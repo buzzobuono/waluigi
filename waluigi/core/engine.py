@@ -1,12 +1,15 @@
 import requests
 import time
 
+class TaskLockedException(Exception):
+    """Eccezione lanciata quando il lock è già impegnato."""
+    pass
+    
 class WaluigiEngine:
     def __init__(self, server_url="http://localhost:8082"):
         self.server_url = server_url
-        self.job_id = f"job_{int(time.time())}"
         
-    def build(self, task):
+    def build(self, job_id, task):
         task_id = f"{task.__class__.__name__}_{task.param_str}"
 
         # 1. CONTROLLO PREVENTIVO (Status GET)
@@ -22,19 +25,19 @@ class WaluigiEngine:
         # 2. DIPENDENZE
         # Risolviamo prima i figli
         for dep in task.requires():
-            self.build(dep)
+            self.build(job_id, dep)
 
         # 3. REGISTRAZIONE E LOCK (L'unica che serve davvero)
         # Qui passiamo TUTTO: job_id, name e params
         r = requests.post(f"{self.server_url}/register", json={
-            "job_id": self.job_id,  # <-- FONDAMENTALE
+            "job_id": job_id,
             "name": task.__class__.__name__,
             "params": task.param_str
         }, timeout=2)
         
         if r.status_code == 409:
-            raise Exception(f"🚫 Task {task.__class__.__name__} occupato altrove.")
-        
+            raise TaskLockedException(f"Task {task.__class__.__name__} già in corso.")
+            
         if r.status_code == 204: 
             print(f"🟣 [Waluigi] {task.__class__.__name__}: Già completato (visto in fase di register).")
             return
@@ -46,7 +49,7 @@ class WaluigiEngine:
             # Notifica Successo (Passiamo il job_id anche qui per coerenza)
             requests.post(f"{self.server_url}/update", json={
                 "task_id": task_id,
-                "job_id": self.job_id,
+                "job_id": job_id,
                 "name": task.__class__.__name__,
                 "params": task.param_str,
                 "status": "SUCCESS"
@@ -54,7 +57,7 @@ class WaluigiEngine:
         except Exception as e:
             requests.post(f"{self.server_url}/update", json={
                 "task_id": task_id,
-                "job_id": self.job_id,
+                "job_id": job_id,
                 "name": task.__class__.__name__,
                 "params": task.param_str,
                 "status": "FAILED"

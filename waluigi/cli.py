@@ -9,14 +9,17 @@ def main():
     # Comando LIST
     subparsers.add_parser("list", help="Elenca tutti i task e il loro stato")
 
-    # Comando RESET
+    # Comando RESET (Singolo Task)
     reset_parser = subparsers.add_parser("reset", help="Elimina un task dal DB per rifarlo")
-    reset_parser.add_argument("task_id", help="L'ID del task da resettare (es. Dep1Task_id-aaa)")
+    reset_parser.add_argument("task_id", help="L'ID del task (es. Dep1Task_id-aaa)")
+
+    # Comando RESET-JOB (Intero Gruppo)
     job_reset_parser = subparsers.add_parser("reset-job", help="Resetta tutti i task di un Job")
-    job_reset_parser.add_argument("job_id", help="L'ID del job (es. job_171000000)")
+    job_reset_parser.add_argument("job_id", help="L'ID del job (es. job_174000000)")
+
     args = parser.parse_args()
     
-    # Inizializza DB (cerca waluigi.db nella cartella corrente)
+    # Inizializza DB
     db_path = os.path.join(os.getcwd(), "waluigi.db")
     if not os.path.exists(db_path):
         print("🚨 Database waluigi.db non trovato in questa cartella.")
@@ -24,26 +27,38 @@ def main():
     
     db = WaluigiDB(db_path)
 
-       
     if args.command == "list":
+        # list_tasks() restituisce: (id, job_id, name, status, last_update)
         tasks = db.list_tasks()
-        print(f"{'JOB ID':<15} | {'TASK ID':<35} | {'STATO'}")
-        print("-" * 80)
+        
+        print(f"\n{'JOB ID':<18} | {'TASK NAME':<25} | {'STATUS':<10} | {'TASK ID'}")
+        print("-" * 100)
+        
         for t in tasks:
-            color = "\033[92m" if t[2] == "SUCCESS" else "\033[93m" if t[2] == "RUNNING" else "\033[91m"
+            t_id, j_id, name, status, last_update = t
+            
+            # Colori ANSI
+            color = "\033[92m" if status == "SUCCESS" else "\033[93m" if status == "RUNNING" else "\033[91m"
             reset = "\033[0m"
-            print(f"{t[0]:<40} | {color}{t[2]:<10}{reset} | {t[3]}")
+            
+            # Gestione Job ID nullo
+            display_job = j_id if j_id else "None"
+            
+            print(f"{display_job:<18} | {name:<25} | {color}{status:<10}{reset} | {t_id}")
+        print("-" * 100 + "\n")
 
     elif args.command == "reset":
         if db.reset_task(args.task_id):
-            print(f"✅ Task {args.task_id} resettato. Ora puoi rieseguirlo.")
+            print(f"✅ Task {args.task_id} resettato con successo.")
         else:
-            print(f"❓ Task {args.task_id} non trovato nel database.")
+            print(f"❓ Task {args.task_id} non trovato.")
     
     elif args.command == "reset-job":
-        # Chiamata al metodo di cancellazione del DB
         count = db.reset_tasks_by_job(args.job_id)
-        print(f"💣 Eliminati {count} task relativi al job {args.job_id}.")
-        
+        if count > 0:
+            print(f"💣 Boom! Eliminati {count} task per il job {args.job_id}.")
+        else:
+            print(f"❓ Nessun task trovato per il job {args.job_id}.")
+
 if __name__ == "__main__":
     main()

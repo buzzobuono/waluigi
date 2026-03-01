@@ -39,13 +39,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     engine = WaluigiEngine()
 
-    print(f"\n--- ⚡️ Waluigi entra in azione per: {args.date} ---")
-    
-    # 2. Esecuzione secca
     try:
         task = MainTask(date=args.date)
-        engine.build(task)
-        print(f"\n✨ Waluigi ha finito il lavoro per il {args.date}.")
+        engine.build(job_id=f"job_{args.date}", task=task)
     except Exception as e:
-        print(f"\n❌ Errore fatale per la data {args.date}: {e}")
+        print(f"\n❌ Errore fatale per gli args {args}: {e}")
         exit(1) # Esci con errore per segnalarlo al sistema (es. Bash o CI/CD)
