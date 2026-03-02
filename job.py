@@ -4,29 +4,54 @@ import time
 from waluigi.core.task import Task
 from waluigi.core.engine import WaluigiEngine
 
+class Dep3Task(Task):
+    
+    #def is_complete(self):
+    #    return False
+        
+    def run(self):
+        time.sleep(5)
+        with open(f"dep3_{self.date}.out", "w") as f:
+            f.write(f"Dati estratti per il giorno {self.date}")
+
+class Dep2Task(Task):
+    
+    #def is_complete(self):
+    #    return False
+        
+    def run(self):
+        time.sleep(5)
+        with open(f"dep2_{self.date}.out", "w") as f:
+            f.write(f"Dati estratti per il giorno {self.date}")
+  
 class Dep1Task(Task):
     
+    #def is_complete(self):
+    #   return False
+    
+    def requires(self):
+        return [Dep2Task(date=self.date, p="2"), Dep3Task(date=self.date, p="2")]
+    
     def run(self):
-        print(f"   [Dep1Task] Running")
         time.sleep(5)
         with open(f"dep1_{self.date}.out", "w") as f:
             f.write(f"Dati estratti per il giorno {self.date}")
-        print(f"   [Dep1Task] Done")
         
 class MainTask(Task):
     def requires(self):
-        return [Dep1Task(date=self.date)]
+        return [Dep1Task(date=self.date, p="2")]
     
+    def is_complete(self):
+        return False
+        
     def run(self):
-        print(f"   [MainTask] Running")
-        time.sleep(5)
+        time.sleep(15)
         input_file = f"dep1_{self.date}.out"
         
         with open(input_file, "r") as f:
             data = f.read()
         with open(f"main_{self.date}.out", "w") as f:
             f.write(f"{data} e processati da Waluigi con successo!")
-        print(f"   [MainTask] Done")
         
 
 if __name__ == "__main__":

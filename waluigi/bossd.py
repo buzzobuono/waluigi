@@ -16,43 +16,51 @@ def get_status(task_id):
 def register():
     data = request.json
     task_id = f"{data['name']}_{data['params']}"
-    job_id = data.get('job_id') 
+    status = db.get_task_status(task_id)
     
-    result = db.register_task(task_id, job_id, data['name'], data['params'])
-    
-    if result == "LOCKED":
+    if status == "SUCCESS":
+        return jsonify({"status": "already_done"}), 204
+    if status == "RUNNING":
         return jsonify({"status": "locked"}), 409
-    if result == "ALREADY_DONE":
-        return jsonify({"status": "done"}), 204 
-    
+
+    db.register_task(task_id, data.get('job_id'), data.get('parent_id'), data['name'], data['params'])
     return jsonify({"status": "ok"})
 
 @app.route('/update', methods=['POST'])
-def update():
+def api_update():
     data = request.json
-    # FIX: Passiamo anche il job_id all'update, altrimenti nel DB viene sovrascritto con NULL
-    db.update_task(
-        data['task_id'], 
-        data.get('job_id'), # Aggiunto questo!
-        data['name'], 
-        data['params'], 
-        data['status']
-    )
-    return jsonify({"status": "updated"})
+    t_id = data['task_id']
+    status = data['status']
+
+    if status == "RUNNING":
+        # Tentativo di acquisizione lock atomico
+        if not db.try_to_lock(t_id):
+            return jsonify({"status": "locked"}), 409
+    
+    # Se non è RUNNING (è SUCCESS/FAILED/PENDING), aggiorna normalmente
+    db.update_task(t_id, data.get('job_id'), data.get('parent_id'), 
+                   data.get('name'), data.get('params'), status)
+    return jsonify({"status": "updated"}), 200
 
 @app.route('/')
 def dashboard():
     conn = db.conn
-    query = "SELECT job_id, name, params, status, last_update, id FROM tasks ORDER BY last_update DESC"
+    # Recuperiamo anche il parent_id
+    query = "SELECT job_id, name, params, status, last_update, id, parent_id FROM tasks"
     cursor = conn.execute(query)
     rows = cursor.fetchall()
 
+    # Raggruppiamo per Job e costruiamo la mappa dei figli
     jobs = {}
-    for row in rows:
-        j_id = str(row[0]) if row[0] else "None" # Gestione stringa per link HTML
-        if j_id not in jobs:
-            jobs[j_id] = []
-        jobs[j_id].append(row)
+    for r in rows:
+        j_id = str(r[0])
+        if j_id not in jobs: jobs[j_id] = {'tasks': {}, 'tree': {}}
+        
+        task_data = {
+            'id': r[5], 'name': r[1], 'params': r[2], 
+            'status': r[3], 'update': r[4], 'parent': r[6]
+        }
+        jobs[j_id]['tasks'][r[5]] = task_data
 
     html = """
     <html>
@@ -63,41 +71,65 @@ def dashboard():
             h1 { color: #d080ff; border-bottom: 2px solid #4b0082; padding-bottom: 10px; }
             .job-container { background-color: #2b0040; border-radius: 8px; margin-bottom: 25px; padding: 15px; }
             .job-header { font-size: 1.2em; font-weight: bold; color: #ffcc00; margin-bottom: 10px; display: flex; justify-content: space-between; }
-            table { border-collapse: collapse; width: 100%; background-color: #360052; }
+            table { border-collapse: collapse; width: 100%; background-color: #360052; font-size: 0.9em; }
             th { background-color: #4b0082; color: white; text-align: left; padding: 12px; }
-            td { padding: 10px; border-bottom: 1px solid #4b0082; }
-            .status-SUCCESS { color: #00ff88; }
-            .status-RUNNING { color: #ffff00; }
-            .status-FAILED { color: #ff4444; }
-            .btn-reset { background: #ff4444; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; text-decoration: none; font-size: 0.8em; }
+            td { padding: 8px; border-bottom: 1px solid #4b0082; }
+            .indent { color: #8a2be2; font-family: monospace; font-weight: bold; white-space: pre; }
+            .status-PENDING { color: #888888; font-style: italic; }
+            .status-RUNNING { color: #ffff00; font-weight: bold; text-shadow: 0 0 5px #ffcc00; }
+            .status-SUCCESS { color: #00ff88; font-weight: bold; }
+            .status-FAILED { color: #ff4444; font-weight: bold; }
+            @keyframes blink { 50% { opacity: 0.5; } }
+            .btn-reset { background: #ff4444; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; text-decoration: none; font-size: 0.8em; }
         </style>
     </head>
     <body>
         <h1>🟣 Waluigi Bossd Dashboard</h1>
     """
 
-    for j_id, tasks in jobs.items():
+    def render_tree(task_id, all_tasks, level=0):
+        """Funzione ricorsiva per generare le righe indentate."""
+        task = all_tasks[task_id]
+        indent = ("&nbsp;&nbsp;&nbsp;&nbsp;" * level) + ("└─ " if level > 0 else "")
+        status_class = f"status-{task['status']}"
+        
+        row_html = f"""
+        <tr>
+            <td><span class='indent'>{indent}</span>{task['name']}</td>
+            <td><code>{task['params']}</code></td>
+            <td class='{status_class}'>{task['status']}</td>
+            <td>{task['update']}</td>
+            <td><a href='/api/reset/task/{task['id']}' class='btn-reset'>Reset</a></td>
+        </tr>
+        """
+        
+        # Trova i figli di questo task nello stesso job
+        children = [t_id for t_id, t in all_tasks.items() if t['parent'] == task_id]
+        for child_id in children:
+            row_html += render_tree(child_id, all_tasks, level + 1)
+        return row_html
+
+    for j_id, data in jobs.items():
         html += f"""
         <div class='job-container'>
             <div class='job-header'>
                 <span>📦 Job: {j_id}</span>
-                <a href='/api/reset/job/{j_id}' class='btn-reset' onclick="return confirm('Resettare tutto il job {j_id}?')">Reset Job</a>
+                <a href='/api/reset/job/{j_id}' class='btn-reset' onclick="return confirm('Resettare?')">Reset Job</a>
             </div>
             <table>
                 <tr><th>Task Name</th><th>Parameters</th><th>Status</th><th>Last Update</th><th>Action</th></tr>
         """
-        for t in tasks:
-            status_class = f"status-{t[3]}"
-            html += f"""
-                <tr>
-                    <td>{t[1]}</td><td><code>{t[2]}</code></td>
-                    <td class='{status_class}'>{t[3]}</td><td>{t[4]}</td>
-                    <td><a href='/api/reset/task/{t[5]}' class='btn-reset'>Reset</a></td>
-                </tr>
-            """
+        # Partiamo dai task che non hanno parent (i Root)
+        roots = [t_id for t_id, t in data['tasks'].items() if t['parent'] is None or t['parent'] not in data['tasks']]
+        for r_id in roots:
+            html += render_tree(r_id, data['tasks'])
+            
         html += "</table></div>"
+    
     html += "</body></html>"
     return html
+
+
 
 # --- API DI CONTROLLO ---
 

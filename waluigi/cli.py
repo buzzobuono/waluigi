@@ -31,11 +31,11 @@ def main():
         # list_tasks() restituisce: (id, job_id, name, status, last_update)
         tasks = db.list_tasks()
         
-        print(f"\n{'JOB ID':<18} | {'TASK NAME':<25} | {'STATUS':<10} | {'TASK ID'}")
+        print(f"\n{'JOB ID':<18} | {'TASK NAME':<25} | {'STATUS':<10} | {'TASK ID'} | {'PARENT TASK ID'}")
         print("-" * 100)
         
         for t in tasks:
-            t_id, j_id, name, status, last_update = t
+            t_id, j_id, name, status, last_update, parent_id = t
             
             # Colori ANSI
             color = "\033[92m" if status == "SUCCESS" else "\033[93m" if status == "RUNNING" else "\033[91m"
@@ -44,7 +44,7 @@ def main():
             # Gestione Job ID nullo
             display_job = j_id if j_id else "None"
             
-            print(f"{display_job:<18} | {name:<25} | {color}{status:<10}{reset} | {t_id}")
+            print(f"{display_job:<18} | {name:<25} | {color}{status:<10}{reset} | {t_id} | {parent_id}")
         print("-" * 100 + "\n")
 
     elif args.command == "reset":

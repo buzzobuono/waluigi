@@ -1,65 +1,67 @@
 import requests
-import time
 
-class TaskLockedException(Exception):
-    """Eccezione lanciata quando il lock è già impegnato."""
-    pass
-    
 class WaluigiEngine:
     def __init__(self, server_url="http://localhost:8082"):
         self.server_url = server_url
-        
-    def build(self, job_id, task):
-        task_id = f"{task.__class__.__name__}_{task.param_str}"
 
-        # 1. CONTROLLO PREVENTIVO (Status GET)
-        # Lo facciamo prima di tutto per evitare di scatenare le dipendenze se non serve
-        try:
-            r = requests.get(f"{self.server_url}/status/{task_id}", timeout=2)
-            if r.status_code == 200 and r.json().get("status") == "SUCCESS":
-                print(f"🟣 [Waluigi] {task.__class__.__name__}: Già completato (DB).")
-                return
-        except Exception as e:
-            print(f"⚠️ Nota: Impossibile recuperare stato preventivo: {e}")
+    def build(self, job_id, task, parent_id=None):
+        task.engine = self
+        t_id = f"{task.__class__.__name__}_{task.param_str}"
 
-        # 2. DIPENDENZE
-        # Risolviamo prima i figli
-        for dep in task.requires():
-            self.build(job_id, dep)
-
-        # 3. REGISTRAZIONE E LOCK (L'unica che serve davvero)
-        # Qui passiamo TUTTO: job_id, name e params
+        # 1. Chiedi al Boss lo stato attuale
         r = requests.post(f"{self.server_url}/register", json={
-            "job_id": job_id,
-            "name": task.__class__.__name__,
-            "params": task.param_str
+            "job_id": job_id, "parent_id": parent_id,
+            "name": task.__class__.__name__, "params": task.param_str
         }, timeout=2)
-        
-        if r.status_code == 409:
-            raise TaskLockedException(f"Task {task.__class__.__name__} già in corso.")
-            
-        if r.status_code == 204: 
-            print(f"🟣 [Waluigi] {task.__class__.__name__}: Già completato (visto in fase di register).")
-            return
 
-        # 4. ESECUZIONE
+        # Se il Boss dice che sta già girando altrove, questo ramo muore qui.
+        if r.status_code == 409:
+            print(f"⚠️ [Waluigi] {t_id} locked")
+            return False
+
+        # 2. Check di completamento reale (Idempotenza)
+        if task.is_complete():
+            # Se a DB non era SUCCESS, allinealo per la dashboard
+            print(f"✅ [Waluigi] {t_id} is complete")
+            if r.status_code != 204:
+                self._update_boss(t_id, job_id, parent_id, task, "SUCCESS")
+            return True
+        
+        print(f"📌 [Waluigi] {t_id} is not complete")
+        
+        # 3. Se non è completo, risolvi le dipendenze.
+        # Se anche una sola dipendenza non è True (è in corso o fallita), il padre si ferma.
+        for dep in task.requires():
+            if not self.build(job_id, dep, parent_id=t_id):
+                # Segnaliamo PENDING per visibilità, ma il processo per questo task finisce.
+                self._update_boss(t_id, job_id, parent_id, task, "PENDING")
+                return False
+
+        # 4. Tutte le dipendenze sono SUCCESS. Ora chiediamo il lock per il RUN.
+        r_lock = requests.post(f"{self.server_url}/update", json={
+            "task_id": t_id, "status": "RUNNING", "job_id": job_id, 
+            "parent_id": parent_id, "name": task.__class__.__name__, "params": task.param_str
+        }, timeout=2)
+
+        if r_lock.status_code == 409:
+            return False # Qualcun altro ha preso il lock mentre controllavamo le deps.
+
+        # 5. ESECUZIONE
         try:
-            print(f"🚀 [Waluigi] Inizio: {task.__class__.__name__}")
+            print(f"🚀 [Waluigi] {t_id} running")
             task.run()
-            # Notifica Successo (Passiamo il job_id anche qui per coerenza)
-            requests.post(f"{self.server_url}/update", json={
-                "task_id": task_id,
-                "job_id": job_id,
-                "name": task.__class__.__name__,
-                "params": task.param_str,
-                "status": "SUCCESS"
-            })
+            task.complete(job_id) # Scrive il flag/file di completamento
+            self._update_boss(t_id, job_id, parent_id, task, "SUCCESS")
+            print(f"🏆 [Waluigi] {t_id} done")
+            return True
         except Exception as e:
-            requests.post(f"{self.server_url}/update", json={
-                "task_id": task_id,
-                "job_id": job_id,
-                "name": task.__class__.__name__,
-                "params": task.param_str,
-                "status": "FAILED"
-            })
-            raise e
+            print(f"❌ [Waluigi] {t_id} erro: {e}")
+            self._update_boss(t_id, job_id, parent_id, task, "FAILED")
+            return False
+
+    def _update_boss(self, t_id, j_id, p_id, task, status):
+        requests.post(f"{self.server_url}/update", json={
+            "task_id": t_id, "job_id": j_id, "parent_id": p_id,
+            "name": task.__class__.__name__, "params": task.param_str,
+            "status": status
+        }, timeout=2)
