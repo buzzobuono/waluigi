@@ -4,6 +4,16 @@ import time
 from waluigi.core.task import Task
 from waluigi.core.engine import WaluigiEngine
 
+class Dep4Task(Task):
+    
+    #def is_complete(self):
+    #    return False
+        
+    def run(self):
+        time.sleep(5)
+        with open(f"dep4_{self.date}.out", "w") as f:
+            f.write(f"Dati estratti per il giorno {self.date}")
+
 class Dep3Task(Task):
     
     #def is_complete(self):
@@ -18,7 +28,9 @@ class Dep2Task(Task):
     
     #def is_complete(self):
     #    return False
-        
+    def requires(self):
+        return [Dep4Task(date=self.date, p="4")]
+
     def run(self):
         time.sleep(5)
         with open(f"dep2_{self.date}.out", "w") as f:
@@ -30,7 +42,7 @@ class Dep1Task(Task):
     #   return False
     
     def requires(self):
-        return [Dep2Task(date=self.date, p="2"), Dep3Task(date=self.date, p="2")]
+        return [Dep2Task(date=self.date, p="4"), Dep3Task(date=self.date, p="43")]
     
     def run(self):
         time.sleep(5)
@@ -39,13 +51,14 @@ class Dep1Task(Task):
         
 class MainTask(Task):
     def requires(self):
-        return [Dep1Task(date=self.date, p="2")]
+        return [Dep1Task(date=self.date, p="45")]
+        #return []
     
     def is_complete(self):
         return False
         
     def run(self):
-        time.sleep(15)
+        time.sleep(5)
         input_file = f"dep1_{self.date}.out"
         
         with open(input_file, "r") as f:
@@ -66,7 +79,7 @@ if __name__ == "__main__":
 
     try:
         task = MainTask(date=args.date)
-        engine.build(job_id=f"job_{args.date}", task=task)
+        engine.build(job_id=f"job_test", task=task)
     except Exception as e:
         print(f"\n❌ Errore fatale per gli args {args}: {e}")
         exit(1) # Esci con errore per segnalarlo al sistema (es. Bash o CI/CD)

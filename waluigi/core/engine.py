@@ -6,12 +6,12 @@ class WaluigiEngine:
 
     def build(self, job_id, task, parent_id=None):
         task.engine = self
-        t_id = f"{task.__class__.__name__}_{task.param_str}"
+        t_id = f"{task.__class__.__name__}"
 
         # 1. Chiedi al Boss lo stato attuale
         r = requests.post(f"{self.server_url}/register", json={
             "job_id": job_id, "parent_id": parent_id,
-            "name": task.__class__.__name__, "params": task.param_str
+            "task_id": task.__class__.__name__, "params": task.params
         }, timeout=2)
 
         # Se il Boss dice che sta già girando altrove, questo ramo muore qui.
@@ -40,7 +40,7 @@ class WaluigiEngine:
         # 4. Tutte le dipendenze sono SUCCESS. Ora chiediamo il lock per il RUN.
         r_lock = requests.post(f"{self.server_url}/update", json={
             "task_id": t_id, "status": "RUNNING", "job_id": job_id, 
-            "parent_id": parent_id, "name": task.__class__.__name__, "params": task.param_str
+            "parent_id": parent_id, "params": task.params
         }, timeout=2)
 
         if r_lock.status_code == 409:
@@ -55,13 +55,14 @@ class WaluigiEngine:
             print(f"🏆 [Waluigi] {t_id} done")
             return True
         except Exception as e:
-            print(f"❌ [Waluigi] {t_id} erro: {e}")
+            print(f"❌ [Waluigi] {t_id} error: {e}")
             self._update_boss(t_id, job_id, parent_id, task, "FAILED")
             return False
 
     def _update_boss(self, t_id, j_id, p_id, task, status):
+        print(t_id)
         requests.post(f"{self.server_url}/update", json={
-            "task_id": t_id, "job_id": j_id, "parent_id": p_id,
-            "name": task.__class__.__name__, "params": task.param_str,
+            "task_id": t_id,"job_id": j_id, "parent_id": p_id,
+                "params": task.params,
             "status": status
         }, timeout=2)

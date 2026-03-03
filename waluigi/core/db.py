@@ -1,7 +1,5 @@
 import sqlite3
 from datetime import datetime
-import sqlite3
-from datetime import datetime
 
 class WaluigiDB:
     def __init__(self, db_path):
@@ -13,12 +11,12 @@ class WaluigiDB:
         with self.conn:
             self.conn.execute("""
             CREATE TABLE IF NOT EXISTS tasks (
-                id TEXT PRIMARY KEY, job_id TEXT, parent_id TEXT,
-                name TEXT, params TEXT, status TEXT, last_update TIMESTAMP
+                job_id TEXT, parent_id TEXT,
+                task_id TEXT primary key, params TEXT, status TEXT, last_update TIMESTAMP
             )""")
 
-    def get_task_status(self, task_id):
-        cursor = self.conn.execute("SELECT status FROM tasks WHERE id = ?", (task_id,))
+    def get_task_status(self, task_id, params):
+        cursor = self.conn.execute("SELECT status FROM tasks WHERE task_id = ? and params = ?", (task_id, params))
         row = cursor.fetchone()
         return row[0] if row else None
 
@@ -29,7 +27,7 @@ class WaluigiDB:
             cursor = self.conn.execute("""
             UPDATE tasks 
             SET status = 'RUNNING', last_update = DATETIME('now')
-            WHERE id = ? AND status != 'RUNNING'
+            WHERE task_id = ? AND status != 'RUNNING'
             """, (task_id,))
             return cursor.rowcount > 0
             
@@ -37,20 +35,20 @@ class WaluigiDB:
         # Registriamo inizialmente come PENDING per non bloccare il lock ottimistico
         with self.conn:
             self.conn.execute("""
-                INSERT INTO tasks (id, job_id, parent_id, name, params, status, last_update)
-                VALUES (?, ?, ?, ?, ?, 'PENDING', ?)
-                ON CONFLICT(id) DO UPDATE SET 
+                INSERT INTO tasks (job_id, parent_id, task_id, params, status, last_update)
+                VALUES (?, ?, ?, ?, 'PENDING', ?)
+                ON CONFLICT(task_id) DO UPDATE SET 
                     job_id=excluded.job_id, parent_id=excluded.parent_id,
                     last_update=excluded.last_update
-            """, (task_id, job_id, parent_id, name, params, datetime.now()))
+            """, (job_id, parent_id, task_id, params, datetime.now()))
 
     def update_task(self, task_id, job_id, parent_id, name, params, status):
         with self.conn:
             self.conn.execute("""
                 UPDATE tasks SET 
-                    status=?, last_update=?, job_id=?, parent_id=?
-                WHERE id=?
-            """, (status, datetime.now(), job_id, parent_id, task_id))
+                    status=?, last_update=?, job_id=?, parent_id=?, params=?
+                WHERE task_id=?
+            """, (status, datetime.now(), job_id, parent_id, params, task_id))
 
     def reset_tasks_by_job(self, job_id):
         with self.conn:
@@ -58,7 +56,7 @@ class WaluigiDB:
     
     def reset_task(self, task_id):
         with self.conn:
-            self.conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+            self.conn.execute("DELETE FROM tasks WHERE task_id = ?", (task_id,))
     
     def list_tasks(self):
         cursor = self.conn.execute("SELECT id, job_id, name, status, last_update, parent_id FROM tasks ORDER BY last_update DESC")

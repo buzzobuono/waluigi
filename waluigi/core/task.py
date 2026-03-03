@@ -3,8 +3,8 @@ import requests
 class Task:
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
-        self.param_str = "_".join(f"{k}-{v}" for k, v in sorted(kwargs.items()))
-        self.id = f"{self.__class__.__name__}_{self.param_str}"
+        self.params = "_".join(f"{k}-{v}" for k, v in sorted(kwargs.items()))
+        self.id = f"{self.__class__.__name__}"
         self.engine = None  # Iniettato dall'Engine durante il build
 
     def is_complete(self):
@@ -13,7 +13,7 @@ class Task:
         Default: chiede al DB tramite l'API status.
         """
         try:
-            r = requests.get(f"{self.engine.server_url}/status/{self.id}", timeout=2)
+            r = requests.get(f"{self.engine.server_url}/status/{self.id}/{self.params}", timeout=2)
             return r.status_code == 200 and r.json().get("status") == "SUCCESS"
         except:
             return False
@@ -27,7 +27,7 @@ class Task:
             "task_id": self.id,
             "job_id": job_id,
             "name": self.__class__.__name__,
-            "params": self.param_str,
+            "params": self.params,
             "status": "SUCCESS"
         }, timeout=2)
 
