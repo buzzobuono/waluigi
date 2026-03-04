@@ -1,22 +1,20 @@
 import requests
+from types import SimpleNamespace
 
 class Task:
-    
+
     id = None
     namespace = "unknown"
-    identities = [] # Cambiano il nome visibile
-    states = [] # Cambiano l'hash (il contenuto)
-    traits = [] # Metadati tecnici (non cambiano l'ID)
     
-    def __init__(self, **kwargs):
+    def __init__(self, id = None, tags=None, params=None, attributes=None):
+        self.tags = tags or []
+        self.params = SimpleNamespace(**(params or {}))
+        self.attributes = SimpleNamespace(**(attributes or {}))
         
-        self.tag = kwargs.pop('tag', None)
-        self.__dict__.update(kwargs)
         self.id = self.id if self.id else self.__class__.__name__
-        if self.tag:
-            self.id = self.id + "(" +self.tag + ")"
-        self.params = " ".join(f"{k}:{v}" for k, v in sorted(kwargs.items()))
-        self.engine = None  # Iniettato dall'Engine durante il build
+        if tags:
+            self.id = self.id + " tags:" + " ".join(tags)
+        self.engine = None
 
     def is_complete(self):
         """
@@ -24,7 +22,7 @@ class Task:
         Default: chiede al DB tramite l'API status.
         """
         try:
-            r = requests.get(f"{self.engine.server_url}/status/{self.id}/{self.params}", timeout=2)
+            r = requests.get(f"{self.engine.server_url}/status/{self.id}/{self.hash(self.params)}", timeout=2)
             return r.status_code == 200 and r.json().get("status") == "SUCCESS"
         except:
             return False
@@ -37,7 +35,8 @@ class Task:
         requests.post(f"{self.engine.server_url}/update", json={
             "id": self.id,
             "namespace": self.namespace,
-            "params": self.params,
+            "params": self.hash(self.params),
+            "attributes": self.hash(self.attributes),
             "status": "SUCCESS"
         }, timeout=2)
 
@@ -46,3 +45,9 @@ class Task:
 
     def run(self):
         raise NotImplementedError
+
+    def hash(self, nsdict):
+        return " ".join(
+            f"{k}:{v}" 
+            for k, v in sorted(vars(nsdict).items())
+        )

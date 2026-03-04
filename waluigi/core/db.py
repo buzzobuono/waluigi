@@ -15,6 +15,7 @@ class WaluigiDB:
                 namespace TEXT, 
                 parent_id TEXT,
                 params TEXT, 
+                attributes TEXT, 
                 status TEXT, 
                 last_update TIMESTAMP
             )""")
@@ -35,23 +36,23 @@ class WaluigiDB:
             """, (id,))
             return cursor.rowcount > 0
             
-    def register_task(self, id, namespace, parent_id, params):
+    def register_task(self, id, namespace, parent_id, params, attributes):
         with self.conn:
             self.conn.execute("""
-                INSERT INTO tasks (id, parent_id, namespace, params, status, last_update)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO tasks (id, parent_id, namespace, params, attributes, status, last_update)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET 
                     namespace=excluded.namespace, parent_id=excluded.parent_id,
                     last_update=excluded.last_update
-            """, (id, parent_id, namespace, params, 'PENDING', datetime.now()))
+            """, (id, parent_id, namespace, params, attributes, 'PENDING', datetime.now()))
 
-    def update_task(self, id, namespace, parent_id, params, status):
+    def update_task(self, id, namespace, parent_id, params, attributes, status):
         with self.conn:
             self.conn.execute("""
                 UPDATE tasks SET 
-                    status=?, last_update=?, namespace=?, parent_id=?, params=?
+                    status=?, last_update=?, namespace=?, parent_id=?, params=?, attributes=?
                 WHERE id=?
-            """, (status, datetime.now(), namespace, parent_id, params, id))
+            """, (status, datetime.now(), namespace, parent_id, params, attributes, id))
 
     def delete_namespace(self, namespace):
         with self.conn:

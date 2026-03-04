@@ -4,14 +4,26 @@ class WaluigiEngine:
     def __init__(self, server_url="http://localhost:8082"):
         self.server_url = server_url
 
+    def _post(self, endpoint, **kwargs):
+        try:
+            r = requests.post(f"{self.server_url}{endpoint}", **kwargs)
+            if 500 <= r.status_code < 600:
+                 raise RuntimeError(f"[bossd] Server error {r.status_code} on {endpoint}")
+            return r
+        except requests.exceptions.RequestException as e:
+            raise RuntimeError(f"[bossd] Connection error on {endpoint}") from e
+        
     def build(self, task, parent_id=None):
         task.engine = self
 
         # 1. Chiedi al Boss lo stato attuale
-        r = requests.post(f"{self.server_url}/register", json={
-            "namespace": task.namespace, "parent_id": parent_id,
-            "id": task.id, "params": task.params
-        }, timeout=2)
+        r = self._post(f"/register", json={
+            "namespace": task.namespace, 
+            "parent_id": parent_id,
+            "id": task.id, 
+            "params": task.hash(task.params), 
+            "attributes": task.hash(task.attributes)
+        })
 
         # Se il Boss dice che sta già girando altrove, questo ramo muore qui.
         if r.status_code == 409:
@@ -35,12 +47,10 @@ class WaluigiEngine:
                 # Segnaliamo PENDING per visibilità, ma il processo per questo task finisce.
                 self._update_boss(parent_id, task, "PENDING")
                 return False
-
+        
+        
         # 4. Tutte le dipendenze sono SUCCESS. Ora chiediamo il lock per il RUN.
-        r_lock = requests.post(f"{self.server_url}/update", json={
-            "id": task.id, "status": "RUNNING", "namespace": task.namespace, 
-            "parent_id": parent_id, "params": task.params
-        }, timeout=2)
+        r_lock = self._update_boss(parent_id, task, "RUNNING")
 
         if r_lock.status_code == 409:
             return False # Qualcun altro ha preso il lock mentre controllavamo le deps.
@@ -59,8 +69,11 @@ class WaluigiEngine:
             return False
 
     def _update_boss(self, p_id, task, status):
-        requests.post(f"{self.server_url}/update", json={
-            "id": task.id,"namespace": task.namespace, "parent_id": p_id,
-                "params": task.params,
+        return self._post(f"/update", json={
+            "id": task.id,
+            "namespace": task.namespace, 
+            "parent_id": p_id,
+            "params": task.hash(task.params), 
+            "attributes": task.hash(task.attributes),
             "status": status
-        }, timeout=2)
+        })

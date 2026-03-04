@@ -15,8 +15,7 @@ def get_status(id, params):
 @app.route('/register', methods=['POST'])
 def register():
     data = request.json
-    print(f"method: register, payload: {data}")
-    
+    print(f"[bossd] register payload: {data}")
     id = data["id"]
     params = data["params"]
     status = db.get_task_status(id, params)
@@ -26,7 +25,7 @@ def register():
     if status == "RUNNING":
         return jsonify({"status": "locked"}), 409
 
-    db.register_task(id, data.get('namespace'), data.get('parent_id'), data['params'])
+    db.register_task(id, data.get('namespace'), data.get('parent_id'), data['params'], data["attributes"])
     return jsonify({"status": "ok"})
 
 @app.route('/update', methods=['POST'])
@@ -42,7 +41,7 @@ def update():
             return jsonify({"status": "locked"}), 409
     
     # Se non è RUNNING (è SUCCESS/FAILED/PENDING), aggiorna normalmente
-    db.update_task(id, data.get('namespace'), data.get('parent_id'), data.get('params'), status)
+    db.update_task(id, data.get('namespace'), data.get('parent_id'), data.get('params'), data.get('attributes'), status)
     return jsonify({"status": "updated"}), 200
 
 @app.route('/')
@@ -83,12 +82,13 @@ def dashboard():
             table { border-collapse: collapse; width: 100%; min-width: 650px; background-color: #360052; }
             th { background-color: #4b0082; color: white; text-align: left; padding: 12px; }
             td { padding: 10px; border-bottom: 1px solid #4b0082; font-size: 0.85em; }
+            .actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
             .indent { color: #8a2be2; font-family: monospace; font-weight: bold; white-space: pre; }
             .status-RUNNING { color: #ffff00; font-weight: bold; animation: blink 2s infinite; }
             .status-SUCCESS { color: #00ff88; font-weight: bold; }
             .status-FAILED { color: #ff4444; font-weight: bold; }
             @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
-            .btn-reset { background: #ff4444; color: white; padding: 6px 12px; border-radius: 4px; border: none; cursor: pointer; font-size: 0.8em; }
+            .btn-action { background: #ff4444; color: white; padding: 12px; border-radius: 4px; border: none; cursor: pointer; font-size: 0.8em;}
             code { background: #1a0026; padding: 2px 4px; border-radius: 3px; color: #d080ff; }
         </style>
         <script>
@@ -114,8 +114,10 @@ def dashboard():
             <td><code>{task['params']}</code></td>
             <td class='status-{task['status']}'>{task['status']}</td>
             <td><small>{task['update']}</small></td>
-            <td><button onclick="actionConfirm('/api/reset/task/{current_id}')" class='btn-reset'>Reset</button></td>
-            <td><button onclick="actionConfirm('/api/delete/task/{current_id}')" class='btn-reset'>Delete</button></td>
+            <td class="actions">
+                <button onclick="actionConfirm('/api/reset/task/{current_id}')" class='btn-action'>Reset</button>
+                <button onclick="actionConfirm('/api/delete/task/{current_id}')" class='btn-action'>Delete</button>
+            </td>
         </tr>
         """
         # Filtra i figli che appartengono a questo genitore
@@ -129,8 +131,10 @@ def dashboard():
         <div class='namespace-container'>
             <div class='namespace-header'>
                 <span>📦 Namespace: {ns_name}</span>
-                <button onclick="actionConfirm('/api/reset/namespace/{ns_name}')" class='btn-reset'>Reset Namespace</button>
-                <button onclick="actionConfirm('/api/delete/namespace/{ns_name}')" class='btn-reset'>Delete Namespace</button>
+                <div class="actions">
+                    <button onclick="actionConfirm('/api/reset/namespace/{ns_name}')" class='btn-action'>Reset</button>
+                    <button onclick="actionConfirm('/api/delete/namespace/{ns_name}')" class='btn-action'>Delete</button>
+                </div>
             </div>
             <table>
                 <tr><th>Task ID</th><th>Parameters</th><th>Status</th><th>Last Update</th><th>Action</th></tr>
