@@ -11,11 +11,11 @@ def main():
 
     # Comando RESET (Singolo Task)
     reset_parser = subparsers.add_parser("reset", help="Elimina un task dal DB per rifarlo")
-    reset_parser.add_argument("task_id", help="L'ID del task (es. Dep1Task_id-aaa)")
+    reset_parser.add_argument("id", help="L'ID del task (es. Dep1Task_id-aaa)")
 
     # Comando RESET-JOB (Intero Gruppo)
     job_reset_parser = subparsers.add_parser("reset-job", help="Resetta tutti i task di un Job")
-    job_reset_parser.add_argument("job_id", help="L'ID del job (es. job_174000000)")
+    job_reset_parser.add_argument("namespace", help="L'ID del job (es. job_174000000)")
 
     args = parser.parse_args()
     
@@ -28,7 +28,7 @@ def main():
     db = WaluigiDB(db_path)
 
     if args.command == "list":
-        # list_tasks() restituisce: (id, job_id, name, status, last_update)
+        # list_tasks() restituisce: (id, namespace, name, status, last_update)
         tasks = db.list_tasks()
         
         print(f"\n{'JOB ID':<18} | {'TASK NAME':<25} | {'STATUS':<10} | {'TASK ID'} | {'PARENT TASK ID'}")
@@ -48,17 +48,17 @@ def main():
         print("-" * 100 + "\n")
 
     elif args.command == "reset":
-        if db.reset_task(args.task_id):
-            print(f"✅ Task {args.task_id} resettato con successo.")
+        if db.reset_task(args.id):
+            print(f"✅ Task {args.id} resettato con successo.")
         else:
-            print(f"❓ Task {args.task_id} non trovato.")
+            print(f"❓ Task {args.id} non trovato.")
     
     elif args.command == "reset-job":
-        count = db.reset_tasks_by_job(args.job_id)
+        count = db.reset_tasks_by_job(args.namespace)
         if count > 0:
-            print(f"💣 Boom! Eliminati {count} task per il job {args.job_id}.")
+            print(f"💣 Boom! Eliminati {count} task per il job {args.namespace}.")
         else:
-            print(f"❓ Nessun task trovato per il job {args.job_id}.")
+            print(f"❓ Nessun task trovato per il job {args.namespace}.")
 
 if __name__ == "__main__":
     main()

@@ -11,54 +11,73 @@ class WaluigiDB:
         with self.conn:
             self.conn.execute("""
             CREATE TABLE IF NOT EXISTS tasks (
-                job_id TEXT, parent_id TEXT,
-                task_id TEXT primary key, params TEXT, status TEXT, last_update TIMESTAMP
+                id TEXT primary key,
+                namespace TEXT, 
+                parent_id TEXT,
+                params TEXT, 
+                status TEXT, 
+                last_update TIMESTAMP
             )""")
 
-    def get_task_status(self, task_id, params):
-        cursor = self.conn.execute("SELECT status FROM tasks WHERE task_id = ? and params = ?", (task_id, params))
+    def get_task_status(self, id, params):
+        cursor = self.conn.execute("SELECT status FROM tasks WHERE id = ? and params = ?", (id, params))
         row = cursor.fetchone()
         return row[0] if row else None
 
-    def try_to_lock(self, task_id):
+    def try_to_lock(self, id):
         """Tenta il passaggio a RUNNING. Ritorna True solo se ha successo atomico."""
         with self.conn:
             # Se lo stato attuale è già RUNNING, la query colpirà 0 righe -> False
             cursor = self.conn.execute("""
             UPDATE tasks 
             SET status = 'RUNNING', last_update = DATETIME('now')
-            WHERE task_id = ? AND status != 'RUNNING'
-            """, (task_id,))
+            WHERE id = ? AND status != 'RUNNING'
+            """, (id,))
             return cursor.rowcount > 0
             
-    def register_task(self, task_id, job_id, parent_id, name, params):
-        # Registriamo inizialmente come PENDING per non bloccare il lock ottimistico
+    def register_task(self, id, namespace, parent_id, params):
         with self.conn:
             self.conn.execute("""
-                INSERT INTO tasks (job_id, parent_id, task_id, params, status, last_update)
-                VALUES (?, ?, ?, ?, 'PENDING', ?)
-                ON CONFLICT(task_id) DO UPDATE SET 
-                    job_id=excluded.job_id, parent_id=excluded.parent_id,
+                INSERT INTO tasks (id, parent_id, namespace, params, status, last_update)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET 
+                    namespace=excluded.namespace, parent_id=excluded.parent_id,
                     last_update=excluded.last_update
-            """, (job_id, parent_id, task_id, params, datetime.now()))
+            """, (id, parent_id, namespace, params, 'PENDING', datetime.now()))
 
-    def update_task(self, task_id, job_id, parent_id, name, params, status):
+    def update_task(self, id, namespace, parent_id, params, status):
         with self.conn:
             self.conn.execute("""
                 UPDATE tasks SET 
-                    status=?, last_update=?, job_id=?, parent_id=?, params=?
-                WHERE task_id=?
-            """, (status, datetime.now(), job_id, parent_id, params, task_id))
+                    status=?, last_update=?, namespace=?, parent_id=?, params=?
+                WHERE id=?
+            """, (status, datetime.now(), namespace, parent_id, params, id))
 
-    def reset_tasks_by_job(self, job_id):
+    def delete_namespace(self, namespace):
         with self.conn:
-            self.conn.execute("DELETE FROM tasks WHERE job_id = ?", (job_id,))
+            self.conn.execute("DELETE FROM tasks WHERE namespace = ?", (namespace,))
     
-    def reset_task(self, task_id):
+    def delete_task(self, id):
         with self.conn:
-            self.conn.execute("DELETE FROM tasks WHERE task_id = ?", (task_id,))
-    
+            self.conn.execute("DELETE FROM tasks WHERE id = ?", (id,))
+            
+    def reset_namespace(self, namespace):
+        with self.conn:
+            self.conn.execute("""
+                UPDATE tasks SET 
+                    status='READY'
+                WHERE namespace=?
+            """, (namespace, ))
+            
+    def reset_task(self, id):
+        with self.conn:
+            self.conn.execute("""
+                UPDATE tasks SET 
+                    status='READY'
+                WHERE id=?
+            """, (id, ))
+
     def list_tasks(self):
-        cursor = self.conn.execute("SELECT id, job_id, name, status, last_update, parent_id FROM tasks ORDER BY last_update DESC")
+        cursor = self.conn.execute("SELECT id, namespace, status, last_update, parent_id FROM tasks ORDER BY last_update DESC")
         return cursor.fetchall()
         

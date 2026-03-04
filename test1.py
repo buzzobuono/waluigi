@@ -6,6 +6,9 @@ from waluigi.core.engine import WaluigiEngine
 
 class Dep4Task(Task):
     
+    id = "dep4"
+    namespace = "test1"
+    
     #def is_complete(self):
     #    return False
         
@@ -16,6 +19,9 @@ class Dep4Task(Task):
 
 class Dep3Task(Task):
     
+    id = "dep3"
+    namespace = "test1"
+    
     #def is_complete(self):
     #    return False
         
@@ -25,6 +31,9 @@ class Dep3Task(Task):
             f.write(f"Dati estratti per il giorno {self.date}")
 
 class Dep2Task(Task):
+    
+    id = "dep2"
+    namespace = "test1"
     
     #def is_complete(self):
     #    return False
@@ -38,6 +47,9 @@ class Dep2Task(Task):
   
 class Dep1Task(Task):
     
+    id = "dep1"
+    namespace = "test1"
+    
     #def is_complete(self):
     #   return False
     
@@ -50,6 +62,10 @@ class Dep1Task(Task):
             f.write(f"Dati estratti per il giorno {self.date}")
         
 class MainTask(Task):
+    
+    id = "main"
+    namespace = "test1"
+    
     def requires(self):
         return [Dep1Task(date=self.date, p="45")]
         #return []
@@ -79,7 +95,7 @@ if __name__ == "__main__":
 
     try:
         task = MainTask(date=args.date)
-        engine.build(job_id=f"job_test", task=task)
+        engine.build(task=task)
     except Exception as e:
         print(f"\n❌ Errore fatale per gli args {args}: {e}")
         exit(1) # Esci con errore per segnalarlo al sistema (es. Bash o CI/CD)
