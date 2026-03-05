@@ -45,8 +45,8 @@ class GlobalReport(Task):
     #namespace = "Main Processes"
     namespace = NAMESPACE
     
-    def is_complete(self):
-        return False
+    #def is_complete(self):
+    #    return False
 
     def requires(self):
         return [

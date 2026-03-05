@@ -46,8 +46,16 @@ class Task:
     def run(self):
         raise NotImplementedError
 
+    # def hash(self, nsdict):
+    #    return " ".join(
+    #       f"{k}:{v}" 
+    #      for k, v in sorted(vars(nsdict).items())
+    #   )
+    
     def hash(self, nsdict):
-        return " ".join(
-            f"{k}:{v}" 
-            for k, v in sorted(vars(nsdict).items())
-        )
+        if not nsdict: return ""
+        # Converte in dizionario se è SimpleNamespace
+        d = vars(nsdict) if not isinstance(nsdict, dict) else nsdict
+        # ORDINA le chiavi alfabeticamente: questo è il segreto
+        return " ".join(f"{k}:{d[k]}" for k in sorted(d.keys()))
+    
