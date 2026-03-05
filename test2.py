@@ -49,18 +49,23 @@ class GlobalReport(Task):
         return False
 
     def requires(self):
-        # Questo task fa convergere 3 rami differenti
         return [
-            CleanDataTask(tags=["ERP"], params={"date": self.params.date, "source" : "ERP"}, attributes= { "fail_prob" : "0.1" }),
-            CleanDataTask(tags=["WEB"], params={"date": self.params.date, "source" : "WEB"}, attributes= { "fail_prob" : "0.2" }),
-            CleanDataTask(tags=["SOCIAL"], params={"date": self.params.date, "source" : "SOCIAL"}, attributes= { "fail_prob" : "0.3" })
+            CleanDataTask(tags=["ERP"], params={"date": self.params.date, "source" : "ERP"}, attributes= { "fail_prob" : "0.0" }),
+            CleanDataTask(tags=["WEB"], params={"date": self.params.date, "source" : "WEB"}, attributes= { "fail_prob" : "0.0" }),
+            CleanDataTask(tags=["SOCIAL"], params={"date": self.params.date, "source" : "SOCIAL"}, attributes= { "fail_prob" : "0.0" }),
+            CleanDataTask(tags=["CONTABILITA"], params={"date": self.params.date, "source" : "CONTABILITA"}, attributes= { "fail_prob" : "0.0" }),
+            CleanDataTask(tags=["MDM"], params={"date": self.params.date, "source" : "MDM"}, attributes= { "fail_prob" : "0.0" }),
+            CleanDataTask(tags=["ANALYTICS"], params={"date": self.params.date, "source" : "ANALYTICS"}, attributes= { "fail_prob" : "0.0" }),
+            CleanDataTask(tags=["MOBILE"], params={"date": self.params.date, "source" : "MOBILE"}, attributes= { "fail_prob" : "0.0" }),
+            CleanDataTask(tags=["AGENTIC"], params={"date": self.params.date, "source" : "AGENTIC"}, attributes= { "fail_prob" : "0.0" }),
+            CleanDataTask(tags=["PROXIMITY"], params={"date": self.params.date, "source" : "PROXIMITY"}, attributes= { "fail_prob" : "0.0" })
         ]
         
     def run(self):
         print("📊 Generazione Global Report in corso...")
         time.sleep(5)
         results = []
-        for s in ["ERP", "WEB", "SOCIAL"]:
+        for s in ["ERP", "WEB", "SOCIAL", "CONTABILITA", "MDM", "ANALYTICS", "MOBILE", "AGENTIC", "PROXIMITY"]:
             with open(f"clean_{s}_{self.params.date}.out", "r") as f:
                 results.append(f.read())
         

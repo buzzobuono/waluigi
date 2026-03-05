@@ -42,30 +42,34 @@ class WaluigiEngine:
         
         # 3. Se non è completo, risolvi le dipendenze.
         # Se anche una sola dipendenza non è True (è in corso o fallita), il padre si ferma.
+        all_deps_ready = True
         for dep in task.requires():
             if not self.build(dep, parent_id=task.id):
                 # Segnaliamo PENDING per visibilità, ma il processo per questo task finisce.
                 self._update_boss(parent_id, task, "PENDING")
+                all_deps_ready = False
+                #return False
+                
+        if all_deps_ready:
+            # 4. Tutte le dipendenze sono SUCCESS. Ora chiediamo il lock per il RUN.
+            r_lock = self._update_boss(parent_id, task, "RUNNING")
+
+            if r_lock.status_code == 409:
+                return False # Qualcun altro ha preso il lock mentre controllavamo le deps.
+
+            # 5. ESECUZIONE
+            try:
+                print(f"🚀 [Waluigi] {task.id} running")
+                task.run()
+                task.complete() # Scrive il flag/file di completamento
+                self._update_boss(parent_id, task, "SUCCESS")
+                print(f"🏆 [Waluigi] {task.id} done")
+                return True
+            except Exception as e:
+                print(f"❌ [Waluigi] {task.id} error: {e}")
+                self._update_boss(parent_id, task, "FAILED")
                 return False
-        
-        
-        # 4. Tutte le dipendenze sono SUCCESS. Ora chiediamo il lock per il RUN.
-        r_lock = self._update_boss(parent_id, task, "RUNNING")
-
-        if r_lock.status_code == 409:
-            return False # Qualcun altro ha preso il lock mentre controllavamo le deps.
-
-        # 5. ESECUZIONE
-        try:
-            print(f"🚀 [Waluigi] {task.id} running")
-            task.run()
-            task.complete() # Scrive il flag/file di completamento
-            self._update_boss(parent_id, task, "SUCCESS")
-            print(f"🏆 [Waluigi] {task.id} done")
-            return True
-        except Exception as e:
-            print(f"❌ [Waluigi] {task.id} error: {e}")
-            self._update_boss(parent_id, task, "FAILED")
+        else:
             return False
 
     def _update_boss(self, p_id, task, status):
