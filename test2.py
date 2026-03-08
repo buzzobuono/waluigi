@@ -79,9 +79,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("date", help="YYYY-MM-DD")
     args = parser.parse_args()
-
     engine = WaluigiEngine()
-    
     # Lanciamo il task di aggregazione che scatenerà tutta la piramide
     report = GlobalReport(params= {"date": args.date})
     engine.build(task=report)

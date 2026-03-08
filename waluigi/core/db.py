@@ -1,12 +1,27 @@
 import sqlite3
+import threading
 from datetime import datetime
 
 class WaluigiDB:
+    
     def __init__(self, db_path):
-        self.conn = sqlite3.connect(db_path, check_same_thread=False)
-        self.conn.execute("PRAGMA busy_timeout = 5000")
+        self.db_path = db_path
+        # Creiamo un contenitore isolato per ogni thread
+        self._local = threading.local()
         self.create_table()
 
+    @property
+    def conn(self):
+        """Restituisce una connessione specifica per il thread che la chiama."""
+        if not hasattr(self._local, "connection"):
+            # Ogni thread (Flask, Planner, ecc.) avrà il suo tunnel privato al DB
+            self._local.connection = sqlite3.connect(self.db_path, check_same_thread=False)
+            # Timeout di 30 secondi per attendere che il file si sblocchi
+            self._local.connection.execute("PRAGMA busy_timeout = 30000")
+            # WAL mode permette a più lettori e 1 scrittore di non bloccarsi a vicenda
+            self._local.connection.execute("PRAGMA journal_mode=WAL;")
+        return self._local.connection
+        
     def create_table(self):
         with self.conn:
             self.conn.execute("""
@@ -24,7 +39,7 @@ class WaluigiDB:
         cursor = self.conn.execute("SELECT status FROM tasks WHERE id = ? and params = ?", (id, params))
         row = cursor.fetchone()
         return row[0] if row else None
-
+        
     def try_to_lock(self, id):
         """Tenta il passaggio a RUNNING. Ritorna True solo se ha successo atomico."""
         with self.conn:
@@ -50,14 +65,14 @@ class WaluigiDB:
         with self.conn:
             self.conn.execute("""
                 UPDATE tasks SET 
-                    status=?, last_update=?, namespace=?, parent_id=?, params=?, attributes=?
+                    status=?, last_update=?, namespace=?, params=?, attributes=?
                 WHERE id=?
-            """, (status, datetime.now(), namespace, parent_id, params, attributes, id))
+            """, (status, datetime.now(), namespace, params, attributes, id))
 
     def delete_namespace(self, namespace):
         with self.conn:
             self.conn.execute("DELETE FROM tasks WHERE namespace = ?", (namespace,))
-    
+            
     def delete_task(self, id):
         with self.conn:
             self.conn.execute("DELETE FROM tasks WHERE id = ?", (id,))
@@ -66,7 +81,7 @@ class WaluigiDB:
         with self.conn:
             self.conn.execute("""
                 UPDATE tasks SET 
-                    status='READY'
+                    status='PENDING'
                 WHERE namespace=?
             """, (namespace, ))
             
@@ -74,7 +89,7 @@ class WaluigiDB:
         with self.conn:
             self.conn.execute("""
                 UPDATE tasks SET 
-                    status='READY'
+                    status='PENDING'
                 WHERE id=?
             """, (id, ))
 

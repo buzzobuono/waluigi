@@ -81,3 +81,4 @@ class WaluigiEngine:
             "attributes": task.hash(task.attributes),
             "status": status
         })
+        

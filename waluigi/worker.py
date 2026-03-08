@@ -1,7 +1,12 @@
 import sys
 import importlib
 import requests
+import threading
 from flask import Flask, request, jsonify
+
+MAX_CONCURRENT_TASKS = 2
+active_tasks_count = 0
+lock = threading.Lock()
 
 app = Flask(__name__)
 BOSS_URL = "http://localhost:8082" # Assicurati che l'indirizzo sia corretto
@@ -11,50 +16,71 @@ def log(msg):
 
 @app.route('/execute', methods=['POST'])
 def execute():
+    global active_tasks_count
+    with lock:
+        if active_tasks_count >= MAX_CONCURRENT_TASKS:
+            return jsonify({"status": "busy"}), 429
+        active_tasks_count += 1
+        
     data = request.json
-    # Il payload contiene: module, class, params, attributes
-    mod_name = data.get('module')
-    cls_name = data.get('class')
+    log(f"Ricevuto ordine: {data.get('module')}.{data.get('class')}")
     
-    log(f"Ricevuto ordine: {mod_name}.{cls_name}")
+    # Lanciamo l'esecuzione asincrona
+    thread = threading.Thread(target=run_task_async, args=(data,))
+    thread.start()
     
+    # Liberiamo subito il Boss
+    return jsonify({"status": "submitted", "id": data.get('id')}), 202
+
+def run_task_async(data):
+    global active_tasks_count
     try:
-        # 1. Caricamento dinamico del flusso
-        mod = importlib.import_module(mod_name)
-        cls = getattr(mod, cls_name)
-        
-        # 2. Istanziazione del Task
-        task = cls(params=data.get('params'), attributes=data.get('attributes'))
-        
-        # 3. Agganciamo un "finto" engine per permettere a task.complete() 
-        # di sapere a chi inviare l'aggiornamento
+        # Caricamento e istanza (come prima)
+        mod = importlib.import_module(data.get('module'))
+        cls = getattr(mod, data.get('class'))
+        task = cls(id=data.get('id'), tags=data.get('tags'), params=data.get('params'), attributes=data.get('attributes'))
+        # 
         class SimpleEngine:
             def __init__(self, url): self.server_url = url
         task.engine = SimpleEngine(BOSS_URL)
+       
+        # Notifica opzionale: il worker ha iniziato davvero (Status -> RUNNING)
+        _update_boss("", task, "RUNNING")
         
-        # 4. ESECUZIONE
-        log(f"Esecuzione run() per {task.id}...")
+        log(f"🚀 Esecuzione asincrona avviata: {task.id}")
         task.run()
+        #task.complete()
         
-        # 5. NOTIFICA SUCCESS
-        # Usiamo il metodo .complete() originale del tuo Task
-        task.complete()
-        log(f"✅ Task {task.id} completato e notificato al Boss.")
-        
-        return jsonify({"status": "success", "id": task.id}), 200
-
+        # Notifica finale
+        _update_boss("", task, "SUCCESS")
+        log(f"✅ Task {task.id} terminato.")
     except Exception as e:
-        log(f"❌ ERRORE durante l'esecuzione: {e}")
-        # Notifica il fallimento al Boss
-        try:
-            requests.post(f"{BOSS_URL}/update", json={
-                "id": data.get('id'),
-                "status": "FAILED",
-                "params": data.get('params') # Semplificato per brevità
-            })
-        except: pass
-        return jsonify({"status": "error", "message": str(e)}), 500
+        log(f"❌ Errore asincrono: {e}")
+        # In caso di crash, riportiamo a FAILED per sbloccare il grafo
+        _update_boss("", task, "FAILED")
+    finally:
+        with lock:
+            active_tasks_count -= 1
+            
+def _post(endpoint, **kwargs):
+    try:
+        r = requests.post(f"{BOSS_URL}{endpoint}", **kwargs)
+        if 500 <= r.status_code < 600:
+            raise RuntimeError(f"[bossd] Server error {r.status_code} on {endpoint}")
+        return r
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"[bossd] Connection error on {endpoint}") from e
 
+def _update_boss(parent_id, task, status):
+    return _post(f"/update", json={
+            "id": task.id,
+            "namespace": task.namespace, 
+            "parent_id": parent_id,
+            "params": task.hash(task.params), 
+            "attributes": task.hash(task.attributes),
+            "status": status
+        })
+        
 if __name__ == "__main__":
     # Prendi la porta dagli argomenti (es: python worker.py 5001)
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 5001

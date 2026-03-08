@@ -12,6 +12,7 @@ class Task:
         self.attributes = SimpleNamespace(**(attributes or {}))
         
         self.id = self.id if self.id else self.__class__.__name__
+        
         if tags:
             self.id = self.id + " tags:" + " ".join(tags)
         self.engine = None
@@ -46,16 +47,16 @@ class Task:
     def run(self):
         raise NotImplementedError
 
-    # def hash(self, nsdict):
-    #    return " ".join(
-    #       f"{k}:{v}" 
-    #      for k, v in sorted(vars(nsdict).items())
-    #   )
-    
     def hash(self, nsdict):
-        if not nsdict: return ""
-        # Converte in dizionario se è SimpleNamespace
-        d = vars(nsdict) if not isinstance(nsdict, dict) else nsdict
-        # ORDINA le chiavi alfabeticamente: questo è il segreto
-        return " ".join(f"{k}:{d[k]}" for k in sorted(d.keys()))
+        return " ".join(
+           f"{k}:{v}" 
+           for k, v in sorted(vars(nsdict).items())
+        )
+    
+    #def hash(self, nsdict):
+    #    if not nsdict: return ""
+    #    # Converte in dizionario se è SimpleNamespace
+    #    d = vars(nsdict) if not isinstance(nsdict, dict) else nsdict
+    #    # ORDINA le chiavi alfabeticamente: questo è il segreto
+    #    return " ".join(f"{k}:{d[k]}" for k in sorted(d.keys()))
     
