@@ -4,62 +4,90 @@ import time
 import sys
 import os
 import requests
+import configargparse
 from flask import Flask, request, jsonify
 from waluigi.core.db import WaluigiDB
 from waluigi.core.scheduler_engine import WaluigiSchedulerEngine
 
-# Configurazione
+class ParseResources(configargparse.Action):
+    """Trasforma 'water:100,food:16' in {'water': 100.0, 'food': 16.0}"""
+    def __call__(self, parser, namespace, values, option_string=None):
+        res_dict = {}
+        try:
+            for item in values.split(','):
+                key, val = item.split(':')
+                res_dict[key.strip()] = float(val)
+            setattr(namespace, self.dest, res_dict)
+        except Exception:
+            raise parser.error(f"Formato risorse non valido: {values}. Usa k:v,k:v")
+            
 app = Flask(__name__)
-PORT = 8082
-DB_PATH = os.path.join(os.getcwd(), "waluigi.db")
+
+p = configargparse.ArgParser(auto_env_var_prefix='WALUIGI_')
+
+p.add('--port', type=int, default=8082)
+p.add('--host', default='localhost', help='Host logico per URL')
+p.add('--bind-address', default='0.0.0.0', help='IP per Flask')
+p.add('--db-path', default=os.path.join(os.getcwd(), "waluigi.db"), help='Path del db sqlite')
+p.add('--resources', action=ParseResources, default={"coin": 1}, help="Definisci i limiti: 'water:100,food:16'")
+      
+args = p.parse_args()
+
+URL = f"http://{args.host}:{args.port}"
+DB_PATH = args.db_path
+RESOURCES = args.resources
+
+def log(msg):
+    print(f"[Boss 🐢] {msg}", flush=True)
 
 # Inizializzazione DB
 try:
     db = WaluigiDB(DB_PATH)
-    print(f"🟣 [Boss] Database pronto in: {DB_PATH}")
+    log(f"🟣 Database pronto in: {DB_PATH}")
 except Exception as e:
-    print(f"❌ [Boss] Errore critico DB: {e}")
+    log(f"❌ Errore critico DB: {e}")
     sys.exit(1)
     
 active_flows = {}
 
-engine = WaluigiSchedulerEngine(db)
-    
+
+engine = WaluigiSchedulerEngine(db=db, resource_limits=RESOURCES)
+
 @app.route('/update', methods=['POST'])
 def update():
     data = request.json
     print(f"method: update, payload: {data}")
     id = data['id']
     status = data['status']
-    print("* " + status)
     if status == "RUNNING":
-        print("**")
         # Tentativo di acquisizione lock atomico
         if not db.try_to_lock(id):
-            print("***")
             return jsonify({"status": "locked"}), 409
-    print("****")
+    if status in ["SUCCESS", "FAILED"]:
+        task_resources = data.get('resources', {'coin': 1.0}) 
+        engine._deallocate(task_resources)
+        log(f"♻️ Risorse liberate per {id}")
+        
     # Se non è RUNNING (è SUCCESS/FAILED/PENDING), aggiorna normalmente
     db.update_task(id, data.get('namespace'), data.get('parent_id'), data.get('params'), data.get('attributes'), status)
     return jsonify({"status": "updated"}), 200
 
 def planner_loop():
-    print("🧠 [Boss] Planner Loop avviato.")
+    log("🧠 Planner Loop avviato.")
     while True:
         try:
-            if not active_flows:
+            if not active_flows or not engine.workers:
                 time.sleep(5)
                 continue
-            
             for key, root_task in list(active_flows.items()):
                 module_name = key.split(':')[0]
                 res = engine.build(root_task, module_name)
                 
                 if res is True:
-                    print(f"🏁 [Boss] Flusso completato: {key}")
+                    log(f"🏁 Flusso completato: {key}")
                     del active_flows[key]
                 elif res is None:
-                    print(f"💀 [Boss] Flusso {key} rimosso perché bloccato da un errore.")
+                    log(f"💀 Flusso {key} rimosso perché bloccato da un errore.")
                     del active_flows[key]
                 else:
                     pass
@@ -67,15 +95,15 @@ def planner_loop():
             time.sleep(2)
             #break
         except Exception as e:
-            print(f"⚠️ [Boss] Errore nel loop: {e}")
+            log(f"⚠️ Errore nel loop: {e}")
             time.sleep(5)
 
 # --- ROTTE FLASK ---
 
 @app.route('/worker/register', methods=['POST'])
 def register():
-    url = request.json.get("url")
-    engine.registerWorker(url)
+    data = request.json
+    engine.registerWorker(data)
     return jsonify({"status": "ok"})
 
 @app.route('/submit', methods=['POST'])
@@ -87,6 +115,7 @@ def submit():
     
     try:
         mod = importlib.import_module(mod_name)
+        mod = importlib.reload(mod)
         cls = getattr(mod, cls_name)
         root_task = cls(params=params)
         
@@ -95,7 +124,7 @@ def submit():
         flow_key = f"{mod_name}:{root_task.id}"
         active_flows[flow_key] = root_task
         
-        print(f"📥 [Boss] Flusso sottomesso: {flow_key}")
+        log(f"📥 Flusso sottomesso: {flow_key}")
         return jsonify({"status": "submitted", "id": root_task.id})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
@@ -103,7 +132,6 @@ def submit():
 @app.route('/')
 def dashboard():
     conn = db.conn
-    # r[0]=namespace, r[1]=id, r[2]=params, r[3]=status, r[4]=last_update, r[5]=parent_id
     query = "SELECT namespace, id, params, status, last_update, parent_id FROM tasks"
     cursor = conn.execute(query)
     rows = cursor.fetchall()
@@ -159,8 +187,15 @@ def dashboard():
     <body>
         <h1>🟣 Waluigi Dashboard</h1>
     """
-    html = html + f"<h5>Boss Running. Workers: {len(engine.workers)} | Flows: {len(active_flows)}</h5>"
-
+    res_status = " | ".join([f"<b>{k.upper()}</b>: {engine.usage[k]}/{v}" for k, v in engine.limits.items()])
+    
+    html = html + f"""
+    <div style="background: #2b0040; padding: 10px; border-radius: 5px; margin-bottom: 10px; border-left: 4px solid #d080ff;">
+        <h5>Boss Running. Workers: {len(engine.workers)} | Flows: {len(active_flows)}</h5>
+        <p style="margin: 0; font-size: 0.9em; color: #00d4ff;">📊 Risorse: {res_status if res_status else 'Nessun limite impostato'}</p>
+    </div>
+    """
+    
     def render_tree(current_id, all_tasks, level=0):
         if current_id not in all_tasks: return ""
         task = all_tasks[current_id]
@@ -233,5 +268,18 @@ def delete_task(id):
     return jsonify({"status": "ok"})
          
 if __name__ == "__main__":
+    log(f"Parametri:")
+    log(f"    Binding: {args.bind_address}:{args.port}")
+    log(f"    URL: http://{args.host}:{args.port}")
+    log(f"    DB: {args.db_path}")
+    log(f"    Risorse: {args.resources}")
+    
     threading.Thread(target=planner_loop, daemon=True).start()
-    app.run(port=PORT, host='0.0.0.0', debug=False, threaded=True)
+    
+    app.run(
+        host=args.bind_address, 
+        port=args.port, 
+        debug=False, 
+        threaded=True
+    )
+    

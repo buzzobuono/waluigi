@@ -5,7 +5,9 @@ class Task:
 
     id = None
     namespace = "unknown"
-    
+    resources = {
+       "coin": 1
+    }
     def __init__(self, id = None, tags=None, params=None, attributes=None):
         self.tags = tags or []
         self.params = SimpleNamespace(**(params or {}))

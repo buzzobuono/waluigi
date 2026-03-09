@@ -2,28 +2,45 @@ import sys
 import importlib
 import requests
 import threading
+import time
+import configargparse
 from flask import Flask, request, jsonify
 
-MAX_CONCURRENT_TASKS = 2
 active_tasks_count = 0
 lock = threading.Lock()
 
 app = Flask(__name__)
-BOSS_URL = "http://localhost:8082" # Assicurati che l'indirizzo sia corretto
+
+p = configargparse.ArgParser(auto_env_var_prefix='WALUIGI_')
+
+p.add('--port', type=int, default=5001)
+p.add('--host', default='localhost', help='Host logico per URL')
+p.add('--bind-address', default='0.0.0.0', help='IP per Flask')
+p.add('--boss-url', default='http://localhost:8082')
+p.add('--slots', type=int, default=2)
+p.add('--heartbeat', type=int, default=10)
+
+args = p.parse_args()
+
+BOSS_URL = args.boss_url
+URL = f"http://{args.host}:{args.port}"
+SLOTS = args.slots
+HEARTBEAT = args.heartbeat
 
 def log(msg):
-    print(f"👷 [WORKER] {msg}", flush=True)
+    print(f"[worker 👷] {msg}", flush=True)
 
 @app.route('/execute', methods=['POST'])
 def execute():
-    global active_tasks_count
-    with lock:
-        if active_tasks_count >= MAX_CONCURRENT_TASKS:
-            return jsonify({"status": "busy"}), 429
-        active_tasks_count += 1
-        
     data = request.json
     log(f"Ricevuto ordine: {data.get('module')}.{data.get('class')}")
+    
+    global active_tasks_count
+    with lock:
+        if active_tasks_count >= SLOTS:
+            log(f"Slot non disponibile: {data.get('module')}.{data.get('class')}")
+            return jsonify({"status": "busy"}), 429
+        active_tasks_count += 1
     
     # Lanciamo l'esecuzione asincrona
     thread = threading.Thread(target=run_task_async, args=(data,))
@@ -37,6 +54,7 @@ def run_task_async(data):
     try:
         # Caricamento e istanza (come prima)
         mod = importlib.import_module(data.get('module'))
+        mod = importlib.reload(mod)
         cls = getattr(mod, data.get('class'))
         task = cls(id=data.get('id'), tags=data.get('tags'), params=data.get('params'), attributes=data.get('attributes'))
         # 
@@ -78,20 +96,36 @@ def _update_boss(parent_id, task, status):
             "parent_id": parent_id,
             "params": task.hash(task.params), 
             "attributes": task.hash(task.attributes),
+            "resources": task.resources,
             "status": status
         })
         
-if __name__ == "__main__":
-    # Prendi la porta dagli argomenti (es: python worker.py 5001)
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 5001
-    
-    log(f"Avvio Worker sulla porta {port}...")
-    
-    # Registrazione automatica al Boss
-    try:
-        requests.post(f"{BOSS_URL}/worker/register", json={"url": f"http://localhost:{port}"})
-        log("Registrato con successo al Boss.")
-    except:
-        log("Attenzione: Impossibile registrarsi al Boss. Assicurati che sia acceso.")
+def heartbeat():
+    while True:
+        try:
+            requests.post(f"{BOSS_URL}/worker/register", json={
+                 "url": URL,
+                 "status": "ALIVE",
+                 "free_slots": SLOTS - active_tasks_count
+            })
+            log("Registrato con successo al Boss.")
+        except:
+            log("Attenzione: Impossibile registrarsi al Boss. Assicurati che sia acceso.")
 
-    app.run(port=port, host='0.0.0.0', debug=False, threaded=True)
+        time.sleep(HEARTBEAT)
+        
+if __name__ == "__main__":
+    log(f"Parametri:")
+    log(f"    Binding: {args.bind_address}:{args.port}")
+    log(f"    URL: http://{args.host}:{args.port}")
+    log(f"    Slots: {args.slots}")
+    log(f"    Heartbeat: {args.heartbeat}")
+    
+    threading.Thread(target=heartbeat, daemon=True).start()
+    
+    app.run(
+        host=args.bind_address, 
+        port=args.port, 
+        debug=False, 
+        threaded=True
+    )

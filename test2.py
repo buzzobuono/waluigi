@@ -24,6 +24,9 @@ class CleanDataTask(Task):
     id = "clean_data"
     #namespace = "Clean Processes"
     namespace = NAMESPACE
+    resources = {
+       "pdc": 1
+    }
     
     def requires(self):
         # Richiede l'estrazione specifica per la sua sorgente

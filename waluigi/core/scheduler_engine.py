@@ -1,15 +1,22 @@
 from waluigi.core.db import WaluigiDB
 import requests
 import os
-    
+
+def log(msg):
+    print(f"[Boss 🐢] {msg}", flush=True)
+
 class WaluigiSchedulerEngine:
     
     workers = []
     
-    def __init__(self, db, server_url="http://localhost:8082"):
+    def __init__(self, db, resource_limits=None, server_url="http://localhost:8082"):
         self.db = db
         self.server_url = server_url
-
+        # Inizializziamo i limiti passati dal Boss
+        self.limits = resource_limits if resource_limits else {}
+        # Contatore dinamico dell'uso attuale
+        self.usage = {k: 0.0 for k in self.limits.keys()}
+            
     def _register(self, parent_id, task):
         id = task.id
         params_hash = task.hash(task.params)
@@ -24,7 +31,6 @@ class WaluigiSchedulerEngine:
         return "ok"
             
     def _update_boss(self, parent_id, task, status):
-        print("*")
         id = task.id
         if status == "RUNNING":
             # Tentativo di acquisizione lock atomico
@@ -39,10 +45,36 @@ class WaluigiSchedulerEngine:
         params_hash = task.hash(task.params)
         status = self.db.get_task_status(id, params_hash)
         return status == "SUCCESS"
-      
+        
+    def _get_available(self, res_name):
+        return self.limits.get(res_name, 0.0) - self.usage.get(res_name, 0.0)
+
+    def _can_run(self, task):
+        # Prendiamo le risorse dal membro del task (default: consuma 1 coin se definito)
+        task_resources = getattr(task, 'resources', {'coin': 1.0})
+        
+        for res_name, amount in task_resources.items():
+            if res_name not in self.limits:
+                log(f"⚠️ Risorsa richiesta '{res_name}' non gestita dal Boss")
+                return False
+            if self._get_available(res_name) < amount:
+                return False
+        return True # Ora è fuori dal for, corretto!
+
+    def _allocate(self, task):
+        task_resources = getattr(task, 'resources', {'coin': 1.0})
+        for res_name, amount in task_resources.items():
+            self.usage[res_name] += amount
+            
+    def _deallocate(self, task_resources):
+        # Nota: qui passiamo direttamente il dict perché lo chiamiamo dall'update
+        for res_name, amount in task_resources.items():
+            if res_name in self.usage:
+                self.usage[res_name] = max(0.0, self.usage[res_name] - amount)
+                
     def _dispatch(self, task, module_name):
         if not self.workers:
-            print("⚠️ [Boss] Nessun worker disponibile")
+            log("⚠️ Nessun worker disponibile")
             return False
             
         payload = {
@@ -55,80 +87,28 @@ class WaluigiSchedulerEngine:
             "attributes": vars(task.attributes)
         }
         
-        for w_url in self.workers:
+        for worker in self.workers:
+            print(worker)
             try:
                 # Timeout generoso per permettere al worker di caricare i moduli
-                r = requests.post(f"{w_url}/execute", json=payload, timeout=10)
+                r = requests.post(f"{worker['url']}/execute", json=payload, timeout=10)
                 if r.status_code == 202:
-                    print(f"🚀 [Boss] Inviato a {w_url}: {task.id}")
+                    log(f"🚀 Inviato a {worker['url']}: {task.id}")
                     return True
                 elif r.status_code == 429:
-                    print(f"⏳ [Boss] Workers {w_url} occupato per {task.id}")                
+                    log(f"⏳ Workers {worker['url']} occupato per {task.id}")                
             except Exception as e:
-                print(f"❌ [Boss] Worker {w_url} non ha risposto correttamente")
+                log(f"❌ Worker {worker['url']} non ha risposto correttamente. Lo rimuovo dai worker registrati.")
+                self.workers.remove(worker)
                 continue
         
         return False
     
-    def registerWorker(self, url):
-        if url and url not in self.workers:
-            self.workers.append(url)
-        print(f"👷 [Boss] Nuovo worker registrato: {url}")
-        
-    def build__(self, task, module_name, parent_id=None):
-        task.engine = self
-        
-        # 1. Chiedi lo stato attuale
-        r = self._register(parent_id, task)
-        
-        # Se sta già girando altrove, questo ramo muore qui.
-        if r == "locked":
-            print(f"⚠️ [Waluigi] {task.id} locked")
-            return False
-        
-        # 2. Check di completamento reale (Idempotenza)
-        if self._is_complete(task):
-            # Se a DB non era SUCCESS, allinealo per la dashboard
-            print(f"✅ [Boss] {task.id} is complete")
-            if r != "already_done":
-                self._update_boss(parent_id, task, "SUCCESS")
-            return True
-        
-        print(f"📌 [Boss] {task.id} is not complete")
-        
-        # 3. Se non è completo, risolvi le dipendenze.
-        # Se anche una sola dipendenza non è True (è in corso o fallita), il padre si ferma.
-        all_deps_ready = True
-        for dep in task.requires():
-            if not self.build(dep, module_name, parent_id=task.id):
-                # Se il figlio non è ancora SUCCESS, il padre resta in PENDING
-                self._update_boss(parent_id, task, "PENDING")
-                return False # BLOCCANTE
-                
-        if all_deps_ready:
-            # 4. Check finale prima di lanciare
-            status = self.db.get_task_status(task.id, task.hash(task.params))
-            if status in ["RUNNING", "READY"]:
-                return False # Già in carico al worker, aspetta.
-
-            try:
-                # 5. ESECUZIONE
-                r_lock = self._update_boss(parent_id, task, "READY")
-                if r_lock == "locked": return False
-
-                print(f"🚀 [Boss] {task.id} submitted")
-                success = self._dispatch(task, module_name)
-                
-                if not success:
-                    print(f"❌ [Boss] {task.id} cannot be submitted")
-                    self._update_boss(parent_id, task, "UNSUMBITTED")
-            except Exception as e:
-                print(f"❌ [Boss] {task.id} error: {e}")
-                self._update_boss(parent_id, task, "UNSUMBITTED")
-                
-            # IMPORTANTE: Restituiamo False. 
-            # Il padre saprà che il figlio è "partito" ma non è "finito".
-            return False
+    def registerWorker(self, worker):
+        log(f"👷 Contattato dal worker: {worker['url']}")
+        if not any(w['url'] == worker['url'] for w in self.workers):
+            self.workers.append(worker)
+            log(f"👷 Nuovo worker registrato: {worker['url']}")
             
     def build(self, task, module_name, parent_id=None):
         task.engine = self
@@ -138,23 +118,23 @@ class WaluigiSchedulerEngine:
         # SE IL TASK È FALLITO: Blocchiamo questo ramo.
         # Ritorna False per fermare il padre, ma non aggiorniamo il padre a FAILED.
         if status == "FAILED":
-            print(f"🛑 [Boss] {task.id} is FAILED. Blocking parent execution.")
+            log(f"🛑 {task.id} is FAILED. Blocking parent execution.")
             return None
         
         # Chiedi lo stato attuale
         r = self._register(parent_id, task)
         # Se sta già girando altrove, questo ramo muore qui.
         if r == "locked":
-            print(f"⚠️ [Boss] {task.id} locked")
+            log(f"⚠️ {task.id} locked")
             return False
         # Check di completamento (Idempotenza)
         if status == "SUCCESS":
-            print(f"✅ [Boss] {task.id} is complete")
+            log(f"✅ {task.id} is complete")
             if r != "already_done":
                 self._update_boss(parent_id, task, "SUCCESS")
             return True
         
-        print(f"📌 [Boss] {task.id} is not complete")
+        log(f"📌 {task.id} is not complete")
             
         all_deps_ready = True
         
@@ -176,18 +156,26 @@ class WaluigiSchedulerEngine:
         if status in ["RUNNING", "READY"]:
             return False
         try:
+            if not self._can_run(task):
+                log(f"⏳ {task.id} in attesa di risorse...")
+                return False
+            
             r_lock = self._update_boss(parent_id, task, "READY")
             if r_lock == "locked":
                 return False
 
-            print(f"🚀 [Boss] {task.id} submitted")
-            success = self._dispatch(task, module_name)
+            self._allocate(task)
             
+            log(f"🚀 {task.id} submitted")
+            success = self._dispatch(task, module_name)
             if not success:
-                print(f"❌ [Boss] {task.id} cannot be submitted")
+                log(f"❌ {task.id} cannot be submitted")
+                self._deallocate(getattr(task, 'resources', {'coin': 1.0}))
                 self._update_boss(parent_id, task, "PENDING")
+        
         except Exception as e:
-            print(f"❌ [Boss] {task.id} error: {e}")
+            self._deallocate(getattr(task, 'resources', {'coin': 1.0}))
+            log(f"❌ {task.id} error: {e}")
             self._update_boss(parent_id, task, "PENDING")
             
         return False
