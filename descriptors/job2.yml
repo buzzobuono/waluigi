@@ -1,0 +1,11 @@
+kind: Job
+spec:
+  sourcedir: "source"
+  workdir: "/data/data/com.termux/files/home/waluigi/work2"
+  module: "test.test2"
+  class: "GlobalReport"
+  tags: []
+  params:
+    date: "2026-03-16"
+  attributes:
+

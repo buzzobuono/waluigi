@@ -1,0 +1,69 @@
+kind: Job
+spec:
+  - name: "GlobalReport"
+    namespace: "analytics"
+    tags: []
+    command: "python -m analytics.report_generator"
+    params:
+      date: "2026-03-17"
+    attributes:
+      var: "pippo"
+    resources:
+      coin: 1
+    affinity:
+      - python
+    requires:
+      - name: "CleanDataTask"
+        namespace: "analytics"
+        id: "clean_erp"
+        tags: ["ERP"]
+        command: "python -m analytics.cleaner"
+        params:
+          source: "ERP"
+          date: "${parent.params.date}"
+        attributes:
+          fail_prob: "0.0"
+        resources:
+          pdc: 1
+        affinity:
+          - python
+        requires:
+          - task: "RawDataExtract"
+            namespace: "analytics"
+            id: "extract_erp"
+            tags: ["ERP"]
+            command: "python -m analytics.extractor"
+            params:
+              source: "${parent.params.source}"
+              date: "${parent.params.date}"
+            resources:
+              coin: 1
+            affinity:
+              - python
+      - name: "CleanDataTask"
+        namespace: "analytics"
+        id: "clean_web"
+        tags: ["WEB"]
+        command: "python -m analytics.cleaner"
+        params:
+          source: "WEB"
+          date: "${parent.params.date}"
+        attributes:
+          fail_prob: "0.1"
+        resources:
+          coin: 1
+        affinity:
+          - python
+        requires:
+          - name: "RawDataExtract"
+            namespace: "analytics"
+            id: "extract_web"
+            tags: ["WEB"]
+            command: "python -m analytics.extractor"
+            params:
+              source: "${parent.params.source}"
+              date: "${parent.params.date}"
+            resources:
+              coin: 1
+            affinity:
+              - python

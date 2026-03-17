@@ -1,64 +1,275 @@
+import sys
+import json
+import requests
+import yaml
 import argparse
-import os
-from waluigi.core.db import WaluigiDB
+from tabulate import tabulate
+
+class WaluigiCLI:
+    def __init__(self, base_url):
+        self.base_url = base_url.rstrip('/')
+        
+    def apply(self, descriptor_path):
+        with open(descriptor_path, 'r') as f:
+            doc = yaml.safe_load(f)
+            
+        kind = doc.get('kind')
+        spec = doc.get('spec')
+        
+        if kind == 'Job':
+            r = requests.post(f"{self.base_url}/submit", json=spec)
+            print(json.dumps(r.json(), indent=2))
+        elif kind == 'ResourceQuota':
+            print("Not yet implemented")
+        else:
+            print(f"❌ Tipo '{kind}' non supportato")
+        return
+        
+    def describe_job(self, key):
+        try:
+            r = requests.get(f"{self.base_url}/api/active/describe/{key}")
+            if r.status_code == 200:
+                data = r.json()
+                print(f"📋 Dettagli oggetto in memoria per: {key}")
+            
+                # Formattiamo i dettagli in una tabella verticale
+                details = [[k, v] for k, v in data.items()]
+                print(tabulate(details, tablefmt="fancy_grid"))
+            else:
+                print(f"❌ Key '{key}' non trovata in memoria.")
+        except Exception as e:
+            print(f"🔌 Errore: {e}")
+    
+    
+    def get_namespaces(self):
+        try:
+            if r.status_code == 200:
+                all_tasks = r.json()
+                if not all_tasks:
+                    print("📭 Nessun namespace attivo nel database.")
+                    return
+
+                # Raggruppamento per Namespace
+                namespaces = {}
+                for t in all_tasks:
+                    ns = t['namespace']
+                    if ns not in namespaces:
+                        namespaces[ns] = {"tasks": 0, "completed": 0, "failed": 0, "running": 0}
+                
+                    namespaces[ns]["tasks"] += 1
+                    if t['status'] == 'SUCCESS': namespaces[ns]["completed"] += 1
+                    elif t['status'] == 'FAILED': namespaces[ns]["failed"] += 1
+                    elif t['status'] == 'RUNNING': namespaces[ns]["running"] += 1
+
+                # Preparazione tabella sintetica
+                table_data = []
+                for ns, stats in namespaces.items():
+                    progress = f"{stats['completed']}/{stats['tasks']}"
+                    status_str = "🟢 OK" if stats['failed'] == 0 else f"🔴 ERR ({stats['failed']})"
+                    if stats['running'] > 0: status_str = "🟡 RUNNING"
+                
+                    table_data.append([ns, stats['tasks'], progress, status_str])
+
+                headers = ["Namespace", "Total Tasks", "Progress", "State"]
+                print(tabulate(table_data, headers=headers, tablefmt="outline"))
+            else:
+                print(f"❌ Errore del server: {r.status_code}")
+        except Exception as e:
+            print(f"🔌 Errore di connessione: {e}")
+            
+    def reset(self, scope, target):
+        url = f"{self.base_url}/api/reset/{scope}/{target}"
+        r = requests.post(url)
+        print(f"Result {r.status_code}")
+
+    def delete(self, scope, target):
+        url = f"{self.base_url}/api/delete/{scope}/{target}"
+        r = requests.post(url)
+        print(f"Result {r.status_code}")
+        
+    def get_namespaces(self):
+        try:
+            r = requests.get(f"{self.base_url}/api/namespaces")
+            if r.status_code == 200:
+                data = r.json()
+                if not data:
+                    print("⚠️ No namespace found")
+                    return
+                table = []
+                for ns in data:
+                    id = ns.get("id")
+                    task_count = ns.get("task_count")
+                    table.append([id, task_count])
+                headers = ["ID", "TASK COUNT" ]
+                print(tabulate(table, headers=headers, tablefmt="plain"))
+            else:
+                print(f"❌ Error: {r.status_code}")
+        except Exception as e:
+            print(f"❌ Error: {e}")
+        
+    def get_jobs(self):
+        try:
+            r = requests.get(f"{self.base_url}/api/jobs")
+            if r.status_code == 200:
+                data = r.json()
+                if not data:
+                    print("⚠️ No jobs found")
+                    return
+                table = []
+                for job in data:
+                    id = job.get("id")
+                    task_id = job.get("task_id")
+                    params = job.get("params")
+                    namespace = job.get("namespace")
+                    status = job.get("status")
+                    table.append([id, status, task_id, params, namespace ])
+                headers = ["ID", "STATUS", "TASK ID", "PARAMS", "NAMESPACE" ]
+                print(tabulate(table, headers=headers, tablefmt="plain"))
+            else:
+                print(f"❌ Error: {r.status_code}")
+        except Exception as e:
+            print(f"❌ Error: {e}")
+    
+    def get_tasks(self, job_id=None, namespace=None):
+        try:
+            r = requests.get(f"{self.base_url}/api/tasks")
+            if r.status_code == 200:
+                data = r.json()
+                if job_id:
+                    data = [t for t in data if t.get("job_id") == job_id]
+                if namespace:
+                    data = [t for t in data if t.get("namespace") == namespace]
+                if not data:
+                    print("⚠️ No task found")
+                    return
+                    
+                headers = [ "ID", "JOB_ID", "PARAMS", "STATUS", "UPDATE", "NAMESPACE" ]
+                table = []
+                for task in data:
+                    table.append([
+                        task["id"],
+                        task["job_id"],
+                        task["params"],
+                        task["status"],
+                        task["update"],
+                        task['namespace']
+                    ])
+
+                print(tabulate(table, headers=headers, tablefmt="plain"))
+                
+            else:
+                print(f"❌ Error: {r.status_code}")
+        except Exception as e:
+            print(f"❌ Error: {e}")
+   
+    def get_resources(self):
+        try:
+            r = requests.get(f"{self.base_url}/api/resources")
+            if r.status_code == 200:
+                data = r.json()
+                if not data:
+                    print("⚠️ No resources found")
+                    return
+                table = []
+                for res_name in data['limits']:
+                    limit = data['limits'][res_name]
+                    usage = data['usage'].get(res_name, 0.0)
+                    available = data['available'].get(res_name, limit)
+                    perc = (usage / limit * 100) if limit > 0 else 0
+                    status = f"{perc:.1f}%"
+                    table.append([res_name, usage, limit, available, status])
+
+                headers = ["ID", "USAGE", "LIMIT", "AVAILABLE", "STATUS"]
+                print(tabulate(table, headers=headers, tablefmt="plain"))
+            else:
+                print(f"❌ Error: {r.status_code}")
+        except Exception as e:
+            print(f"❌ Error: {e}")
+   
+    def get_workers(self):
+        try:
+            r = requests.get(f"{self.base_url}/api/workers")
+            if r.status_code == 200:
+                data = r.json()
+                if not data:
+                    print("⚠️ No worker found")
+                    return
+                table = []
+                for worker in data:
+                    url = worker.get("url", "N/A")
+                    slots = worker.get("free_slots", "N/A")
+                    status = worker.get("status", "N/A")
+                    table.append([url, slots, status ])
+                headers = ["URL", "SLOTS", "STATUS" ]
+                print(tabulate(table, headers=headers, tablefmt="plain"))
+            else:
+                print(f"❌ Error: {r.status_code}")
+        except Exception as e:
+            print(f"❌ Error: {e}")
 
 def main():
-    parser = argparse.ArgumentParser(description="🟣 Waluigi CLI - Gestione Pipeline")
-    subparsers = parser.add_subparsers(dest="command", help="Comandi disponibili")
+    parser = argparse.ArgumentParser(description='Waluigi CLI Control Panel')
+    parser.add_argument('--url', default='http://localhost:8082', help='Boss URL')
+    subparsers = parser.add_subparsers(dest='command', help='Comandi disponibili')
 
-    # Comando LIST
-    subparsers.add_parser("list", help="Elenca tutti i task e il loro stato")
+    apply_p = subparsers.add_parser('apply', help='Sottomette un job o risorse')
+    apply_p.add_argument('-f', '--file', required=True, help='Path del descrittore JSON')
+    
+    describe_p = subparsers.add_parser('describe', help='Descrive gli oggetti attivi')
+    describe_p.add_argument('type', choices=['namespace', 'job'])
+    describe_p.add_argument('target', nargs='?', help='Oggetto target')
+    
+    get_p = subparsers.add_parser('get', help='Elenca gli oggetti attivi')
+    get_p.add_argument('type', choices=['namespaces', 'jobs', 'tasks', 'resources', 'workers'])
+    get_p.add_argument('-n', '--namespace', required=False, help='Namespace')
+    get_p.add_argument('-j', '--job_id', required=False, help='Job ID')
+    
+    reset_p = subparsers.add_parser('reset', help='Resetta task o namespace')
+    reset_p.add_argument('type', choices=['task', 'namespace'])
+    reset_p.add_argument('target', help='ID del task o nome del namespace')
 
-    # Comando RESET (Singolo Task)
-    reset_parser = subparsers.add_parser("reset", help="Elimina un task dal DB per rifarlo")
-    reset_parser.add_argument("id", help="L'ID del task (es. Dep1Task_id-aaa)")
-
-    # Comando RESET-JOB (Intero Gruppo)
-    job_reset_parser = subparsers.add_parser("reset-job", help="Resetta tutti i task di un Job")
-    job_reset_parser.add_argument("namespace", help="L'ID del job (es. job_174000000)")
+    del_p = subparsers.add_parser('delete', help='Elimina task o namespace')
+    del_p.add_argument('type', choices=['task', 'namespace'])
+    del_p.add_argument('target', help='ID del task o nome del namespace')
 
     args = parser.parse_args()
-    
-    # Inizializza DB
-    db_path = os.path.join(os.getcwd(), "waluigi.db")
-    if not os.path.exists(db_path):
-        print("🚨 Database waluigi.db non trovato in questa cartella.")
-        return
-    
-    db = WaluigiDB(db_path)
+    cli = WaluigiCLI(args.url)
 
-    if args.command == "list":
-        # list_tasks() restituisce: (id, namespace, name, status, last_update)
-        tasks = db.list_tasks()
+    if args.command == 'apply':
+        cli.apply(args.file)
+    elif args.command == 'get':
+        if args.type == 'namespaces':
+            cli.get_namespaces()
+        elif args.type == 'jobs':
+            cli.get_jobs()
+        elif args.type == 'tasks':
+            cli.get_tasks(args.job_id, args.namespace)           
+        elif args.type == 'resources':
+            cli.get_resources()
+        elif args.type == 'workers':
+            cli.get_workers()            
+    elif args.command == 'describe':
+        if args.type == 'job':
+            if args.target:
+                cli.describe_job(args.target)
+    elif args.command == 'reset':
+        if args.type == 'namespace':
+            if args.target:
+                cli.reset('namespace', args.target)
+        if args.type == 'task':
+            if args.target:
+                cli.reset('task', args.target)
         
-        print(f"\n{'JOB ID':<18} | {'TASK NAME':<25} | {'STATUS':<10} | {'TASK ID'} | {'PARENT TASK ID'}")
-        print("-" * 100)
-        
-        for t in tasks:
-            t_id, j_id, name, status, last_update, parent_id = t
-            
-            # Colori ANSI
-            color = "\033[92m" if status == "SUCCESS" else "\033[93m" if status == "RUNNING" else "\033[91m"
-            reset = "\033[0m"
-            
-            # Gestione Job ID nullo
-            display_job = j_id if j_id else "None"
-            
-            print(f"{display_job:<18} | {name:<25} | {color}{status:<10}{reset} | {t_id} | {parent_id}")
-        print("-" * 100 + "\n")
-
-    elif args.command == "reset":
-        if db.reset_task(args.id):
-            print(f"✅ Task {args.id} resettato con successo.")
-        else:
-            print(f"❓ Task {args.id} non trovato.")
-    
-    elif args.command == "reset-job":
-        count = db.reset_tasks_by_job(args.namespace)
-        if count > 0:
-            print(f"💣 Boom! Eliminati {count} task per il job {args.namespace}.")
-        else:
-            print(f"❓ Nessun task trovato per il job {args.namespace}.")
+    elif args.command == 'delete':
+        if args.type == 'namespace':
+            if args.target:
+                cli.delete('namespace', args.target)
+        if args.type == 'task':
+            if args.target:
+                cli.delete('task', args.target)
+                
+    else:
+        parser.print_help()
 
 if __name__ == "__main__":
     main()

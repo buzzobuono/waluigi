@@ -2,7 +2,6 @@ import argparse
 import time
 import random
 from waluigi.core.task import Task
-from waluigi.core.engine import WaluigiEngine
 
 NAMESPACE="analytics"
 
@@ -29,10 +28,12 @@ class CleanDataTask(Task):
     }
     
     def requires(self):
+        
         # Richiede l'estrazione specifica per la sua sorgente
         return [RawDataExtract(tags=self.tags, params={"date": self.params.date, "source" : self.params.source})]
         
     def run(self):
+        
         # Simuliamo un possibile errore casuale per testare la robustezza
         if random.random() < float(self.attributes.fail_prob):
             raise Exception(f"💥 Errore imprevisto durante la pulizia di {self.params.source}!")
@@ -47,11 +48,9 @@ class GlobalReport(Task):
     id = "final_report"
     #namespace = "Main Processes"
     namespace = NAMESPACE
-    
-    #def is_complete(self):
-    #    return False
 
     def requires(self):
+        self.attributes.var="pippo"
         return [
             CleanDataTask(tags=["ERP"], params={"date": self.params.date, "source" : "ERP"}, attributes= { "fail_prob" : "0.0" }),
             CleanDataTask(tags=["WEB"], params={"date": self.params.date, "source" : "WEB"}, attributes= { "fail_prob" : "0.0" }),
@@ -65,6 +64,7 @@ class GlobalReport(Task):
         ]
         
     def run(self):
+        print(self.attributes.var)
         print("📊 Generazione Global Report in corso...")
         time.sleep(5)
         results = []
@@ -76,13 +76,4 @@ class GlobalReport(Task):
             f.write("=== WALUIGI GLOBAL REPORT ===\n")
             f.write("\n".join(results))
         print("✅ Report Finale Creato!")
-
-# --- MAIN ---
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("date", help="YYYY-MM-DD")
-    args = parser.parse_args()
-    engine = WaluigiEngine()
-    # Lanciamo il task di aggregazione che scatenerà tutta la piramide
-    report = GlobalReport(params= {"date": args.date})
-    engine.build(task=report)
+        

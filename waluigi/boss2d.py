@@ -30,12 +30,16 @@ p.add('--host', default='localhost', help='Host logico per URL')
 p.add('--bind-address', default='0.0.0.0', help='IP per Flask')
 p.add('--db-path', default=os.path.join(os.getcwd(), "waluigi.db"), help='Path del db sqlite')
 p.add('--resources', action=ParseResources, default={"coin": 1}, help="Definisci i limiti: 'water:100,food:16'")
-      
+p.add('--workdir', default=os.path.join(os.getcwd(), "work"), help='Default working directory')
+p.add('--sourcedir', default=os.path.join(os.getcwd(), "source"), help='Default source code directory')
+    
 args = p.parse_args()
 
 URL = f"http://{args.host}:{args.port}"
 DB_PATH = args.db_path
 RESOURCES = args.resources
+WORKDIR = args.workdir
+SOURCEDIR = args.sourcedir
 
 def log(msg):
     print(f"[Boss 🐢] {msg}", flush=True)
@@ -48,8 +52,9 @@ except Exception as e:
     log(f"❌ Errore critico DB: {e}")
     sys.exit(1)
     
-active_flows = {}
-
+active_jobs = {}
+completed_jobs = {}
+failed_jobs = {}
 
 engine = WaluigiSchedulerEngine(db=db, resource_limits=RESOURCES)
 
@@ -69,33 +74,35 @@ def update():
         log(f"♻️ Risorse liberate per {id}")
         
     # Se non è RUNNING (è SUCCESS/FAILED/PENDING), aggiorna normalmente
-    db.update_task(id, data.get('namespace'), data.get('parent_id'), data.get('params'), data.get('attributes'), status)
+    db.update_task(id, data.get('namespace'), data.get('params'), data.get('attributes'), status)
     return jsonify({"status": "updated"}), 200
 
 def planner_loop():
     log("🧠 Planner Loop avviato.")
     while True:
         try:
-            if not active_flows or not engine.workers:
+            if not active_jobs or not engine.workers:
                 time.sleep(5)
                 continue
-            for key, root_task in list(active_flows.items()):
-                module_name = key.split(':')[0]
-                res = engine.build(root_task, module_name)
+            for job_id, job in list(active_jobs.items()):
+                module_name = job_id.split(':')[0]
+                res = engine.build(job_attributes=job['attributes'], 
+                    task=job["task"],
+                    parent_id=None)
                 
                 if res is True:
-                    log(f"🏁 Flusso completato: {key}")
-                    del active_flows[key]
+                    log(f"🏁 Job completed: {job_id}")
+                    completed_jobs[job_id] = active_jobs.pop(job_id, None);
                 elif res is None:
-                    log(f"💀 Flusso {key} rimosso perché bloccato da un errore.")
-                    del active_flows[key]
+                    log(f"💀 Job {job_id} failed because blocked by an error")
+                    failed_jobs[job_id] = active_jobs.pop(job_id, None);
                 else:
                     pass
                 
             time.sleep(2)
-            #break
         except Exception as e:
             log(f"⚠️ Errore nel loop: {e}")
+            failed_jobs[job_id] = active_jobs.pop(job_id, None);
             time.sleep(5)
 
 # --- ROTTE FLASK ---
@@ -105,30 +112,67 @@ def register():
     data = request.json
     engine.registerWorker(data)
     return jsonify({"status": "ok"})
-
+        
 @app.route('/submit', methods=['POST'])
 def submit():
     data = request.json
-    mod_name = data.get("module")
-    cls_name = data.get("class")
+    workdir = data.get("workdir", WORKDIR)
+    sourcedir = data.get("sourcedir", SOURCEDIR)
+    module_name = data.get("module")
+    class_name = data.get("class")
+    id = data.get("id", None)
+    tags = data.get("tags", [])
     params = data.get("params", {})
+    attributes = data.get("attributes", {})
     
+    added_to_path = False
     try:
-        mod = importlib.import_module(mod_name)
-        mod = importlib.reload(mod)
-        cls = getattr(mod, cls_name)
-        root_task = cls(params=params)
+        if sourcedir and sourcedir not in sys.path:
+            sys.path.insert(0, sourcedir)
+            added_to_path = True
         
-        db.register_task(root_task.id, root_task.namespace, None, root_task.hash(root_task.params), root_task.hash(root_task.attributes))
-        
-        flow_key = f"{mod_name}:{root_task.id}"
-        active_flows[flow_key] = root_task
-        
-        log(f"📥 Flusso sottomesso: {flow_key}")
-        return jsonify({"status": "submitted", "id": root_task.id})
+        if module_name in sys.modules:
+            del sys.modules[module_name]
+            
+        module = importlib.import_module(module_name)
+        module = importlib.reload(module)
+        del module.__file__
+        clazz = getattr(module, class_name)
+        task = clazz(id=id, tags=tags, params=params, attributes=attributes)
+        job_id = f"{module_name}:{class_name}:{task.id}"
+        if any(k.startswith(job_id) for k in active_jobs):
+            log(f"Sottomissione flusso rifiutata: {job_id} già attivo.")
+            return jsonify({"status": "rejected", "reason": "flow_active"}), 409
+          
+        db.register_task(id=task.id,
+            namespace=task.namespace, 
+            parent_id=None, 
+            params=task.hash(task.params), 
+            attributes=task.hash(task.attributes), 
+            job_id=job_id
+        )
+        job_attributes = {
+            "job_id": job_id,
+            "workdir": workdir,
+            "sourcedir": sourcedir,
+            "module_name": module_name
+        }
+        completed_jobs.pop(job_id, None)
+        failed_jobs.pop(job_id, None)
+        active_jobs[job_id] = { "task": task, "attributes": job_attributes }
+            
+        log(f"📥 Flusso sottomesso: {job_id}")
+        return jsonify({"status": "submitted", "job_id": job_id, "task_id": task.id})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
-            
+    finally:
+        if added_to_path:
+            try:
+                sys.path.remove(sourcedir)
+            except ValueError:
+                pass        
+
+
 @app.route('/')
 def dashboard():
     conn = db.conn
@@ -191,7 +235,7 @@ def dashboard():
     
     html = html + f"""
     <div style="background: #2b0040; padding: 10px; border-radius: 5px; margin-bottom: 10px; border-left: 4px solid #d080ff;">
-        <h5>Boss Running. Workers: {len(engine.workers)} | Flows: {len(active_flows)}</h5>
+        <h5>Boss Running. Workers: {len(engine.workers)} | Flows: {len(active_jobs)}</h5>
         <p style="margin: 0; font-size: 0.9em; color: #00d4ff;">📊 Risorse: {res_status if res_status else 'Nessun limite impostato'}</p>
     </div>
     """
@@ -266,14 +310,112 @@ def delete_namespace(namespace):
 def delete_task(id):
     db.delete_task(id)
     return jsonify({"status": "ok"})
-         
-if __name__ == "__main__":
-    log(f"Parametri:")
+        
+@app.route('/api/resources', methods=['GET'])
+def get_resources_api():
+    return jsonify({
+        "limits": engine.limits,
+        "usage": engine.usage,
+        "available": {k: engine.limits[k] - engine.usage[k] for k in engine.limits}
+    })
+
+@app.route('/api/resources', methods=['POST'])
+def apply_resources_api():
+    data = request.json
+    for k, v in data.items():
+        engine.limits[k] = float(v)
+        if k not in engine.usage:
+            engine.usage[k] = 0.0
+    log(f"♻️ Nuovi limiti risorse applicati: {engine.limits}")
+    return jsonify({"status": "updated", "new_limits": engine.limits})
+
+@app.route('/api/workers', methods=['GET'])
+def get_workers_api():
+    return jsonify(engine.workers)
+    
+@app.route('/api/namespaces', methods=['GET'])
+def get_namespaces():
+    rows = db.list_namespaces()
+    ns = [{"id": r[0], "task_count": r[1]} for r in rows]
+    return jsonify(ns)
+          
+@app.route('/api/tasks', methods=['GET'])
+def get_tasks():
+    rows = db.list_tasks()
+    jobs = [{"namespace": r[1], "id": r[0], "job_id": r[6], "params": r[5], "status": r[2], "update": r[3]} for r in rows]
+    return jsonify(jobs)
+      
+@app.route('/api/jobs', methods=['GET'])
+def get_jobs():
+    data = []
+    for job_id, job in active_jobs.items():
+        task = job['task']
+        job_attributes = job['attributes']
+        data.append({
+            "id": job_attributes['job_id'],
+            "workdir": job_attributes['workdir'],
+            "sourcedir": job_attributes['sourcedir'],  
+            "module_name": job_attributes['module_name'],
+            "task_id": task.id,
+            "params": vars(task.params) if hasattr(task.params, '__dict__') else task.params,
+            "namespace": task.namespace,
+            "status": "ACTIVE"         
+        })
+    for job_id, job in completed_jobs.items():
+        task = job['task']
+        job_attributes = job['attributes']
+        data.append({
+            "id": job_attributes['job_id'],
+            "workdir": job_attributes['workdir'],
+            "sourcedir": job_attributes['sourcedir'],  
+            "module_name": job_attributes['module_name'],
+            "task_id": task.id,
+            "params": vars(task.params) if hasattr(task.params, '__dict__') else task.params,
+            "namespace": task.namespace,
+            "status": "COMPLETED"                 
+        })
+    for job_id, job in failed_jobs.items():
+        task = job['task']
+        job_attributes = job['attributes']
+        data.append({
+            "id": job_attributes['job_id'],
+            "workdir": job_attributes['workdir'],
+            "sourcedir": job_attributes['sourcedir'],    
+            "module_name": job_attributes['module_name'],
+            "task_id": task.id,
+            "params": vars(task.params) if hasattr(task.params, '__dict__') else task.params,
+            "namespace": task.namespace,
+            "status": "FAILED" 
+        })    
+    return jsonify(data)
+
+@app.route('/api/active/describe/<path:key>', methods=['GET'])
+def describe_active(key):
+    if key not in active_jobs:
+        return jsonify({"error": "Job not found"}), 404
+    
+    task = active_jobs[key]
+    # Qui descriviamo l'oggetto in memoria
+    return jsonify({
+        "key": key,
+        "id": task.id,
+        "namespace": task.namespace,
+        "tags": task.tags,
+        "params": vars(task.params) if hasattr(task.params, '__dict__') else task.params,
+        "attributes": vars(task.attributes) if hasattr(task.attributes, '__dict__') else task.attributes,
+        "resources": getattr(task, 'resources', {})
+    })
+
+
+def main():
+    log(f"Waluigi Boss:")
     log(f"    Binding: {args.bind_address}:{args.port}")
     log(f"    URL: http://{args.host}:{args.port}")
     log(f"    DB: {args.db_path}")
-    log(f"    Risorse: {args.resources}")
-    
+    log(f"    Resources: {args.resources}")
+    log(f"    Default Source Dir: {args.sourcedir}")
+    log(f"    Default Work Dir: {args.workdir}")
+   
     threading.Thread(target=planner_loop, daemon=True).start()
     
     app.run(
@@ -282,4 +424,7 @@ if __name__ == "__main__":
         debug=False, 
         threaded=True
     )
+    
+if __name__ == "__main__":
+    main()
     

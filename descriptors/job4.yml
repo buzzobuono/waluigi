@@ -1,0 +1,10 @@
+kind: Job
+spec:
+  path: "."
+  module: "test.test4"
+  class: "FinalAggregator"
+  tags: []
+  params:
+    date: "2026-03-10"
+  attributes:
+

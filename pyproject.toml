@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "waluigi"
+version = "0.1.0"
+dependencies = [
+    "requests",
+    "tabulate",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["waluigi"]
+
+[project.scripts]
+wlctl = "waluigi.cli:main"
+wlbossd = "waluigi.boss2d:main"
+wlworkerd = "waluigi.worker:main"
+

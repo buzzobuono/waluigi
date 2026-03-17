@@ -17,7 +17,7 @@ class WaluigiSchedulerEngine:
         # Contatore dinamico dell'uso attuale
         self.usage = {k: 0.0 for k in self.limits.keys()}
             
-    def _register(self, parent_id, task):
+    def _register(self, parent_id, task, job_id):
         id = task.id
         params_hash = task.hash(task.params)
         attributes_hash = task.hash(task.attributes)
@@ -27,17 +27,17 @@ class WaluigiSchedulerEngine:
             return "already_done"
         if status == "RUNNING":
             return "locked"
-        self.db.register_task(id, task.namespace, parent_id, params_hash, attributes_hash)
+        self.db.register_task(id, task.namespace, parent_id, params_hash, attributes_hash, job_id=job_id)
         return "ok"
             
-    def _update_boss(self, parent_id, task, status):
+    def _update_task(self, task, status):
         id = task.id
         if status == "RUNNING":
             # Tentativo di acquisizione lock atomico
             if not self.db.try_to_lock(id):
                 return "locked"
         # Se non è RUNNING (è SUCCESS/FAILED/PENDING), aggiorna normalmente
-        self.db.update_task(id, task.namespace, parent_id, task.hash(task.params), task.hash(task.attributes), status)
+        self.db.update_task(id, task.namespace, task.hash(task.params), task.hash(task.attributes), status)
         return "updated"
     
     def _is_complete(self, task):
@@ -72,13 +72,15 @@ class WaluigiSchedulerEngine:
             if res_name in self.usage:
                 self.usage[res_name] = max(0.0, self.usage[res_name] - amount)
                 
-    def _dispatch(self, task, module_name):
+    def _dispatch(self, job_attributes, task):
         if not self.workers:
             log("⚠️ Nessun worker disponibile")
             return False
             
         payload = {
-            "module": module_name,
+            "workdir": job_attributes['workdir'],
+            "sourcedir": job_attributes['sourcedir'],
+            "module": job_attributes['module_name'],
             "class": task.__class__.__name__,
             "id": task.id,
             "tags": task.tags, 
@@ -96,7 +98,9 @@ class WaluigiSchedulerEngine:
                     log(f"🚀 Inviato a {worker['url']}: {task.id}")
                     return True
                 elif r.status_code == 429:
-                    log(f"⏳ Workers {worker['url']} occupato per {task.id}")                
+                    log(f"⏳ Workers {worker['url']} occupato per {task.id}")
+                else:
+                    log(f"⏳ Workers {worker['url']} errore per {task.id}")
             except Exception as e:
                 log(f"❌ Worker {worker['url']} non ha risposto correttamente. Lo rimuovo dai worker registrati.")
                 self.workers.remove(worker)
@@ -109,8 +113,8 @@ class WaluigiSchedulerEngine:
         if not any(w['url'] == worker['url'] for w in self.workers):
             self.workers.append(worker)
             log(f"👷 Nuovo worker registrato: {worker['url']}")
-            
-    def build(self, task, module_name, parent_id=None):
+    
+    def build(self, job_attributes, task, parent_id):
         task.engine = self
         
         # Recupero dello stato attuale dal DB
@@ -122,24 +126,27 @@ class WaluigiSchedulerEngine:
             return None
         
         # Chiedi lo stato attuale
-        r = self._register(parent_id, task)
+        r = self._register(parent_id, task, job_attributes['job_id'])
         # Se sta già girando altrove, questo ramo muore qui.
         if r == "locked":
             log(f"⚠️ {task.id} locked")
             return False
+            
         # Check di completamento (Idempotenza)
         if status == "SUCCESS":
             log(f"✅ {task.id} is complete")
             if r != "already_done":
-                self._update_boss(parent_id, task, "SUCCESS")
+                self._update_task(task, "SUCCESS")
             return True
         
         log(f"📌 {task.id} is not complete")
             
         all_deps_ready = True
-        
         for dep in task.requires():
-            res = self.build(dep, module_name, parent_id=task.id)
+            res = self.build(job_attributes=job_attributes,
+                task=dep,
+                parent_id=task.id
+                )
             if res is None: 
                 return None # Propaga lo stop al padre senza fare update
             if res is False:
@@ -148,7 +155,7 @@ class WaluigiSchedulerEngine:
         # Se anche un solo figlio non è SUCCESS (perché è READY, RUNNING o appena lanciato)
         # il padre deve fermarsi qui.
         if not all_deps_ready:
-            self._update_boss(parent_id, task, "PENDING")
+            self._update_task(task, "PENDING")
             return False
                 
         # Esecuzione (Tutte le deps sono SUCCESS)
@@ -160,23 +167,23 @@ class WaluigiSchedulerEngine:
                 log(f"⏳ {task.id} in attesa di risorse...")
                 return False
             
-            r_lock = self._update_boss(parent_id, task, "READY")
+            r_lock = self._update_task(task, "READY")
             if r_lock == "locked":
                 return False
 
             self._allocate(task)
             
             log(f"🚀 {task.id} submitted")
-            success = self._dispatch(task, module_name)
+            success = self._dispatch(job_attributes, task)
             if not success:
                 log(f"❌ {task.id} cannot be submitted")
                 self._deallocate(getattr(task, 'resources', {'coin': 1.0}))
-                self._update_boss(parent_id, task, "PENDING")
+                self._update_task(task, "PENDING")
         
         except Exception as e:
             self._deallocate(getattr(task, 'resources', {'coin': 1.0}))
             log(f"❌ {task.id} error: {e}")
-            self._update_boss(parent_id, task, "PENDING")
+            self._update_task(task, "PENDING")
             
         return False
        

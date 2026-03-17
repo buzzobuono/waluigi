@@ -32,9 +32,10 @@ class WaluigiDB:
                 params TEXT, 
                 attributes TEXT, 
                 status TEXT, 
-                last_update TIMESTAMP
+                last_update TIMESTAMP,
+                job_id TEXT
             )""")
-
+    
     def get_task_status(self, id, params):
         cursor = self.conn.execute("SELECT status FROM tasks WHERE id = ? and params = ?", (id, params))
         row = cursor.fetchone()
@@ -51,17 +52,17 @@ class WaluigiDB:
             """, (id,))
             return cursor.rowcount > 0
             
-    def register_task(self, id, namespace, parent_id, params, attributes):
+    def register_task(self, id, namespace, parent_id, params, attributes, job_id):
         with self.conn:
             self.conn.execute("""
-                INSERT INTO tasks (id, parent_id, namespace, params, attributes, status, last_update)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO tasks (id, parent_id, namespace, params, attributes, status, last_update, job_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET 
                     namespace=excluded.namespace, parent_id=excluded.parent_id,
                     last_update=excluded.last_update
-            """, (id, parent_id, namespace, params, attributes, 'PENDING', datetime.now()))
+            """, (id, parent_id, namespace, params, attributes, 'PENDING', datetime.now(), job_id))
 
-    def update_task(self, id, namespace, parent_id, params, attributes, status):
+    def update_task(self, id, namespace, params, attributes, status):
         with self.conn:
             self.conn.execute("""
                 UPDATE tasks SET 
@@ -94,6 +95,11 @@ class WaluigiDB:
             """, (id, ))
 
     def list_tasks(self):
-        cursor = self.conn.execute("SELECT id, namespace, status, last_update, parent_id FROM tasks ORDER BY last_update DESC")
+        cursor = self.conn.execute("SELECT id, namespace, status, last_update, parent_id, params, job_id FROM tasks ORDER BY last_update DESC")
         return cursor.fetchall()
-        
+    
+    def list_namespaces(self):
+        cursor = self.conn.execute("SELECT namespace, count(*) FROM tasks GROUP BY namespace")
+        return cursor.fetchall()
+    
+    
