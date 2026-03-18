@@ -12,12 +12,12 @@ class WaluigiCLI:
     def apply(self, descriptor_path):
         with open(descriptor_path, 'r') as f:
             doc = yaml.safe_load(f)
-            
+          
         kind = doc.get('kind')
         spec = doc.get('spec')
         
         if kind == 'Job':
-            r = requests.post(f"{self.base_url}/submit", json=spec)
+            r = requests.post(f"{self.base_url}/submit", json=doc)
             print(json.dumps(r.json(), indent=2))
         elif kind == 'ResourceQuota':
             print("Not yet implemented")

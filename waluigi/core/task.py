@@ -4,21 +4,16 @@ from types import SimpleNamespace
 class Task:
 
     id = None
-    namespace = "unknown"
+    namespace = "default"
     resources = {
        "coin": 1
     }
     
-    def __init__(self, id = None, tags=None, params=None, attributes=None):
-        self.tags = tags or []
+    def __init__(self, id = None, params=None, attributes=None):
         self.params = SimpleNamespace(**(params or {}))
         self.attributes = SimpleNamespace(**(attributes or {}))
-        
+        self.id = id if id else self.id
         self.id = self.id if self.id else self.__class__.__name__
-        
-        if tags:
-            self.id = self.id + " tags:" + " ".join(tags)
-        self.engine = None
             
     def requires(self):
         return []

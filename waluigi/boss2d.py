@@ -8,6 +8,7 @@ import configargparse
 from flask import Flask, request, jsonify
 from waluigi.core.db import WaluigiDB
 from waluigi.core.scheduler_engine import WaluigiSchedulerEngine
+from waluigi.core.dynamic_task import DynamicTask
 
 class ParseResources(configargparse.Action):
     """Trasforma 'water:100,food:16' in {'water': 100.0, 'food': 16.0}"""
@@ -113,8 +114,8 @@ def register():
     engine.registerWorker(data)
     return jsonify({"status": "ok"})
         
-@app.route('/submit', methods=['POST'])
-def submit():
+@app.route('/legacy/submit', methods=['POST'])
+def submit_legacy():
     data = request.json
     workdir = data.get("workdir", WORKDIR)
     sourcedir = data.get("sourcedir", SOURCEDIR)
@@ -144,7 +145,8 @@ def submit():
             log(f"Sottomissione flusso rifiutata: {job_id} già attivo.")
             return jsonify({"status": "rejected", "reason": "flow_active"}), 409
           
-        db.register_task(id=task.id,
+        db.register_task(
+            id=task.id,
             namespace=task.namespace, 
             parent_id=None, 
             params=task.hash(task.params), 
@@ -162,7 +164,11 @@ def submit():
         active_jobs[job_id] = { "task": task, "attributes": job_attributes }
             
         log(f"📥 Flusso sottomesso: {job_id}")
-        return jsonify({"status": "submitted", "job_id": job_id, "task_id": task.id})
+        return jsonify({
+            "status": "submitted", 
+            "job_id": job_id, 
+            "task_id": task.id
+        })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
     finally:
@@ -172,6 +178,61 @@ def submit():
             except ValueError:
                 pass        
 
+@app.route('/submit', methods=['POST'])
+def submit():
+    data = request.json
+    if data.get("kind") != "Job" or "spec" not in data:
+        return jsonify({"status": "error", "message": "Formato non supportato. Richiesto 'kind: Job' con 'spec'."}), 400
+    spec_list = data.get("spec", [])
+    if not spec_list:
+        return jsonify({"status": "error", "message": "Spec vuoto"}), 400
+    
+    metadata = data.get("metadata", {})
+    workdir = metadata.get("workdir", WORKDIR)
+    sourcedir = metadata.get("sourcedir", SOURCEDIR)
+    module_name = metadata.get("module")
+    print(module_name)
+    try:
+        root_data = spec_list[0]
+        task = DynamicTask(root_data)
+        
+        job_id = f"dynamic:{task.namespace}:{task.id}"
+        
+        if job_id in active_jobs:
+            log(f"⚠️ Sottomissione rifiutata: {job_id} è già in esecuzione.")
+            return jsonify({"status": "rejected", "reason": "flow_active"}), 409
+          
+        # Registrazione formale nel database
+        db.register_task(
+            id=task.id,
+            namespace=task.namespace, 
+            parent_id=None, 
+            params=task.hash(task.params), 
+            attributes=task.hash(task.attributes), 
+            job_id=job_id
+        )
+        
+        job_attributes = {
+            "job_id": job_id,
+            "workdir": workdir,
+            "sourcedir": sourcedir,
+            "module_name": module_name
+        }
+        
+        completed_jobs.pop(job_id, None)
+        failed_jobs.pop(job_id, None)
+        active_jobs[job_id] = { "task": task, "attributes": job_attributes }
+            
+        log(f"📥 Flusso sottomesso: {job_id}")
+        return jsonify({
+            "status": "submitted", 
+            "job_id": job_id, 
+            "task_id": task.id
+        })
+
+    except Exception as e:
+        log(f"❌ Errore processamento YAML: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/')
 def dashboard():

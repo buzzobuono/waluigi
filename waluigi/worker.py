@@ -40,10 +40,90 @@ def execute():
     data = request.json
     workdir = data.get("workdir", WORKDIR)
     sourcedir = data.get("sourcedir", SOURCEDIR)
+    command = data.get("command")
+    task_id = data.get("id")
+    namespace = data.get("namespace")
+    params = data.get("params", {})
+    attributes = data.get("attributes", {})
+    
+    if not command:
+        return jsonify({"status": "error", "message": "No command provided"}), 400
+
+    log(f"Ricevuto ordine: {task_id}")
+    
+    global active_tasks_count
+    with lock:
+        if active_tasks_count >= SLOTS:
+            log(f"Slot non disponibile.")
+            return jsonify({"status": "busy"}), 429
+        active_tasks_count += 1
+    
+    log(f"🚀 Forking task: {task_id} [{namespace}]")
+        
+    try:
+        thread = threading.Thread(
+            target=run_command_async, 
+            args=(command, id, namespace, params, attributes)
+        )
+        thread.start()
+    except Exception as e:
+        log(f"❌ Errore nel caricamento del modulo: {e}")
+        with lock:
+            active_tasks_count -= 1
+        return jsonify({"status": "error", "message": str(e)}), 500
+            
+    
+    return jsonify({"status": "submitted", "id": task_id}), 202
+
+def run_command_async(command, task_id, namespace, workdir, params):
+    global active_tasks_count
+    
+    try:
+        _update_boss(task, "RUNNING")
+        
+        env = os.environ.copy()
+        for k, v in params.items():
+            env[f"WALUIGI_PARAM_{k.upper()}"] = str(v)
+
+        log(f"🚀 Forking: {command}")
+        
+        process = subprocess.Popen(
+            command,
+            shell=True,
+            cwd=workdir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env=env
+        )
+
+        for line in process.stdout:
+            print(f"[{task_id}] {line.strip()}", flush=True)
+
+        process.wait()
+
+        if process.returncode == 0:
+            log(f"✅ Task {task_id} terminato con successo.")
+            _update_boss(task_id, "SUCCESS")
+        else:
+            log(f"❌ Task {task_id} fallito (Exit code: {process.returncode})")
+            _update_boss(task_id, "FAILED")
+            
+    except Exception as e:
+        log(f"❌ Errore: {e}")
+        _update_boss(task, "FAILED")
+    finally:
+        with lock:
+            active_tasks_count -= 1
+            
+@app.route('/legacy/execute', methods=['POST'])
+def execute_legacy():
+    data = request.json
+    workdir = data.get("workdir", WORKDIR)
+    sourcedir = data.get("sourcedir", SOURCEDIR)
     module_name = data.get("module")
     class_name = data.get("class")
-    id = data.get("id", "")
-    tags = data.get("tags", [])
+    id = data.get("id", None)
     params = data.get("params", {})
     attributes = data.get("attributes", {})
     
@@ -68,7 +148,7 @@ def execute():
             
             module = importlib.import_module(module_name)
             clazz = getattr(module, class_name)
-            task = clazz(id=id, tags=tags, params=params, attributes=attributes)
+            task = clazz(id=id, params=params, attributes=attributes)
             
             thread = threading.Thread(target=run_task_async, args=(task, workdir))
             thread.start()
@@ -104,8 +184,7 @@ def run_task_async(task, workdir):
         _update_boss(task, "SUCCESS")
         log(f"✅ Task {task.id} terminato.")
     except Exception as e:
-        log(f"❌ Errore asincrono: {e}")
-        # In caso di crash, riportiamo a FAILED per sbloccare il grafo
+        log(f"❌ Errore: {e}")
         _update_boss(task, "FAILED")
     finally:
         with lock:
@@ -120,7 +199,17 @@ def _post(endpoint, **kwargs):
     except requests.exceptions.RequestException as e:
         raise RuntimeError(f"[bossd] Connection error on {endpoint}") from e
 
-def _update_boss(task, status):
+def _update_boss_legacy(task, status):
+    return _post(f"/update", json={
+            "id": task.id,
+            "namespace": task.namespace,
+            "params": task.hash(task.params), 
+            "attributes": task.hash(task.attributes),
+            "resources": task.resources,
+            "status": status
+        })
+        
+def _update_boss(id, namespace, params, attributes, resources, status):
     return _post(f"/update", json={
             "id": task.id,
             "namespace": task.namespace,

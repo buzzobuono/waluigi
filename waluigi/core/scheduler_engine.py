@@ -81,9 +81,9 @@ class WaluigiSchedulerEngine:
             "workdir": job_attributes['workdir'],
             "sourcedir": job_attributes['sourcedir'],
             "module": job_attributes['module_name'],
-            "class": task.__class__.__name__,
+            "class": task.name,
+            "command": task.command,
             "id": task.id,
-            "tags": task.tags, 
             "params": vars(task.params),
             "params_hash": task.hash(task.params),
             "attributes": vars(task.attributes)

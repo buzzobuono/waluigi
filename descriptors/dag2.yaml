@@ -1,9 +1,12 @@
 kind: Job
+metadata:
+  module: "test.test2"
+  sourcedir: "source"
+  workdir: "/data/data/com.termux/files/home/waluigi/work3"
 spec:
   - name: "GlobalReport"
     namespace: "analytics"
-    tags: []
-    command: "python -m analytics.report_generator"
+    command: "echo python -m analytics.report_generator"
     params:
       date: "2026-03-17"
     attributes:
@@ -16,8 +19,7 @@ spec:
       - name: "CleanDataTask"
         namespace: "analytics"
         id: "clean_erp"
-        tags: ["ERP"]
-        command: "python -m analytics.cleaner"
+        command: "echo python -m analytics.cleaner"
         params:
           source: "ERP"
           date: "${parent.params.date}"
@@ -28,11 +30,10 @@ spec:
         affinity:
           - python
         requires:
-          - task: "RawDataExtract"
+          - name: "RawDataExtract"
             namespace: "analytics"
             id: "extract_erp"
-            tags: ["ERP"]
-            command: "python -m analytics.extractor"
+            command: "echo python -m analytics.extractor"
             params:
               source: "${parent.params.source}"
               date: "${parent.params.date}"
@@ -43,8 +44,7 @@ spec:
       - name: "CleanDataTask"
         namespace: "analytics"
         id: "clean_web"
-        tags: ["WEB"]
-        command: "python -m analytics.cleaner"
+        command: "echo python -m analytics.cleaner"
         params:
           source: "WEB"
           date: "${parent.params.date}"
@@ -58,8 +58,7 @@ spec:
           - name: "RawDataExtract"
             namespace: "analytics"
             id: "extract_web"
-            tags: ["WEB"]
-            command: "python -m analytics.extractor"
+            command: "echo python -m analytics.extractor"
             params:
               source: "${parent.params.source}"
               date: "${parent.params.date}"
