@@ -1,0 +1,31 @@
+services:
+  
+  boss:
+    image: buzzobuono/waluigi-bossd:latest
+    ports:
+    - target: 8082
+      published: 8082
+      protocol: tcp
+      mode: ingress
+    environment:
+      - WALUIGI_DB_PATH=/db/waluigi.db
+      - WALUIGI_RESOURCES=coin:32,pdc:32
+    command: ["wlbossd"]
+    volumes:
+      - ./db:/db
+    deploy:
+      replicas: 1
+
+  worker:
+    image: buzzobuono/waluigi-workerd:latest
+    depends_on:
+      - boss
+    environment:
+      - WALUIGI_BOSS_URL=http://boss:8082
+      - WALUIGI_WORKDIR=/work
+      - WALUIGI_SOURCEDIR=/source
+    volumes:
+      - ./work:/work
+      - ./source:/source
+    deploy:
+      replicas: 16

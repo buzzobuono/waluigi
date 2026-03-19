@@ -8,11 +8,16 @@ version = "0.1.0"
 dependencies = [
     "requests",
     "tabulate",
+    "Flask>=3.0.0",
+    "ConfigArgParse>=1.7",
+    "requests>=2.31.0",
+    "pyyaml"
 ]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["waluigi"]
+include = ["waluigi*"]
+namespaces = true
 
 [project.scripts]
 wlctl = "waluigi.cli:main"

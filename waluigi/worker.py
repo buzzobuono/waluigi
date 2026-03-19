@@ -3,9 +3,11 @@ import importlib
 import requests
 import threading
 import time
+import socket
 import os
 import configargparse
 from flask import Flask, request, jsonify
+import subprocess
 
 active_tasks_count = 0
 lock = threading.Lock()
@@ -15,7 +17,7 @@ app = Flask(__name__)
 p = configargparse.ArgParser(auto_env_var_prefix='WALUIGI_')
 
 p.add('--port', type=int, default=5001)
-p.add('--host', default='localhost', help='Host logico per URL')
+p.add('--host', default=socket.gethostname(), help='Host logico per URL')
 p.add('--bind-address', default='0.0.0.0', help='IP per Flask')
 p.add('--boss-url', default='http://localhost:8082')
 p.add('--slots', type=int, default=2)
@@ -41,15 +43,16 @@ def execute():
     workdir = data.get("workdir", WORKDIR)
     sourcedir = data.get("sourcedir", SOURCEDIR)
     command = data.get("command")
-    task_id = data.get("id")
+    id = data.get("id")
     namespace = data.get("namespace")
     params = data.get("params", {})
     attributes = data.get("attributes", {})
-    
+    resources = data.get("resources")
+
     if not command:
         return jsonify({"status": "error", "message": "No command provided"}), 400
 
-    log(f"Ricevuto ordine: {task_id}")
+    log(f"Ricevuto ordine: {id}")
     
     global active_tasks_count
     with lock:
@@ -57,33 +60,34 @@ def execute():
             log(f"Slot non disponibile.")
             return jsonify({"status": "busy"}), 429
         active_tasks_count += 1
-    
-    log(f"🚀 Forking task: {task_id} [{namespace}]")
-        
+            
     try:
         thread = threading.Thread(
             target=run_command_async, 
-            args=(command, id, namespace, params, attributes)
+            args=(command, id, namespace, params, attributes, resources, workdir)
         )
         thread.start()
+    
+        return jsonify({"status": "submitted", "id": id}), 202
+    
     except Exception as e:
-        log(f"❌ Errore nel caricamento del modulo: {e}")
+        log(f"❌ Errore: {e}")
         with lock:
             active_tasks_count -= 1
         return jsonify({"status": "error", "message": str(e)}), 500
             
-    
-    return jsonify({"status": "submitted", "id": task_id}), 202
 
-def run_command_async(command, task_id, namespace, workdir, params):
+def run_command_async(command, id, namespace, params, attributes, resources, workdir):
     global active_tasks_count
     
     try:
-        _update_boss(task, "RUNNING")
+        _update_boss(id, namespace, params, attributes, resources, "RUNNING")
         
         env = os.environ.copy()
         for k, v in params.items():
             env[f"WALUIGI_PARAM_{k.upper()}"] = str(v)
+        for k, v in attributes.items():
+            env[f"WALUIGI_ATTRIBUTE_{k.upper()}"] = str(v)
 
         log(f"🚀 Forking: {command}")
         
@@ -98,20 +102,20 @@ def run_command_async(command, task_id, namespace, workdir, params):
         )
 
         for line in process.stdout:
-            print(f"[{task_id}] {line.strip()}", flush=True)
+            print(f"[{id}] {line.strip()}", flush=True)
 
         process.wait()
 
         if process.returncode == 0:
-            log(f"✅ Task {task_id} terminato con successo.")
-            _update_boss(task_id, "SUCCESS")
+            log(f"✅ Task {id} terminato con successo.")
+            _update_boss(id, namespace, params, attributes, resources, "SUCCESS")
         else:
-            log(f"❌ Task {task_id} fallito (Exit code: {process.returncode})")
-            _update_boss(task_id, "FAILED")
+            log(f"❌ Task {id} fallito (Exit code: {process.returncode})")
+            _update_boss(id, namespace, params, attributes, resources, "FAILED")
             
     except Exception as e:
         log(f"❌ Errore: {e}")
-        _update_boss(task, "FAILED")
+        _update_boss(id, namespace, params, attributes, resources, "FAILED")
     finally:
         with lock:
             active_tasks_count -= 1
@@ -150,7 +154,8 @@ def execute_legacy():
             clazz = getattr(module, class_name)
             task = clazz(id=id, params=params, attributes=attributes)
             
-            thread = threading.Thread(target=run_task_async, args=(task, workdir))
+            thread = threading.Thread(target=run_task_async, 
+                                        args=(task, workdir))
             thread.start()
             task_started = True
             
@@ -211,13 +216,19 @@ def _update_boss_legacy(task, status):
         
 def _update_boss(id, namespace, params, attributes, resources, status):
     return _post(f"/update", json={
-            "id": task.id,
-            "namespace": task.namespace,
-            "params": task.hash(task.params), 
-            "attributes": task.hash(task.attributes),
-            "resources": task.resources,
+            "id": id,
+            "namespace": namespace,
+            "params": _hash(params), 
+            "attributes": _hash(attributes),
+            "resources": resources,
             "status": status
         })
+
+def _hash(nsdict):
+    return " ".join(
+        f"{k}:{v}" 
+        for k, v in sorted(nsdict.items())
+    )
         
 def heartbeat():
     while True:

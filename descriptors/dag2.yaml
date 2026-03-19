@@ -1,14 +1,15 @@
 kind: Job
 metadata:
   module: "test.test2"
-  sourcedir: "source"
-  workdir: "/data/data/com.termux/files/home/waluigi/work3"
+  sourcedir: "/source"
+  workdir: "/work"
 spec:
   - name: "GlobalReport"
+    id: "final_report"
     namespace: "analytics"
-    command: "echo python -m analytics.report_generator"
+    command: "python /source/analytics/global_report.py"
     params:
-      date: "2026-03-17"
+      date: "2026-03-20"
     attributes:
       var: "pippo"
     resources:
@@ -19,7 +20,7 @@ spec:
       - name: "CleanDataTask"
         namespace: "analytics"
         id: "clean_erp"
-        command: "echo python -m analytics.cleaner"
+        command: "python /source/analytics/clean_data.py"
         params:
           source: "ERP"
           date: "${parent.params.date}"
@@ -33,7 +34,7 @@ spec:
           - name: "RawDataExtract"
             namespace: "analytics"
             id: "extract_erp"
-            command: "echo python -m analytics.extractor"
+            command: "python /source/analytics/raw_data_exctact.py"
             params:
               source: "${parent.params.source}"
               date: "${parent.params.date}"
@@ -44,21 +45,46 @@ spec:
       - name: "CleanDataTask"
         namespace: "analytics"
         id: "clean_web"
-        command: "echo python -m analytics.cleaner"
+        command: "python /source/analytics/clean_data.py"
         params:
           source: "WEB"
           date: "${parent.params.date}"
         attributes:
           fail_prob: "0.1"
         resources:
-          coin: 1
+          pdc: 1
         affinity:
           - python
         requires:
           - name: "RawDataExtract"
             namespace: "analytics"
             id: "extract_web"
-            command: "echo python -m analytics.extractor"
+            command: "python /source/analytics/raw_data_exctact.py"
+            params:
+              source: "${parent.params.source}"
+              date: "${parent.params.date}"
+            resources:
+              coin: 1
+            affinity:
+              - python
+      - name: "CleanDataTask"
+        namespace: "analytics"
+        id: "clean_social"
+        command: "python /source/analytics/clean_data.py"
+        params:
+          source: "SOCIAL"
+          date: "${parent.params.date}"
+        attributes:
+          fail_prob: "0.0"
+        resources:
+          pdc: 1
+        affinity:
+          - python
+        requires:
+          - name: "RawDataExtract"
+            namespace: "analytics"
+            id: "extract_social"
+            command: "python /source/analytics/raw_data_exctact.py"
             params:
               source: "${parent.params.source}"
               date: "${parent.params.date}"
