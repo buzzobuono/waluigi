@@ -69,6 +69,24 @@ class WaluigiDB:
                     status=?, last_update=?, namespace=?, params=?, attributes=?
                 WHERE id=?
             """, (status, datetime.now(), namespace, params, attributes, id))
+    
+    def claim_job(self, boss_id, lock_duration_seconds=60):
+        with self.connection:
+            query = """
+            UPDATE jobs 
+                SET locked_by = ?, 
+                locked_until = datetime('now', '+60 seconds')
+                WHERE id = (
+                SELECT id FROM jobs 
+                WHERE status != 'SUCCESS' 
+                AND (locked_until IS NULL OR locked_until < datetime('now'))
+                LIMIT 1
+            )
+            """
+            cursor = self.db.execute(query, (boss_id,))
+            if cursor.rowcount > 0:
+                return self.db.execute("SELECT id FROM jobs WHERE locked_by = ?", (boss_id,)).fetchone()[0]
+        return None
 
     def delete_namespace(self, namespace):
         with self.conn:
