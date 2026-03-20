@@ -70,16 +70,14 @@ class WaluigiSchedulerEngine:
             if res_name in self.usage:
                 self.usage[res_name] = max(0.0, self.usage[res_name] - amount)
                 
-    def _dispatch(self, job_attributes, task):
+    def _dispatch(self, job_metadata, task):
         if not self.workers:
             log("⚠️ Nessun worker disponibile")
             return False
             
         payload = {
-            "workdir": job_attributes['workdir'],
-            "sourcedir": job_attributes['sourcedir'],
-            "module": job_attributes['module_name'],
-            "class": task.name,
+            "workdir": job_metadata['workdir'],
+            "sourcedir": job_metadata['sourcedir'],
             "command": task.command,
             "id": task.id,
             "params": vars(task.params),
@@ -105,16 +103,16 @@ class WaluigiSchedulerEngine:
                 log(f"❌ Worker {worker['url']} non ha risposto correttamente. Lo rimuovo dai worker registrati.")
                 self.workers.remove(worker)
                 continue
-        
+                
         return False
-    
+        
     def registerWorker(self, worker):
         log(f"👷 Contattato dal worker: {worker['url']}")
         if not any(w['url'] == worker['url'] for w in self.workers):
             self.workers.append(worker)
             log(f"👷 Nuovo worker registrato: {worker['url']}")
     
-    def build(self, job_attributes, task, parent_id):
+    def build(self, job_metadata, task, parent_id):
         task.engine = self
         
         # Recupero dello stato attuale dal DB
@@ -126,7 +124,7 @@ class WaluigiSchedulerEngine:
             return None
         
         # Chiedi lo stato attuale
-        r = self._register(parent_id, task, job_attributes['job_id'])
+        r = self._register(parent_id, task, job_metadata['job_id'])
         # Se sta già girando altrove, questo ramo muore qui.
         if r == "locked":
             log(f"⚠️ {task.id} locked")
@@ -143,7 +141,7 @@ class WaluigiSchedulerEngine:
             
         all_deps_ready = True
         for dep in task.requires():
-            res = self.build(job_attributes=job_attributes,
+            res = self.build(job_metadata=job_metadata,
                 task=dep,
                 parent_id=task.id
                 )
@@ -174,7 +172,7 @@ class WaluigiSchedulerEngine:
             self._allocate(task)
             
             log(f"🚀 {task.id} submitted")
-            success = self._dispatch(job_attributes, task)
+            success = self._dispatch(job_metadata, task)
             if not success:
                 log(f"❌ {task.id} cannot be submitted")
                 self._deallocate(getattr(task, 'resources', {'coin': 1.0}))

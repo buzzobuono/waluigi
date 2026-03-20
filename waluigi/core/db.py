@@ -1,5 +1,6 @@
 import sqlite3
 import threading
+import json
 from datetime import datetime
 
 class WaluigiDB:
@@ -25,17 +26,26 @@ class WaluigiDB:
     def create_table(self):
         with self.conn:
             self.conn.execute("""
-            CREATE TABLE IF NOT EXISTS tasks (
-                id TEXT primary key,
-                namespace TEXT, 
-                parent_id TEXT,
-                params TEXT, 
-                attributes TEXT, 
-                status TEXT, 
-                last_update TIMESTAMP,
-                job_id TEXT
+                CREATE TABLE IF NOT EXISTS tasks (
+                    id TEXT PRIMARY KEY,
+                    namespace TEXT, 
+                    parent_id TEXT,
+                    params TEXT, 
+                    attributes TEXT, 
+                    status TEXT, 
+                    last_update TIMESTAMP,
+                    job_id TEXT
+                )""")
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS jobs (
+                job_id TEXT PRIMARY KEY,
+                metadata TEXT,    -- workdir, sourcedir, module_name
+                spec TEXT,        -- Il contenuto dello YAML o i parametri della classe
+                status TEXT,           -- PENDING, RUNNING, SUCCESS, FAILED
+                locked_by TEXT,        -- ID del Boss (es: hostname)
+                locked_until TIMESTAMP
             )""")
-    
+
     def get_task_status(self, id, params):
         cursor = self.conn.execute("SELECT status FROM tasks WHERE id = ? and params = ?", (id, params))
         row = cursor.fetchone()
@@ -70,22 +80,57 @@ class WaluigiDB:
                 WHERE id=?
             """, (status, datetime.now(), namespace, params, attributes, id))
     
-    def claim_job(self, boss_id, lock_duration_seconds=60):
-        with self.connection:
+    import json
+
+    def create_job(self, job_id, metadata, spec):
+        with self.conn:
             query = """
-            UPDATE jobs 
+            INSERT INTO jobs (
+                job_id, 
+                metadata, 
+                spec,
+                status
+            ) VALUES (?, ?, ?, 'PENDING')
+            ON CONFLICT(job_id) DO UPDATE SET
+            metadata = excluded.metadata,
+            spec = excluded.spec,
+            status = 'PENDING',
+            locked_by = NULL,
+            locked_until = NULL
+            WHERE status NOT IN ('RUNNING', 'READY')
+            """
+            self.conn.execute(query, (
+                job_id, 
+                json.dumps(metadata),
+                json.dumps(spec)
+            ))
+
+    def claim_job(self, boss_id):
+        with self.conn:
+            query = """
+                UPDATE jobs 
                 SET locked_by = ?, 
-                locked_until = datetime('now', '+60 seconds')
-                WHERE id = (
-                SELECT id FROM jobs 
-                WHERE status != 'SUCCESS' 
+                locked_until = datetime('now', '+60 seconds'),
+                status = 'RUNNING'
+                WHERE job_id = (
+                SELECT job_id FROM jobs 
+                WHERE status NOT IN ('SUCCESS', 'FAILED')
                 AND (locked_until IS NULL OR locked_until < datetime('now'))
                 LIMIT 1
-            )
+                )
             """
-            cursor = self.db.execute(query, (boss_id,))
+            cursor = self.conn.execute(query, (boss_id,))
+        
             if cursor.rowcount > 0:
-                return self.db.execute("SELECT id FROM jobs WHERE locked_by = ?", (boss_id,)).fetchone()[0]
+                res = self.conn.execute(
+                    "SELECT job_id, metadata, spec FROM jobs WHERE locked_by = ?", 
+                    (boss_id,)
+                ).fetchone()
+                return {
+                    "job_id": res[0],
+                    "metadata": json.loads(res[1]),    
+                    "spec": json.loads(res[2])
+                }
         return None
 
     def delete_namespace(self, namespace):
@@ -120,4 +165,27 @@ class WaluigiDB:
         cursor = self.conn.execute("SELECT namespace, count(*) FROM tasks GROUP BY namespace")
         return cursor.fetchall()
     
-    
+    def claim_job(self, boss_id):
+        with self.conn:
+            query_find = """
+                SELECT id FROM jobs 
+                WHERE status NOT IN ('SUCCESS', 'FAILED')
+                AND (locked_until IS NULL OR locked_until < datetime('now'))
+                LIMIT 1
+            """
+            row = self.conn.execute(query_find).fetchone()
+        
+            if not row:
+                return None
+            
+            job_id = row[0]
+        
+            self.conn.execute("""
+                UPDATE jobs SET 
+                locked_by = ?, 
+                locked_until = datetime('now', '+30 seconds')
+                WHERE id = ? 
+                AND (locked_until IS NULL OR locked_until < datetime('now'))
+            """, (boss_id, job_id))
+        
+        return job_id if self.conn.total_changes > 0 else None

@@ -87,7 +87,7 @@ def planner_loop():
                 continue
             for job_id, job in list(active_jobs.items()):
                 module_name = job_id.split(':')[0]
-                res = engine.build(job_attributes=job['attributes'], 
+                res = engine.build(job_metadata=job['attributes'], 
                     task=job["task"],
                     parent_id=None)
                 
@@ -113,95 +113,37 @@ def register():
     data = request.json
     engine.registerWorker(data)
     return jsonify({"status": "ok"})
-        
-@app.route('/legacy/submit', methods=['POST'])
-def submit_legacy():
-    data = request.json
-    workdir = data.get("workdir", WORKDIR)
-    sourcedir = data.get("sourcedir", SOURCEDIR)
-    module_name = data.get("module")
-    class_name = data.get("class")
-    id = data.get("id", None)
-    tags = data.get("tags", [])
-    params = data.get("params", {})
-    attributes = data.get("attributes", {})
-    
-    added_to_path = False
-    try:
-        if sourcedir and sourcedir not in sys.path:
-            sys.path.insert(0, sourcedir)
-            added_to_path = True
-        
-        if module_name in sys.modules:
-            del sys.modules[module_name]
-            
-        module = importlib.import_module(module_name)
-        module = importlib.reload(module)
-        del module.__file__
-        clazz = getattr(module, class_name)
-        task = clazz(id=id, tags=tags, params=params, attributes=attributes)
-        job_id = f"{module_name}:{class_name}:{task.id}"
-        if any(k.startswith(job_id) for k in active_jobs):
-            log(f"Sottomissione flusso rifiutata: {job_id} già attivo.")
-            return jsonify({"status": "rejected", "reason": "flow_active"}), 409
-          
-        db.register_task(
-            id=task.id,
-            namespace=task.namespace, 
-            parent_id=None, 
-            params=task.hash(task.params), 
-            attributes=task.hash(task.attributes), 
-            job_id=job_id
-        )
-        job_attributes = {
-            "job_id": job_id,
-            "workdir": workdir,
-            "sourcedir": sourcedir,
-            "module_name": module_name
-        }
-        completed_jobs.pop(job_id, None)
-        failed_jobs.pop(job_id, None)
-        active_jobs[job_id] = { "task": task, "attributes": job_attributes }
-            
-        log(f"📥 Flusso sottomesso: {job_id}")
-        return jsonify({
-            "status": "submitted", 
-            "job_id": job_id, 
-            "task_id": task.id
-        })
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
-    finally:
-        if added_to_path:
-            try:
-                sys.path.remove(sourcedir)
-            except ValueError:
-                pass        
 
 @app.route('/submit', methods=['POST'])
 def submit():
     data = request.json
     if data.get("kind") != "Job" or "spec" not in data:
         return jsonify({"status": "error", "message": "Formato non supportato. Richiesto 'kind: Job' con 'spec'."}), 400
-    spec_list = data.get("spec", [])
-    if not spec_list:
+    spec = data.get("spec", [])
+    if not spec:
         return jsonify({"status": "error", "message": "Spec vuoto"}), 400
     
     metadata = data.get("metadata", {})
     workdir = metadata.get("workdir", WORKDIR)
     sourcedir = metadata.get("sourcedir", SOURCEDIR)
-    module_name = metadata.get("module")
-    print(module_name)
     try:
-        root_data = spec_list[0]
+        root_data = spec[0]
         task = DynamicTask(root_data)
         
-        job_id = f"dynamic:{task.namespace}:{task.id}"
+        job_id = f"job/{task.id}"
         
         if job_id in active_jobs:
             log(f"⚠️ Sottomissione rifiutata: {job_id} è già in esecuzione.")
-            return jsonify({"status": "rejected", "reason": "flow_active"}), 409
-          
+            return jsonify({"status": "rejected", "reason": "already active"}), 409
+                
+        metadata['job_id'] = job_id
+        
+        db.create_job(
+            job_id=job_id,
+            metadata=metadata,
+            spec=spec
+        )
+        
         # Registrazione formale nel database
         db.register_task(
             id=task.id,
@@ -212,16 +154,9 @@ def submit():
             job_id=job_id
         )
         
-        job_attributes = {
-            "job_id": job_id,
-            "workdir": workdir,
-            "sourcedir": sourcedir,
-            "module_name": module_name
-        }
-        
         completed_jobs.pop(job_id, None)
         failed_jobs.pop(job_id, None)
-        active_jobs[job_id] = { "task": task, "attributes": job_attributes }
+        active_jobs[job_id] = { "task": task, "attributes": metadata }
             
         log(f"📥 Flusso sottomesso: {job_id}")
         return jsonify({
