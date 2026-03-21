@@ -52,10 +52,6 @@ try:
 except Exception as e:
     log(f"❌ Errore critico DB: {e}")
     sys.exit(1)
-    
-active_jobs = {}
-completed_jobs = {}
-failed_jobs = {}
 
 engine = WaluigiSchedulerEngine(db=db, resource_limits=RESOURCES)
 
@@ -77,36 +73,48 @@ def update():
     # Se non è RUNNING (è SUCCESS/FAILED/PENDING), aggiorna normalmente
     db.update_task(id, data.get('namespace'), data.get('params'), data.get('attributes'), status)
     return jsonify({"status": "updated"}), 200
-
+        
 def planner_loop():
-    log("🧠 Planner Loop avviato.")
+    boss_id = f"boss-{socket.gethostname()}"
+    log(f"🧠 Planner Loop avviato: {boss_id}")
+
     while True:
         try:
-            if not active_jobs or not engine.workers:
+            #if not engine.workers:
+            #    time.sleep(5)
+            #    continue
+                
+            job = db.claim_job(boss_id)
+            if not job:
                 time.sleep(5)
                 continue
-            for job_id, job in list(active_jobs.items()):
-                module_name = job_id.split(':')[0]
-                res = engine.build(job_metadata=job['attributes'], 
-                    task=job["task"],
-                    parent_id=None)
-                
-                if res is True:
-                    log(f"🏁 Job completed: {job_id}")
-                    completed_jobs[job_id] = active_jobs.pop(job_id, None);
-                elif res is None:
-                    log(f"💀 Job {job_id} failed because blocked by an error")
-                    failed_jobs[job_id] = active_jobs.pop(job_id, None);
-                else:
-                    pass
-                
-            time.sleep(2)
-        except Exception as e:
-            log(f"⚠️ Errore nel loop: {e}")
-            failed_jobs[job_id] = active_jobs.pop(job_id, None);
+
+            job_id = job['job_id']
+            
+            task = DynamicTask(job['spec'])
+
+            res = engine.build(
+                job_metadata=job['metadata'], 
+                task=task,
+                parent_id=None
+            )
+            
+            if res is True:
+                log(f"🏁 Job completed: {job_id}")
+                db.update_job_status(job_id, "SUCCESS")
+            elif res is None:
+                log(f"💀 Job {job_id} failed because blocked by an error")
+                db.update_job_status(job_id, "FAILED")
+            
+            db.release_job(job_id)
+
             time.sleep(5)
 
-# --- ROTTE FLASK ---
+        except Exception as e:
+            log(f"⚠️ Errore nel loop: {e}")
+            if 'job_id' in locals(): 
+                db.release_job(job_id)
+            time.sleep(5)
 
 @app.route('/worker/register', methods=['POST'])
 def register():
@@ -117,9 +125,10 @@ def register():
 @app.route('/submit', methods=['POST'])
 def submit():
     data = request.json
+    
     if data.get("kind") != "Job" or "spec" not in data:
         return jsonify({"status": "error", "message": "Formato non supportato. Richiesto 'kind: Job' con 'spec'."}), 400
-    spec = data.get("spec", [])
+    spec = data.get("spec", {})
     if not spec:
         return jsonify({"status": "error", "message": "Spec vuoto"}), 400
     
@@ -127,12 +136,10 @@ def submit():
     workdir = metadata.get("workdir", WORKDIR)
     sourcedir = metadata.get("sourcedir", SOURCEDIR)
     try:
-        root_data = spec[0]
-        task = DynamicTask(root_data)
-        
+        task = DynamicTask(spec)
         job_id = f"job/{task.id}"
-        
-        if job_id in active_jobs:
+        print(db.get_job_status(job_id))
+        if db.get_job_status(job_id) != 'SUCCESS' and db.get_job_status(job_id) != 'FAILED':
             log(f"⚠️ Sottomissione rifiutata: {job_id} è già in esecuzione.")
             return jsonify({"status": "rejected", "reason": "already active"}), 409
                 
@@ -144,20 +151,6 @@ def submit():
             spec=spec
         )
         
-        # Registrazione formale nel database
-        db.register_task(
-            id=task.id,
-            namespace=task.namespace, 
-            parent_id=None, 
-            params=task.hash(task.params), 
-            attributes=task.hash(task.attributes), 
-            job_id=job_id
-        )
-        
-        completed_jobs.pop(job_id, None)
-        failed_jobs.pop(job_id, None)
-        active_jobs[job_id] = { "task": task, "attributes": metadata }
-            
         log(f"📥 Flusso sottomesso: {job_id}")
         return jsonify({
             "status": "submitted", 
@@ -171,6 +164,7 @@ def submit():
 
 @app.route('/')
 def dashboard():
+    running_jobs = db.list_jobs("RUNNING")
     conn = db.conn
     query = "SELECT namespace, id, params, status, last_update, parent_id FROM tasks"
     cursor = conn.execute(query)
@@ -230,7 +224,7 @@ def dashboard():
     
     html = html + f"""
     <div style="background: #2b0040; padding: 10px; border-radius: 5px; margin-bottom: 10px; border-left: 4px solid #d080ff;">
-        <h5>Boss Running. Workers: {len(engine.workers)} | Flows: {len(active_jobs)}</h5>
+        <h5>Boss Running. Workers: {len(engine.workers)} | Running Jobs: {len(running_jobs)}</h5>
         <p style="margin: 0; font-size: 0.9em; color: #00d4ff;">📊 Risorse: {res_status if res_status else 'Nessun limite impostato'}</p>
     </div>
     """
@@ -333,20 +327,24 @@ def get_namespaces():
 @app.route('/api/tasks', methods=['GET'])
 def get_tasks():
     rows = db.list_tasks()
-    jobs = [{"namespace": r[1], "id": r[0], "job_id": r[6], "params": r[5], "status": r[2], "update": r[3]} for r in rows]
-    return jsonify(jobs)
+    tasks = [{"namespace": r[1], "id": r[0], "job_id": r[6], "params": r[5], "status": r[2], "update": r[3]} for r in rows]
+    return jsonify(tasks)
       
 @app.route('/api/jobs', methods=['GET'])
 def get_jobs():
+    rows = db.list_jobs()
+    jobs = [{"job_id": r[0], "status": r[1], "locked_by": r[2], "locked_until": r[3]} for r in rows]
+    return jsonify(jobs)
+    
+def get_jobs_old():
     data = []
     for job_id, job in active_jobs.items():
         task = job['task']
-        job_attributes = job['attributes']
+        job_metadata = job['metadata']
         data.append({
-            "id": job_attributes['job_id'],
-            "workdir": job_attributes['workdir'],
-            "sourcedir": job_attributes['sourcedir'],  
-            "module_name": job_attributes['module_name'],
+            "id": job_metadata['job_id'],
+            "workdir": job_metadata['workdir'],
+            "sourcedir": job_metadata['sourcedir'],  
             "task_id": task.id,
             "params": vars(task.params) if hasattr(task.params, '__dict__') else task.params,
             "namespace": task.namespace,
@@ -354,12 +352,11 @@ def get_jobs():
         })
     for job_id, job in completed_jobs.items():
         task = job['task']
-        job_attributes = job['attributes']
+        job_metadata = job['metadata']
         data.append({
-            "id": job_attributes['job_id'],
-            "workdir": job_attributes['workdir'],
-            "sourcedir": job_attributes['sourcedir'],  
-            "module_name": job_attributes['module_name'],
+            "id": job_metadata['job_id'],
+            "workdir": job_metadata['workdir'],
+            "sourcedir": job_metadata['sourcedir'],  
             "task_id": task.id,
             "params": vars(task.params) if hasattr(task.params, '__dict__') else task.params,
             "namespace": task.namespace,
@@ -367,12 +364,11 @@ def get_jobs():
         })
     for job_id, job in failed_jobs.items():
         task = job['task']
-        job_attributes = job['attributes']
+        job_metadata = job['metadata']
         data.append({
-            "id": job_attributes['job_id'],
-            "workdir": job_attributes['workdir'],
-            "sourcedir": job_attributes['sourcedir'],    
-            "module_name": job_attributes['module_name'],
+            "id": job_metadata['job_id'],
+            "workdir": job_metadata['workdir'],
+            "sourcedir": job_metadata['sourcedir'],  
             "task_id": task.id,
             "params": vars(task.params) if hasattr(task.params, '__dict__') else task.params,
             "namespace": task.namespace,

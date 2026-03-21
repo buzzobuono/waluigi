@@ -1,9 +1,9 @@
 kind: Job
 metadata:
-  sourcedir: "source"
-  workdir: "."
+    sourcedir: "source"
+    workdir: "."
 spec:
-  - name: "GlobalReport"
+    name: "GlobalReport"
     id: "final_report"
     namespace: "analytics"
     command: "python source/analytics/global_report.py"

@@ -117,13 +117,10 @@ class WaluigiCLI:
                     return
                 table = []
                 for job in data:
-                    id = job.get("id")
-                    task_id = job.get("task_id")
-                    params = job.get("params")
-                    namespace = job.get("namespace")
+                    id = job.get("job_id")
                     status = job.get("status")
-                    table.append([id, status, task_id, params, namespace ])
-                headers = ["ID", "STATUS", "TASK ID", "PARAMS", "NAMESPACE" ]
+                    table.append([id, status])
+                headers = ["ID", "STATUS", "LOCKED_BY", "LOCKED_UNTIL" ]
                 print(tabulate(table, headers=headers, tablefmt="plain"))
             else:
                 print(f"❌ Error: {r.status_code}")
