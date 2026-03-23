@@ -10,17 +10,17 @@ from waluigi.core.db import WaluigiDB
 from waluigi.core.scheduler_engine import WaluigiSchedulerEngine
 from waluigi.core.dynamic_task import DynamicTask
 
-class ParseResources(configargparse.Action):
-    """Trasforma 'water:100,food:16' in {'water': 100.0, 'food': 16.0}"""
-    def __call__(self, parser, namespace, values, option_string=None):
-        res_dict = {}
-        try:
-            for item in values.split(','):
-                key, val = item.split(':')
-                res_dict[key.strip()] = float(val)
-            setattr(namespace, self.dest, res_dict)
-        except Exception:
-            raise parser.error(f"Formato risorse non valido: {values}. Usa k:v,k:v")
+#class ParseResources(configargparse.Action):
+#    """Trasforma 'water:100,food:16' in {'water': 100.0, 'food': 16.0}"""
+#    def __call__(self, parser, namespace, values, option_string=None):
+#        res_dict = {}
+#        try:
+#            for item in values.split(','):
+#                key, val = item.split(':')
+#                res_dict[key.strip()] = float(val)
+#            setattr(namespace, self.dest, res_dict)
+#        except Exception:
+#            raise parser.error(f"Formato risorse non valido: {values}. Usa k:v,k:v")
             
 app = Flask(__name__)
 
@@ -30,7 +30,7 @@ p.add('--port', type=int, default=8082)
 p.add('--host', default=socket.gethostname(), help='Host logico per URL')
 p.add('--bind-address', default='0.0.0.0', help='IP per Flask')
 p.add('--db-path', default=os.path.join(os.getcwd(), "waluigi.db"), help='Path del db sqlite')
-p.add('--resources', action=ParseResources, default={"coin": 1}, help="Definisci i limiti: 'water:100,food:16'")
+#p.add('--resources', action=ParseResources, default={"coin": 1}, help="Definisci i limiti: 'water:100,food:16'")
 p.add('--workdir', default=os.path.join(os.getcwd(), "work"), help='Default working directory')
 p.add('--sourcedir', default=os.path.join(os.getcwd(), "source"), help='Default source code directory')
     
@@ -38,14 +38,13 @@ args = p.parse_args()
 
 URL = f"http://{args.host}:{args.port}"
 DB_PATH = args.db_path
-RESOURCES = args.resources
+#RESOURCES = args.resources
 WORKDIR = args.workdir
 SOURCEDIR = args.sourcedir
 
 def log(msg):
     print(f"[Boss 🐢] {msg}", flush=True)
-
-# Inizializzazione DB
+    
 try:
     db = WaluigiDB(DB_PATH)
     log(f"🟣 Database pronto in: {DB_PATH}")
@@ -53,7 +52,7 @@ except Exception as e:
     log(f"❌ Errore critico DB: {e}")
     sys.exit(1)
 
-engine = WaluigiSchedulerEngine(db=db, resource_limits=RESOURCES)
+engine = WaluigiSchedulerEngine(db=db)
 
 @app.route('/update', methods=['POST'])
 def update():
@@ -67,7 +66,7 @@ def update():
             return jsonify({"status": "locked"}), 409
     if status in ["SUCCESS", "FAILED"]:
         task_resources = data.get('resources', {'coin': 1.0}) 
-        engine._deallocate(task_resources)
+        db.release_resources(task_resources)
         log(f"♻️ Risorse liberate per {id}")
         
     # Se non è RUNNING (è SUCCESS/FAILED/PENDING), aggiorna normalmente
@@ -138,8 +137,9 @@ def submit():
     try:
         task = DynamicTask(spec)
         job_id = f"job/{task.id}"
-        print(db.get_job_status(job_id))
-        if db.get_job_status(job_id) != 'SUCCESS' and db.get_job_status(job_id) != 'FAILED':
+        status = db.get_job_status(job_id)
+        
+        if status and status != 'SUCCESS' and status != 'FAILED':
             log(f"⚠️ Sottomissione rifiutata: {job_id} è già in esecuzione.")
             return jsonify({"status": "rejected", "reason": "already active"}), 409
                 
@@ -165,6 +165,9 @@ def submit():
 @app.route('/')
 def dashboard():
     running_jobs = db.list_jobs("RUNNING")
+    workers = db.list_workers()
+    resources = db.list_resources()
+    
     conn = db.conn
     query = "SELECT namespace, id, params, status, last_update, parent_id FROM tasks"
     cursor = conn.execute(query)
@@ -220,11 +223,13 @@ def dashboard():
     <body>
         <h1>🟣 Waluigi Dashboard</h1>
     """
-    res_status = " | ".join([f"<b>{k.upper()}</b>: {engine.usage[k]}/{v}" for k, v in engine.limits.items()])
-    
+    res_status = " | ".join([
+        f"<b>{r['name'].upper()}</b>: {r['usage']}/{r['amount']}" 
+        for r in resources
+    ])
     html = html + f"""
     <div style="background: #2b0040; padding: 10px; border-radius: 5px; margin-bottom: 10px; border-left: 4px solid #d080ff;">
-        <h5>Boss Running. Workers: {len(engine.workers)} | Running Jobs: {len(running_jobs)}</h5>
+        <h5>Boss Running. Workers: {len(workers)} | Running Jobs: {len(running_jobs)}</h5>
         <p style="margin: 0; font-size: 0.9em; color: #00d4ff;">📊 Risorse: {res_status if res_status else 'Nessun limite impostato'}</p>
     </div>
     """
@@ -295,28 +300,41 @@ def delete_namespace(namespace):
 def delete_task(id):
     db.delete_task(id)
     return jsonify({"status": "ok"})
-        
+
 @app.route('/api/resources', methods=['GET'])
 def get_resources_api():
-    return jsonify({
-        "limits": engine.limits,
-        "usage": engine.usage,
-        "available": {k: engine.limits[k] - engine.usage[k] for k in engine.limits}
-    })
+    resources = db.list_resources()
+    return jsonify(resources)
 
 @app.route('/api/resources', methods=['POST'])
 def apply_resources_api():
-    data = request.json
-    for k, v in data.items():
-        engine.limits[k] = float(v)
-        if k not in engine.usage:
-            engine.usage[k] = 0.0
-    log(f"♻️ Nuovi limiti risorse applicati: {engine.limits}")
-    return jsonify({"status": "updated", "new_limits": engine.limits})
+    doc = request.json
+    if not doc or doc.get('kind') != 'ClusterResources':
+        return jsonify({"status": "error", "message": "Expected kind: ClusterResources"}), 400
+    
+    spec = doc.get('spec', {})
+    if not spec:
+        return jsonify({"status": "error", "message": "Spec vuoto"}), 400
+    try:
+        (success, msg) = db.update_resources(spec)
+        print(success)
+        if not success:
+            return jsonify({"status": "error", "message": msg}), 409
+            
+        log(f"⚙️ Limiti del cluster aggiornati: {spec}")
+        return jsonify({
+            "status": "ok",
+            "message": msg    
+        }), 200
+    except Exception as e:
+        log(f"❌ Errore aggiornamento risorse: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/workers', methods=['GET'])
 def get_workers_api():
-    return jsonify(engine.workers)
+    rows = db.list_workers()
+    workers = [{"url": r[0], "status": r[1], "max_slots": r[2], "free_slots": r[3], "last_seen": r[4]} for r in rows]
+    return jsonify(workers)
     
 @app.route('/api/namespaces', methods=['GET'])
 def get_namespaces():
@@ -336,46 +354,6 @@ def get_jobs():
     jobs = [{"job_id": r[0], "status": r[1], "locked_by": r[2], "locked_until": r[3]} for r in rows]
     return jsonify(jobs)
     
-def get_jobs_old():
-    data = []
-    for job_id, job in active_jobs.items():
-        task = job['task']
-        job_metadata = job['metadata']
-        data.append({
-            "id": job_metadata['job_id'],
-            "workdir": job_metadata['workdir'],
-            "sourcedir": job_metadata['sourcedir'],  
-            "task_id": task.id,
-            "params": vars(task.params) if hasattr(task.params, '__dict__') else task.params,
-            "namespace": task.namespace,
-            "status": "ACTIVE"         
-        })
-    for job_id, job in completed_jobs.items():
-        task = job['task']
-        job_metadata = job['metadata']
-        data.append({
-            "id": job_metadata['job_id'],
-            "workdir": job_metadata['workdir'],
-            "sourcedir": job_metadata['sourcedir'],  
-            "task_id": task.id,
-            "params": vars(task.params) if hasattr(task.params, '__dict__') else task.params,
-            "namespace": task.namespace,
-            "status": "COMPLETED"                 
-        })
-    for job_id, job in failed_jobs.items():
-        task = job['task']
-        job_metadata = job['metadata']
-        data.append({
-            "id": job_metadata['job_id'],
-            "workdir": job_metadata['workdir'],
-            "sourcedir": job_metadata['sourcedir'],  
-            "task_id": task.id,
-            "params": vars(task.params) if hasattr(task.params, '__dict__') else task.params,
-            "namespace": task.namespace,
-            "status": "FAILED" 
-        })    
-    return jsonify(data)
-
 @app.route('/api/active/describe/<path:key>', methods=['GET'])
 def describe_active(key):
     if key not in active_jobs:
@@ -399,10 +377,10 @@ def main():
     log(f"    Binding: {args.bind_address}:{args.port}")
     log(f"    URL: http://{args.host}:{args.port}")
     log(f"    DB: {args.db_path}")
-    log(f"    Resources: {args.resources}")
+    #log(f"    Resources: {args.resources}")
     log(f"    Default Source Dir: {args.sourcedir}")
     log(f"    Default Work Dir: {args.workdir}")
-   
+    
     threading.Thread(target=planner_loop, daemon=True).start()
     
     app.run(

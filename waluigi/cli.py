@@ -19,8 +19,9 @@ class WaluigiCLI:
         if kind == 'Job':
             r = requests.post(f"{self.base_url}/submit", json=doc)
             print(json.dumps(r.json(), indent=2))
-        elif kind == 'ResourceQuota':
-            print("Not yet implemented")
+        elif kind == 'ClusterResources':
+            r = requests.post(f"{self.base_url}/api/resources", json=doc)
+            print(json.dumps(r.json(), indent=2))
         else:
             print(f"❌ Tipo '{kind}' non supportato")
         return
@@ -168,15 +169,15 @@ class WaluigiCLI:
                     print("⚠️ No resources found")
                     return
                 table = []
-                for res_name in data['limits']:
-                    limit = data['limits'][res_name]
-                    usage = data['usage'].get(res_name, 0.0)
-                    available = data['available'].get(res_name, limit)
-                    perc = (usage / limit * 100) if limit > 0 else 0
+                for res in data:
+                    name = res.get("name")
+                    amount = res.get("amount")
+                    usage = res.get("usage")
+                    available = res.get("available")
+                    perc = (usage / amount * 100) if amount > 0 else 0
                     status = f"{perc:.1f}%"
-                    table.append([res_name, usage, limit, available, status])
-
-                headers = ["ID", "USAGE", "LIMIT", "AVAILABLE", "STATUS"]
+                    table.append([name, amount, usage, available, status ])
+                headers = ["NAME", "AMOUNT", "USAGE", "AVAILABLE", "STATUS"]
                 print(tabulate(table, headers=headers, tablefmt="plain"))
             else:
                 print(f"❌ Error: {r.status_code}")
@@ -193,11 +194,14 @@ class WaluigiCLI:
                     return
                 table = []
                 for worker in data:
-                    url = worker.get("url", "N/A")
-                    slots = worker.get("free_slots", "N/A")
-                    status = worker.get("status", "N/A")
-                    table.append([url, slots, status ])
-                headers = ["URL", "SLOTS", "STATUS" ]
+                    url = worker.get("url")
+                    status = worker.get("status")
+                    max_slots = worker.get("max_slots")
+                    free_slots = worker.get("free_slots")
+                    last_seen = worker.get("last_seen")
+                    
+                    table.append([url, status, max_slots, free_slots, last_seen ])
+                headers = ["URL", "STATUS", "MAX_SLOTS", "FREE_SLOTS", "LAST_SEEN",]
                 print(tabulate(table, headers=headers, tablefmt="plain"))
             else:
                 print(f"❌ Error: {r.status_code}")

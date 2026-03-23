@@ -6,7 +6,7 @@ class GlobalReport(Task):
     def run(self):
         print(self.attributes.var)
         print("📊 Generazione Global Report in corso...")
-        time.sleep(5)
+        time.sleep(20)
         results = []
         for s in ["ERP", "WEB", "SOCIAL"]:
             with open(f"clean_{s}_{self.params.date}.out", "r") as f:

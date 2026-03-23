@@ -5,7 +5,7 @@ class RawDataExtract(Task):
 
     def run(self):
         print(f"📥 Estrazione dati da sorgente: {self.params.source}...")
-        time.sleep(3)
+        time.sleep(20)
         with open(f"raw_{self.params.source}_{self.params.date}.out", "w") as f:
             f.write(f"Dati grezzi {self.params.source}")
 

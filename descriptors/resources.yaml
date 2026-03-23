@@ -1,0 +1,5 @@
+kind: ClusterResources
+metadata:
+spec:
+  coin: 10.0
+  pdc: 5.0

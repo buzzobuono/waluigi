@@ -75,7 +75,6 @@ def execute():
         with lock:
             active_tasks_count -= 1
         return jsonify({"status": "error", "message": str(e)}), 500
-            
 
 def run_command_async(command, id, namespace, params, attributes, resources, workdir):
     global active_tasks_count
@@ -120,81 +119,6 @@ def run_command_async(command, id, namespace, params, attributes, resources, wor
         with lock:
             active_tasks_count -= 1
             
-@app.route('/legacy/execute', methods=['POST'])
-def execute_legacy():
-    data = request.json
-    workdir = data.get("workdir", WORKDIR)
-    sourcedir = data.get("sourcedir", SOURCEDIR)
-    module_name = data.get("module")
-    class_name = data.get("class")
-    id = data.get("id", None)
-    params = data.get("params", {})
-    attributes = data.get("attributes", {})
-    
-    log(f"Ricevuto ordine: {module_name}.{class_name}")
-    
-    global active_tasks_count
-    with lock:
-        if active_tasks_count >= SLOTS:
-            log(f"Slot non disponibile.")
-            return jsonify({"status": "busy"}), 429
-        active_tasks_count += 1
-        
-    try:
-        added_to_path = False
-        if sourcedir and sourcedir not in sys.path:
-            sys.path.insert(0, sourcedir)
-            added_to_path = True
-
-        try:
-            if module_name in sys.modules:
-                del sys.modules[module_name]
-            
-            module = importlib.import_module(module_name)
-            clazz = getattr(module, class_name)
-            task = clazz(id=id, params=params, attributes=attributes)
-            
-            thread = threading.Thread(target=run_task_async, 
-                                        args=(task, workdir))
-            thread.start()
-            task_started = True
-            
-            return jsonify({"status": "submitted", "id": task.id}), 202
-
-        finally:
-            if added_to_path:
-                sys.path.remove(sourcedir)
-
-    except Exception as e:
-        log(f"❌ Errore nel caricamento del modulo: {e}")
-        with lock:
-            active_tasks_count -= 1
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-def run_task_async(task, workdir):
-    global active_tasks_count
-    try:
-        class SimpleEngine:
-            def __init__(self, url): self.server_url = url
-        task.engine = SimpleEngine(BOSS_URL)
-       
-        _update_boss(task, "RUNNING")
-        
-        log(f"📁 Setting workdir: {workdir}")
-        os.chdir(workdir)
-        
-        log(f"🚀 Esecuzione asincrona avviata: {task.id}")
-        task.run()
-        
-        _update_boss(task, "SUCCESS")
-        log(f"✅ Task {task.id} terminato.")
-    except Exception as e:
-        log(f"❌ Errore: {e}")
-        _update_boss(task, "FAILED")
-    finally:
-        with lock:
-            active_tasks_count -= 1
-            
 def _post(endpoint, **kwargs):
     try:
         r = requests.post(f"{BOSS_URL}{endpoint}", **kwargs)
@@ -203,16 +127,6 @@ def _post(endpoint, **kwargs):
         return r
     except requests.exceptions.RequestException as e:
         raise RuntimeError(f"[bossd] Connection error on {endpoint}") from e
-
-def _update_boss_legacy(task, status):
-    return _post(f"/update", json={
-            "id": task.id,
-            "namespace": task.namespace,
-            "params": task.hash(task.params), 
-            "attributes": task.hash(task.attributes),
-            "resources": task.resources,
-            "status": status
-        })
         
 def _update_boss(id, namespace, params, attributes, resources, status):
     return _post(f"/update", json={
@@ -229,21 +143,20 @@ def _hash(nsdict):
         f"{k}:{v}" 
         for k, v in sorted(nsdict.items())
     )
-        
+    
 def heartbeat():
     while True:
         try:
             requests.post(f"{BOSS_URL}/worker/register", json={
                  "url": URL,
                  "status": "ALIVE",
+                 "max_slots": SLOTS,
                  "free_slots": SLOTS - active_tasks_count
             })
             log("Registrato con successo al Boss.")
         except:
-            log("Attenzione: Impossibile registrarsi al Boss. Assicurati che sia acceso.")
-
+            log("Boss non raggiungibile...")
         time.sleep(HEARTBEAT)
-        
         
 def main():
     log(f"Waluigi Worker:")

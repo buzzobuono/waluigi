@@ -47,12 +47,22 @@ class WaluigiDB:
                 )""")
             self.conn.execute("""
                 CREATE TABLE IF NOT EXISTS workers (
-                    worker_id TEXT,
-                    task_id TEXT,
+                    url TEXT PRIMARY KEY,
                     status TEXT,
-                    last_seen TIMESTAMP,
-                    PRIMARY KEY (worker_id, task_id)
+                    max_slots INTEGER,
+                    free_slots INTEGER,
+                    last_seen TIMESTAMP
                 )""")
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS resources (
+                    name TEXT PRIMARY KEY,
+                    amount REAL,
+                    usage REAL DEFAULT 0.0
+                )""")
+            self.conn.execute("""
+                    INSERT OR IGNORE INTO resources (name, amount, usage)
+                    VALUES ('coin', 2.0, 0.0)
+                """)    
 
     def get_task_status(self, id, params):
         cursor = self.conn.execute("SELECT status FROM tasks WHERE id = ? and params = ?", (id, params))
@@ -201,4 +211,138 @@ class WaluigiDB:
         else:
             cursor = self.conn.execute("SELECT job_id, status, locked_by, locked_until FROM jobs")
         return cursor.fetchall()
-        
+    
+    def register_worker(self, url, max_slots, free_slots):
+        with self.conn:
+            self.conn.execute("""
+                INSERT INTO workers (url, max_slots, free_slots, status, last_seen)
+                VALUES (?, ?, ?, 'ALIVE', CURRENT_TIMESTAMP)
+                ON CONFLICT(url) DO UPDATE SET
+                    max_slots = excluded.max_slots,
+                    free_slots = excluded.free_slots,
+                    status = 'ALIVE',
+                    last_seen = excluded.last_seen
+            """, (url, max_slots, free_slots))
+
+    def list_workers(self):
+        with self.conn:
+            cursor = self.conn.execute("""
+                SELECT url, status, max_slots, free_slots, last_seen FROM workers
+                ORDER BY last_seen ASC
+            """)
+        return cursor.fetchall()
+
+    def get_available_workers(self):
+        with self.conn:
+            cursor = self.conn.execute("""
+                SELECT url FROM workers 
+                WHERE free_slots > 0 
+                ORDER BY free_slots DESC, last_seen ASC
+            """)
+        return [{"url": r[0]} for r in cursor.fetchall()]
+            
+    def delete_worker(self, url):
+        with self.conn:
+            self.conn.execute("DELETE FROM workers WHERE url = ?", (url,))
+            
+    def update_resources__old(self, resource_limits):
+        self.conn.execute("BEGIN IMMEDIATE")
+        try:
+            for name, amount in resource_limits.items():
+                self.conn.execute("""
+                    INSERT INTO resources (name, amount, usage)
+                    VALUES (?, ?, 0.0)
+                    ON CONFLICT(name) DO UPDATE SET
+                        amount = excluded.amount
+                """, (name, amount))
+            
+            self.conn.execute("COMMIT")
+        except Exception:
+            self.conn.execute("ROLLBACK")
+            raise
+    
+    def update_resources(self, resource_limits):
+        with self.conn:
+            self.conn.execute("BEGIN IMMEDIATE")
+            try:
+                cursor = self.conn.execute("SELECT name, amount, usage FROM resources")
+                db_state = {r[0]: (r[1], r[2]) for r in cursor.fetchall()}
+
+                to_delete = [name for name in db_state if name not in resource_limits]
+                for name in to_delete:
+                    _, usage = db_state[name]
+                    if usage > 0:
+                        raise ValueError(f"Risorse occupate: '{name}' in uso ({usage}), impossibile rimuovere")
+
+                for name, new_amount in resource_limits.items():
+                    new_amount = float(new_amount)
+                    if name in db_state:
+                        _, usage = db_state[name]
+                        if new_amount < usage:
+                            raise ValueError(f"Risorse occupate: '{name}' uso attuale ({usage}) > richiesto ({new_amount})")
+                
+                    self.conn.execute("""
+                        INSERT INTO resources (name, amount, usage)
+                        VALUES (?, ?, 0.0)
+                        ON CONFLICT(name) DO UPDATE SET amount = excluded.amount
+                    """, (name, new_amount))
+
+                for name in to_delete:
+                    self.conn.execute("DELETE FROM resources WHERE name = ?", (name,))
+
+                self.conn.execute("COMMIT")
+                return True, "Risorse aggiornate con successo"
+
+            except ValueError as ve:
+                self.conn.execute("ROLLBACK")
+                return False, str(ve)
+            except Exception as e:
+                self.conn.execute("ROLLBACK")
+                return False, str(e)
+
+    def acquire_resources(self, required_resources):
+        self.conn.execute("BEGIN IMMEDIATE")
+        try:
+            for name, amount in required_resources.items():
+                res = self.conn.execute(
+                    "SELECT amount, usage FROM resources WHERE name = ?", (name,)
+                ).fetchone()
+                
+                if not res or (res[1] + amount > res[0]):
+                    self.conn.execute("ROLLBACK")
+                    return False
+
+            for name, amount in required_resources.items():
+                self.conn.execute(
+                    "UPDATE resources SET usage = usage + ? WHERE name = ?",
+                    (amount, name)
+                )
+            
+            self.conn.execute("COMMIT")
+            return True
+        except Exception:
+            self.conn.execute("ROLLBACK")
+            raise
+
+    def release_resources(self, required_resources):
+        self.conn.execute("BEGIN IMMEDIATE")
+        try:
+            for name, amount in required_resources.items():
+                self.conn.execute("""
+                    UPDATE resources 
+                    SET usage = MAX(0.0, usage - ?) 
+                    WHERE name = ?
+                """, (amount, name))
+            
+            self.conn.execute("COMMIT")
+        except Exception:
+            self.conn.execute("ROLLBACK")
+            raise
+    
+    def list_resources(self):
+        with self.conn:
+            cursor = self.conn.execute("""
+                SELECT name, amount, usage FROM resources
+            """)
+        return [{"name": r[0], "amount": r[1], "usage": r[2] } for r in cursor.fetchall()]
+            
