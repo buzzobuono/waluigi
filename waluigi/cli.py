@@ -98,10 +98,10 @@ class WaluigiCLI:
                     return
                 table = []
                 for ns in data:
-                    id = ns.get("id")
+                    namespace = ns.get("namespace")
                     task_count = ns.get("task_count")
-                    table.append([id, task_count])
-                headers = ["ID", "TASK COUNT" ]
+                    table.append([namespace, task_count])
+                headers = ["NAMESPACE", "TASK COUNT" ]
                 print(tabulate(table, headers=headers, tablefmt="plain"))
             else:
                 print(f"❌ Error: {r.status_code}")
@@ -141,7 +141,7 @@ class WaluigiCLI:
                     print("⚠️ No task found")
                     return
                     
-                headers = [ "ID", "JOB_ID", "PARAMS", "STATUS", "UPDATE", "NAMESPACE" ]
+                headers = [ "ID", "JOB_ID", "PARAMS", "STATUS", "LAST UPDATE", "NAMESPACE" ]
                 table = []
                 for task in data:
                     table.append([
@@ -149,7 +149,7 @@ class WaluigiCLI:
                         task["job_id"],
                         task["params"],
                         task["status"],
-                        task["update"],
+                        task["last_update"],
                         task['namespace']
                     ])
 

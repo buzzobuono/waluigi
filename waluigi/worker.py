@@ -1,6 +1,7 @@
 import sys
 import importlib
 import requests
+import uuid
 import threading
 import time
 import socket
@@ -14,8 +15,9 @@ lock = threading.Lock()
 
 app = Flask(__name__)
 
-p = configargparse.ArgParser(auto_env_var_prefix='WALUIGI_')
+p = configargparse.ArgParser(auto_env_var_prefix='WALUIGI_WORKER_')
 
+p.add('--id', default=str(uuid.uuid4()), help='ID unico')
 p.add('--port', type=int, default=5001)
 p.add('--host', default=socket.gethostname(), help='Host logico per URL')
 p.add('--bind-address', default='0.0.0.0', help='IP per Flask')
@@ -27,6 +29,7 @@ p.add('--sourcedir', default=os.path.join(os.getcwd(), "source"), help='Default 
 
 args = p.parse_args()
 
+WORKER_ID = args.id
 BOSS_URL = args.boss_url
 URL = f"http://{args.host}:{args.port}"
 SLOTS = args.slots
@@ -160,6 +163,7 @@ def heartbeat():
         
 def main():
     log(f"Waluigi Worker:")
+    log(f"    ID: {args.id}")
     log(f"    Binding: {args.bind_address}:{args.port}")
     log(f"    URL: http://{args.host}:{args.port}")
     log(f"    Slots: {args.slots}")

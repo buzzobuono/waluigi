@@ -4,43 +4,28 @@ import time
 import sys
 import os
 import socket
+import uuid
 import configargparse
 from flask import Flask, request, jsonify
 from waluigi.core.db import WaluigiDB
 from waluigi.core.scheduler_engine import WaluigiSchedulerEngine
 from waluigi.core.dynamic_task import DynamicTask
 
-#class ParseResources(configargparse.Action):
-#    """Trasforma 'water:100,food:16' in {'water': 100.0, 'food': 16.0}"""
-#    def __call__(self, parser, namespace, values, option_string=None):
-#        res_dict = {}
-#        try:
-#            for item in values.split(','):
-#                key, val = item.split(':')
-#                res_dict[key.strip()] = float(val)
-#            setattr(namespace, self.dest, res_dict)
-#        except Exception:
-#            raise parser.error(f"Formato risorse non valido: {values}. Usa k:v,k:v")
-            
 app = Flask(__name__)
 
-p = configargparse.ArgParser(auto_env_var_prefix='WALUIGI_')
+p = configargparse.ArgParser(auto_env_var_prefix='WALUIGI_BOSS_')
 
+p.add('--id', default=str(uuid.uuid4()), help='ID unico')
 p.add('--port', type=int, default=8082)
 p.add('--host', default=socket.gethostname(), help='Host logico per URL')
 p.add('--bind-address', default='0.0.0.0', help='IP per Flask')
 p.add('--db-path', default=os.path.join(os.getcwd(), "waluigi.db"), help='Path del db sqlite')
-#p.add('--resources', action=ParseResources, default={"coin": 1}, help="Definisci i limiti: 'water:100,food:16'")
-p.add('--workdir', default=os.path.join(os.getcwd(), "work"), help='Default working directory')
-p.add('--sourcedir', default=os.path.join(os.getcwd(), "source"), help='Default source code directory')
-    
+  
 args = p.parse_args()
 
+BOSS_ID = args.id
 URL = f"http://{args.host}:{args.port}"
 DB_PATH = args.db_path
-#RESOURCES = args.resources
-WORKDIR = args.workdir
-SOURCEDIR = args.sourcedir
 
 def log(msg):
     print(f"[Boss 🐢] {msg}", flush=True)
@@ -57,7 +42,7 @@ engine = WaluigiSchedulerEngine(db=db)
 @app.route('/update', methods=['POST'])
 def update():
     data = request.json
-    print(f"method: update, payload: {data}")
+    #print(f"method: update, payload: {data}")
     id = data['id']
     status = data['status']
     if status == "RUNNING":
@@ -74,8 +59,7 @@ def update():
     return jsonify({"status": "updated"}), 200
         
 def planner_loop():
-    boss_id = f"boss-{socket.gethostname()}"
-    log(f"🧠 Planner Loop avviato: {boss_id}")
+    log(f"🧠 Planner Loop avviato: {BOSS_ID}")
 
     while True:
         try:
@@ -83,7 +67,7 @@ def planner_loop():
             #    time.sleep(5)
             #    continue
                 
-            job = db.claim_job(boss_id)
+            job = db.claim_job(BOSS_ID)
             if not job:
                 time.sleep(5)
                 continue
@@ -132,8 +116,8 @@ def submit():
         return jsonify({"status": "error", "message": "Spec vuoto"}), 400
     
     metadata = data.get("metadata", {})
-    workdir = metadata.get("workdir", WORKDIR)
-    sourcedir = metadata.get("sourcedir", SOURCEDIR)
+    workdir = metadata.get("workdir")
+    sourcedir = metadata.get("sourcedir")
     try:
         task = DynamicTask(spec)
         job_id = f"job/{task.id}"
@@ -167,26 +151,22 @@ def dashboard():
     running_jobs = db.list_jobs("RUNNING")
     workers = db.list_workers()
     resources = db.list_resources()
+    tasks = db.list_tasks()
     
-    conn = db.conn
-    query = "SELECT namespace, id, params, status, last_update, parent_id FROM tasks"
-    cursor = conn.execute(query)
-    rows = cursor.fetchall()
-
     namespaces = {}
-    for r in rows:
-        ns = str(r[0])  # Il namespace (ex job_id)
-        t_id = str(r[1]) # L'id univoco del task
+    for task in tasks:
+        ns = task['namespace']
+        t_id = task['id']
         
         if ns not in namespaces: 
             namespaces[ns] = {'tasks': {}}
         
         namespaces[ns]['tasks'][t_id] = {
             'id': t_id, 
-            'params': r[2], 
-            'status': r[3], 
-            'update': r[4], 
-            'parent': r[5]
+            'params': task['params'], 
+            'status': task['status'], 
+            'update': task['last_update'], 
+            'parent': task['parent_id']
         }
     
     html = """
@@ -332,26 +312,22 @@ def apply_resources_api():
 
 @app.route('/api/workers', methods=['GET'])
 def get_workers_api():
-    rows = db.list_workers()
-    workers = [{"url": r[0], "status": r[1], "max_slots": r[2], "free_slots": r[3], "last_seen": r[4]} for r in rows]
+    workers = db.list_workers()
     return jsonify(workers)
     
 @app.route('/api/namespaces', methods=['GET'])
 def get_namespaces():
-    rows = db.list_namespaces()
-    ns = [{"id": r[0], "task_count": r[1]} for r in rows]
+    ns = db.list_namespaces()
     return jsonify(ns)
           
 @app.route('/api/tasks', methods=['GET'])
 def get_tasks():
-    rows = db.list_tasks()
-    tasks = [{"namespace": r[1], "id": r[0], "job_id": r[6], "params": r[5], "status": r[2], "update": r[3]} for r in rows]
+    tasks = db.list_tasks()
     return jsonify(tasks)
       
 @app.route('/api/jobs', methods=['GET'])
 def get_jobs():
-    rows = db.list_jobs()
-    jobs = [{"job_id": r[0], "status": r[1], "locked_by": r[2], "locked_until": r[3]} for r in rows]
+    jobs = db.list_jobs()
     return jsonify(jobs)
     
 @app.route('/api/active/describe/<path:key>', methods=['GET'])
@@ -374,12 +350,10 @@ def describe_active(key):
 
 def main():
     log(f"Waluigi Boss:")
+    log(f"    ID: {args.id}")
     log(f"    Binding: {args.bind_address}:{args.port}")
     log(f"    URL: http://{args.host}:{args.port}")
     log(f"    DB: {args.db_path}")
-    #log(f"    Resources: {args.resources}")
-    log(f"    Default Source Dir: {args.sourcedir}")
-    log(f"    Default Work Dir: {args.workdir}")
     
     threading.Thread(target=planner_loop, daemon=True).start()
     

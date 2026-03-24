@@ -121,14 +121,18 @@ class WaluigiDB:
                     status='PENDING'
                 WHERE id=?
             """, (id, ))
-
+            
     def list_tasks(self):
-        cursor = self.conn.execute("SELECT id, namespace, status, last_update, parent_id, params, job_id FROM tasks ORDER BY last_update DESC")
-        return cursor.fetchall()
-    
+        with self.conn:
+            cursor = self.conn.execute("SELECT id, namespace, status, last_update, parent_id, params, job_id FROM tasks ORDER BY last_update DESC")
+            columns = [column[0] for column in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
     def list_namespaces(self):
-        cursor = self.conn.execute("SELECT namespace, count(*) FROM tasks GROUP BY namespace")
-        return cursor.fetchall()
+        with self.conn:
+            cursor = self.conn.execute("SELECT namespace, count(*) as task_count FROM tasks GROUP BY namespace")
+            columns = [column[0] for column in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
         
     def create_job(self, job_id, metadata, spec):
         with self.conn:
@@ -210,7 +214,8 @@ class WaluigiDB:
             cursor = self.conn.execute("SELECT job_id, status, locked_by, locked_until FROM jobs WHERE status = ?", (status,))
         else:
             cursor = self.conn.execute("SELECT job_id, status, locked_by, locked_until FROM jobs")
-        return cursor.fetchall()
+        columns = [column[0] for column in cursor.description]
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
     
     def register_worker(self, url, max_slots, free_slots):
         with self.conn:
@@ -230,7 +235,8 @@ class WaluigiDB:
                 SELECT url, status, max_slots, free_slots, last_seen FROM workers
                 ORDER BY last_seen ASC
             """)
-        return cursor.fetchall()
+            columns = [column[0] for column in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
     def get_available_workers(self):
         with self.conn:
@@ -239,27 +245,12 @@ class WaluigiDB:
                 WHERE free_slots > 0 
                 ORDER BY free_slots DESC, last_seen ASC
             """)
-        return [{"url": r[0]} for r in cursor.fetchall()]
+            columns = [column[0] for column in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
             
     def delete_worker(self, url):
         with self.conn:
             self.conn.execute("DELETE FROM workers WHERE url = ?", (url,))
-            
-    def update_resources__old(self, resource_limits):
-        self.conn.execute("BEGIN IMMEDIATE")
-        try:
-            for name, amount in resource_limits.items():
-                self.conn.execute("""
-                    INSERT INTO resources (name, amount, usage)
-                    VALUES (?, ?, 0.0)
-                    ON CONFLICT(name) DO UPDATE SET
-                        amount = excluded.amount
-                """, (name, amount))
-            
-            self.conn.execute("COMMIT")
-        except Exception:
-            self.conn.execute("ROLLBACK")
-            raise
     
     def update_resources(self, resource_limits):
         with self.conn:
@@ -344,5 +335,6 @@ class WaluigiDB:
             cursor = self.conn.execute("""
                 SELECT name, amount, usage FROM resources
             """)
-        return [{"name": r[0], "amount": r[1], "usage": r[2] } for r in cursor.fetchall()]
+            columns = [column[0] for column in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
             
