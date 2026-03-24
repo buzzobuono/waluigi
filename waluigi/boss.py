@@ -19,13 +19,15 @@ p.add('--id', default=str(uuid.uuid4()), help='ID unico')
 p.add('--port', type=int, default=8082)
 p.add('--host', default=socket.gethostname(), help='Host logico per URL')
 p.add('--bind-address', default='0.0.0.0', help='IP per Flask')
-p.add('--db-path', default=os.path.join(os.getcwd(), "waluigi.db"), help='Path del db sqlite')
+p.add('--db-path', default=os.path.join(os.getcwd(), "db/waluigi.db"), help='Path del db sqlite')
   
 args = p.parse_args()
 
 BOSS_ID = args.id
 URL = f"http://{args.host}:{args.port}"
 DB_PATH = args.db_path
+
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 def log(msg):
     print(f"[Boss 🐢] {msg}", flush=True)
@@ -216,10 +218,12 @@ def dashboard():
         if current_id not in all_tasks: return ""
         task = all_tasks[current_id]
         indent = ("&nbsp;" * level) + ("└─ " if level > 0 else "")
+
+        task_id_link = f"<a href='/api/logs/{task['id']}' target='_blank' style='color: #00d4ff; text-decoration: none;'>{task['id']}</a>"
         
         row_html = f"""
         <tr>
-            <td><span class='indent'>{indent}</span>{task['id']}</td>
+            <td><span class='indent'>{indent}</span>{task_id_link}</td>
             <td>{task['params']}</td>
             <td class='status-{task['status']}'>{task['status']}</td>
             <td>{task['update']}</td>
@@ -345,6 +349,25 @@ def describe_active(key):
         "resources": getattr(task, 'resources', {})
     })
 
+@app.route('/api/logs/<task_id>', methods=['POST'])
+def receive_logs(task_id):
+    data = request.json
+    logs = data.get('logs', [])
+    worker_id = data.get('worker_id', 'unknown')
+    
+    if logs:
+        try:
+            db.insert_task_logs(task_id, logs, worker_id)
+            return jsonify({"status": "ok"}), 201
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
+    return jsonify({"status": "empty"}), 200
+
+@app.route('/api/logs/<task_id>', methods=['GET'])
+def get_task_logs(task_id):
+    limit = request.args.get('limit', default=20, type=int)    
+    logs = db.get_logs(task_id, limit=limit) 
+    return jsonify(logs)
 
 def main():
     log(f"Waluigi Boss:")

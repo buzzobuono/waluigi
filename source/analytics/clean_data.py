@@ -8,7 +8,12 @@ class CleanDataTask(Task):
         if random.random() < float(self.attributes.fail_prob):
             raise Exception(f"💥 Errore imprevisto durante la pulizia di {self.params.source}!")
         print(f"🧹 Pulizia dati sorgente: {self.params.source}...")
-        time.sleep(20)
+        
+        steps = 20
+        for step in range(steps):
+            print(f"Pulizia Step {step+1}/{steps}")
+            time.sleep(1)
+
         with open(f"clean_{self.params.source}_{self.params.date}.out", "w") as f:
             f.write(f"Dati puliti {self.params.source}")
 

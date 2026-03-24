@@ -6,11 +6,13 @@ class GlobalReport(Task):
     def run(self):
         print(self.attributes.var)
         print("📊 Generazione Global Report in corso...")
-        time.sleep(20)
+
         results = []
         for s in ["ERP", "WEB", "SOCIAL"]:
             with open(f"clean_{s}_{self.params.date}.out", "r") as f:
+                print(f"Esecuzione File {s}")
                 results.append(f.read())
+                time.sleep(7)
         
         with open(f"REPORT_{self.params.date}.out", "w") as f:
             f.write("=== WALUIGI GLOBAL REPORT ===\n")

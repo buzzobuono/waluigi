@@ -62,7 +62,17 @@ class WaluigiDB:
             self.conn.execute("""
                     INSERT OR IGNORE INTO resources (name, amount, usage)
                     VALUES ('coin', 2.0, 0.0)
-                """)    
+                """)
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS task_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    task_id TEXT NOT NULL,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    message TEXT,
+                    boss_id TEXT, -- Qui salviamo il worker_id o boss_id che genera il log
+                    FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
+                )""")
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_task_id ON task_logs(task_id)")
 
     def get_task_status(self, id, params):
         cursor = self.conn.execute("SELECT status FROM tasks WHERE id = ? and params = ?", (id, params))
@@ -337,4 +347,27 @@ class WaluigiDB:
             """)
             columns = [column[0] for column in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
-            
+    
+    def insert_task_logs(self, task_id, logs, worker_id):
+        with self.conn:
+            try:
+                self.conn.executemany("INSERT INTO task_logs (task_id, message, boss_id) VALUES (?, ?, ?)", [(task_id, line, worker_id) for line in logs])
+            except Exception as e:
+                print(f"❌ Errore DB durante insert_task_logs: {e}")
+                raise
+    
+    def get_logs(self, task_id, limit=20):
+        query = """
+            SELECT * FROM (
+                SELECT id, timestamp, boss_id, message 
+                FROM task_logs 
+                WHERE task_id = ? 
+                ORDER BY id DESC 
+                LIMIT ?
+            ) ORDER BY id ASC
+        """
+        cursor = self.conn.execute(query, (task_id, limit))
+        return [
+            {"id": r[0], "timestamp": r[1], "worker_id": r[2], "message": r[3]} 
+            for r in cursor.fetchall()
+        ]

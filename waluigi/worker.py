@@ -81,6 +81,7 @@ def run_command_async(command, id, namespace, params, attributes, resources, wor
         _update_boss(id, namespace, params, attributes, resources, "RUNNING")
         
         env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
         for k, v in params.items():
             env[f"WALUIGI_PARAM_{k.upper()}"] = str(v)
         for k, v in attributes.items():
@@ -95,11 +96,22 @@ def run_command_async(command, id, namespace, params, attributes, resources, wor
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            bufsize=1,
             env=env
         )
 
-        for line in process.stdout:
-            print(f"[{id}] {line.strip()}", flush=True)
+        log_buffer = []
+        for line in iter(process.stdout.readline, ""):
+            clean_line = line.strip()
+            if clean_line:
+                print(f"[{id}] {clean_line}", flush=True)
+                log_buffer.append(clean_line)                
+                if len(log_buffer) >= 5:
+                    _send_logs(id, log_buffer)
+                    log_buffer = []
+
+        if log_buffer:
+            _send_logs(id, log_buffer)
 
         process.wait()
 
@@ -116,7 +128,16 @@ def run_command_async(command, id, namespace, params, attributes, resources, wor
     finally:
         with lock:
             active_tasks_count -= 1
-            
+
+def _send_logs(task_id, lines):
+    try:
+        return _post(f"/api/logs/{task_id}", json={
+            "worker_id": WORKER_ID,
+            "logs": lines
+        }, timeout=5)
+    except Exception as e:
+        log(f"⚠️ Errore invio log per {task_id}: {e}")
+
 def _post(endpoint, **kwargs):
     try:
         r = requests.post(f"{BOSS_URL}{endpoint}", **kwargs)

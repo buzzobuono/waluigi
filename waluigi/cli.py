@@ -3,6 +3,7 @@ import json
 import requests
 import yaml
 import argparse
+import time
 from tabulate import tabulate
 
 class WaluigiCLI:
@@ -208,6 +209,38 @@ class WaluigiCLI:
         except Exception as e:
             print(f"❌ Error: {e}")
 
+    def get_logs(self, task_id, limit=20, follow=False):
+        last_seen_id = 0
+        
+        try:
+            while True:
+                params = {}
+                if follow and last_seen_id > 0:
+                    params = {'limit': 100, 'after_id': last_seen_id} 
+                else:
+                    params = {'limit': limit}
+                r = requests.get(f"{self.base_url}/api/logs/{task_id}", params=params)
+                if r.status_code != 200:
+                    print(f"❌ Errore: {r.status_code}")
+                    break
+                logs = r.json()
+                if not logs and not follow:
+                    break
+                new_logs = [l for l in logs if l.get('id', 0) > last_seen_id]
+                for entry in new_logs:
+                    ts = entry.get('timestamp', 'N/A')
+                    wid = entry.get('worker_id', '???')
+                    msg = entry.get('message', '')
+                    print(f"[{ts}] [{wid}] {msg}")
+                    last_seen_id = max(last_seen_id, entry.get('id', 0))
+                if not follow:
+                    break
+                
+                time.sleep(1)
+                
+        except KeyboardInterrupt:
+            print("\n👋 Follow interrotto.")
+
 def main():
     parser = argparse.ArgumentParser(description='Waluigi CLI Control Panel')
     parser.add_argument('--url', default='http://localhost:8082', help='Boss URL')
@@ -224,6 +257,11 @@ def main():
     get_p.add_argument('type', choices=['namespaces', 'jobs', 'tasks', 'resources', 'workers'])
     get_p.add_argument('-n', '--namespace', required=False, help='Namespace')
     get_p.add_argument('-j', '--job_id', required=False, help='Job ID')
+    
+    logs_p = subparsers.add_parser('logs', help='Visualizza i log di un task')
+    logs_p.add_argument('task_id', help='ID del task di cui leggere i log')
+    logs_p.add_argument('-n', '--lines', type=int, default=20, help='Numero di righe da mostrare (default 20)')
+    logs_p.add_argument('-f', '--follow', action='store_true', help='Segui i log in tempo reale')
     
     reset_p = subparsers.add_parser('reset', help='Resetta task o namespace')
     reset_p.add_argument('type', choices=['task', 'namespace'])
@@ -248,7 +286,9 @@ def main():
         elif args.type == 'resources':
             cli.get_resources()
         elif args.type == 'workers':
-            cli.get_workers()            
+            cli.get_workers()
+    elif args.command == 'logs':
+        cli.get_logs(args.task_id, limit=args.lines, follow=args.follow)
     elif args.command == 'describe':
         if args.type == 'job':
             if args.target:
@@ -260,7 +300,6 @@ def main():
         if args.type == 'task':
             if args.target:
                 cli.reset('task', args.target)
-        
     elif args.command == 'delete':
         if args.type == 'namespace':
             if args.target:
