@@ -39,10 +39,10 @@ class WaluigiDB:
             self.conn.execute("""
                 CREATE TABLE IF NOT EXISTS jobs (
                     job_id TEXT PRIMARY KEY,
-                    metadata TEXT,    -- workdir, sourcedir, module_name
-                    spec TEXT,        -- Il contenuto dello YAML o i parametri della classe
-                    status TEXT,           -- PENDING, RUNNING, SUCCESS, FAILED
-                    locked_by TEXT,        -- ID del Boss (es: hostname)
+                    metadata TEXT,
+                    spec TEXT,
+                    status TEXT,
+                    locked_by TEXT,
                     locked_until TIMESTAMP
                 )""")
             self.conn.execute("""

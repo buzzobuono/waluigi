@@ -116,8 +116,6 @@ def submit():
         return jsonify({"status": "error", "message": "Spec vuoto"}), 400
     
     metadata = data.get("metadata", {})
-    workdir = metadata.get("workdir")
-    sourcedir = metadata.get("sourcedir")
     try:
         task = DynamicTask(spec)
         job_id = f"job/{task.id}"

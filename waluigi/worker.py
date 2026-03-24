@@ -1,5 +1,3 @@
-import sys
-import importlib
 import requests
 import uuid
 import threading
@@ -24,8 +22,7 @@ p.add('--bind-address', default='0.0.0.0', help='IP per Flask')
 p.add('--boss-url', default='http://localhost:8082')
 p.add('--slots', type=int, default=2)
 p.add('--heartbeat', type=int, default=10)
-p.add('--workdir', default=os.path.join(os.getcwd(), "work"), help='Default working directory')
-p.add('--sourcedir', default=os.path.join(os.getcwd(), "source"), help='Default source code directory')
+p.add('--default-workdir', default=os.path.join(os.getcwd(), "work"), help='Default working directory')
 
 args = p.parse_args()
 
@@ -34,8 +31,7 @@ BOSS_URL = args.boss_url
 URL = f"http://{args.host}:{args.port}"
 SLOTS = args.slots
 HEARTBEAT = args.heartbeat
-WORKDIR = args.workdir
-SOURCEDIR = args.sourcedir
+DEFAULT_WORKDIR = args.default_workdir
 
 def log(msg):
     print(f"[worker 👷] {msg}", flush=True)
@@ -43,8 +39,7 @@ def log(msg):
 @app.route('/execute', methods=['POST'])
 def execute():
     data = request.json
-    workdir = data.get("workdir", WORKDIR)
-    sourcedir = data.get("sourcedir", SOURCEDIR)
+    workdir = data.get("workdir", DEFAULT_WORKDIR)
     command = data.get("command")
     id = data.get("id")
     namespace = data.get("namespace")
@@ -164,12 +159,12 @@ def heartbeat():
 def main():
     log(f"Waluigi Worker:")
     log(f"    ID: {args.id}")
+    log(f"    Boss URL: {args.boss_url}")
     log(f"    Binding: {args.bind_address}:{args.port}")
     log(f"    URL: http://{args.host}:{args.port}")
     log(f"    Slots: {args.slots}")
     log(f"    Heartbeat: {args.heartbeat}")
-    log(f"    Default Source Dir: {args.sourcedir}")
-    log(f"    Default Work Dir: {args.workdir}")
+    log(f"    Default Work Dir: {args.default_workdir}")
     
     threading.Thread(target=heartbeat, daemon=True).start()
     

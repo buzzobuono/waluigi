@@ -21,6 +21,6 @@ namespaces = true
 
 [project.scripts]
 wlctl = "waluigi.cli:main"
-wlbossd = "waluigi.boss2d:main"
+wlbossd = "waluigi.boss:main"
 wlworkerd = "waluigi.worker:main"
 

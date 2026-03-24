@@ -48,7 +48,6 @@ class WaluigiSchedulerEngine:
     def _dispatch(self, job_metadata, task):
         payload = {
             "workdir": job_metadata['workdir'],
-            "sourcedir": job_metadata['sourcedir'],
             "command": task.command,
             "id": task.id,
             "params": vars(task.params),

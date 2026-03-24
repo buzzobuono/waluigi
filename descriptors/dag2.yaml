@@ -1,12 +1,11 @@
 kind: Job
 metadata:
-    sourcedir: "source"
-    workdir: "."
+    workdir: "work"
 spec:
     name: "GlobalReport"
     id: "final_report"
     namespace: "analytics"
-    command: "python source/analytics/global_report.py"
+    command: "python ../source/analytics/global_report.py"
     params:
       date: "2026-03-20"
     attributes:
@@ -19,7 +18,7 @@ spec:
       - name: "CleanDataTask"
         namespace: "analytics"
         id: "clean_erp"
-        command: "python source/analytics/clean_data.py"
+        command: "python ../source/analytics/clean_data.py"
         params:
           source: "ERP"
           date: "${parent.params.date}"
@@ -33,7 +32,7 @@ spec:
           - name: "RawDataExtract"
             namespace: "analytics"
             id: "extract_erp"
-            command: "python source/analytics/raw_data_exctact.py"
+            command: "python ../source/analytics/raw_data_exctact.py"
             params:
               source: "${parent.params.source}"
               date: "${parent.params.date}"
@@ -44,7 +43,7 @@ spec:
       - name: "CleanDataTask"
         namespace: "analytics"
         id: "clean_web"
-        command: "python source/analytics/clean_data.py"
+        command: "python ../source/analytics/clean_data.py"
         params:
           source: "WEB"
           date: "${parent.params.date}"
@@ -58,7 +57,7 @@ spec:
           - name: "RawDataExtract"
             namespace: "analytics"
             id: "extract_web"
-            command: "python source/analytics/raw_data_exctact.py"
+            command: "python ../source/analytics/raw_data_exctact.py"
             params:
               source: "${parent.params.source}"
               date: "${parent.params.date}"
@@ -69,7 +68,7 @@ spec:
       - name: "CleanDataTask"
         namespace: "analytics"
         id: "clean_social"
-        command: "python source/analytics/clean_data.py"
+        command: "python ../source/analytics/clean_data.py"
         params:
           source: "SOCIAL"
           date: "${parent.params.date}"
@@ -83,7 +82,7 @@ spec:
           - name: "RawDataExtract"
             namespace: "analytics"
             id: "extract_social"
-            command: "python source/analytics/raw_data_exctact.py"
+            command: "python ../source/analytics/raw_data_exctact.py"
             params:
               source: "${parent.params.source}"
               date: "${parent.params.date}"

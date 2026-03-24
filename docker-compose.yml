@@ -8,22 +8,21 @@ services:
       protocol: tcp
       mode: ingress
     environment:
-      - WALUIGI_DB_PATH=/db/waluigi.db
-      - WALUIGI_RESOURCES=coin:32,pdc:32
+      - WALUIGI_BOSS_DB_PATH=/db/waluigi.db
     command: ["wlbossd"]
     volumes:
       - ./db:/db
     deploy:
-      replicas: 1
+      replicas: 4
 
   worker:
     image: buzzobuono/waluigi-workerd:latest
     depends_on:
       - boss
     environment:
-      - WALUIGI_BOSS_URL=http://boss:8082
-      - WALUIGI_WORKDIR=/work
-      - WALUIGI_SOURCEDIR=/source
+      - WALUIGI_WORKER_BOSS_URL=http://boss:8082
+      - WALUIGI_WORKER_WORKDIR=/work
+      - WALUIGI_WORKER_SLOTS=1
     volumes:
       - ./work:/work
       - ./source:/source
