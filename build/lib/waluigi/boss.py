@@ -15,11 +15,11 @@ app = Flask(__name__)
 
 p = configargparse.ArgParser(auto_env_var_prefix='WALUIGI_BOSS_')
 
-p.add('--id', default=str(uuid.uuid4()), help='Unique ID')
+p.add('--id', default=str(uuid.uuid4()), help='ID unico')
 p.add('--port', type=int, default=8082)
-p.add('--host', default=socket.gethostname(), help='Hostname')
-p.add('--bind-address', default='0.0.0.0', help='Binding IP')
-p.add('--db-path', default=os.path.join(os.getcwd(), "db/waluigi.db"), help='Sqlite DB Path')
+p.add('--host', default=socket.gethostname(), help='Host logico per URL')
+p.add('--bind-address', default='0.0.0.0', help='IP per Flask')
+p.add('--db-path', default=os.path.join(os.getcwd(), "db/waluigi.db"), help='Path del db sqlite')
   
 args = p.parse_args()
 
@@ -34,9 +34,9 @@ def log(msg):
     
 try:
     db = WaluigiDB(DB_PATH)
-    log(f"🟣 Database ready: {DB_PATH}")
+    log(f"🟣 Database pronto in: {DB_PATH}")
 except Exception as e:
-    log(f"❌ Error: {e}")
+    log(f"❌ Errore critico DB: {e}")
     sys.exit(1)
 
 engine = WaluigiSchedulerEngine(db=db)
@@ -44,21 +44,24 @@ engine = WaluigiSchedulerEngine(db=db)
 @app.route('/update', methods=['POST'])
 def update():
     data = request.json
+    #print(f"method: update, payload: {data}")
     id = data['id']
     status = data['status']
     if status == "RUNNING":
+        # Tentativo di acquisizione lock atomico
         if not db.try_to_lock(id):
             return jsonify({"status": "locked"}), 409
     if status in ["SUCCESS", "FAILED"]:
         task_resources = data.get('resources', {'coin': 1.0}) 
         db.release_resources(task_resources)
-        log(f"♻️ Resources released for {id}")
+        log(f"♻️ Risorse liberate per {id}")
         
+    # Se non è RUNNING (è SUCCESS/FAILED/PENDING), aggiorna normalmente
     db.update_task(id, data.get('namespace'), data.get('params'), data.get('attributes'), status)
     return jsonify({"status": "updated"}), 200
         
 def planner_loop():
-    log(f"🧠 Planner Loop started: {BOSS_ID}")
+    log(f"🧠 Planner Loop avviato: {BOSS_ID}")
 
     while True:
         try:
@@ -72,6 +75,7 @@ def planner_loop():
                 continue
 
             job_id = job['job_id']
+            
             task = DynamicTask(job['spec'])
 
             res = engine.build(
@@ -88,10 +92,11 @@ def planner_loop():
                 db.update_job_status(job_id, "FAILED")
             
             db.release_job(job_id)
+
             time.sleep(5)
 
         except Exception as e:
-            log(f"❌ Error: {e}")
+            log(f"⚠️ Errore nel loop: {e}")
             if 'job_id' in locals(): 
                 db.release_job(job_id)
             time.sleep(5)
@@ -107,10 +112,10 @@ def submit():
     data = request.json
     
     if data.get("kind") != "Job" or "spec" not in data:
-        return jsonify({"status": "error", "message": "Format not supported. Neef 'kind: Job' and not empty 'spec'."}), 400
+        return jsonify({"status": "error", "message": "Formato non supportato. Richiesto 'kind: Job' con 'spec'."}), 400
     spec = data.get("spec", {})
     if not spec:
-        return jsonify({"status": "error", "message": "Empty 'spec'"}), 400
+        return jsonify({"status": "error", "message": "Spec vuoto"}), 400
     
     metadata = data.get("metadata", {})
     try:
@@ -119,8 +124,8 @@ def submit():
         status = db.get_job_status(job_id)
         
         if status and status != 'SUCCESS' and status != 'FAILED':
-            log(f"⚠️ Submission rejected: {job_id} is already active.")
-            return jsonify({"status": "rejected", "message": "already active"}), 409
+            log(f"⚠️ Sottomissione rifiutata: {job_id} è già in esecuzione.")
+            return jsonify({"status": "rejected", "reason": "already active"}), 409
                 
         metadata['job_id'] = job_id
         
@@ -130,7 +135,7 @@ def submit():
             spec=spec
         )
         
-        log(f"📥 Job submitted: {job_id}")
+        log(f"📥 Flusso sottomesso: {job_id}")
         return jsonify({
             "status": "submitted", 
             "job_id": job_id, 
@@ -138,7 +143,7 @@ def submit():
         })
 
     except Exception as e:
-        log(f"❌ Error: {e}")
+        log(f"❌ Errore processamento YAML: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/')
@@ -169,6 +174,7 @@ def dashboard():
     <head>
         <title>Waluigi Dashboard</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <!--meta http-equiv="refresh" content="5"-->
         <style>
             body { background-color: #1a0026; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; padding: 15px; margin: 0; }
             h1 { color: #d080ff; font-size: 1.8em; border-bottom: 2px solid #4b0082; padding-bottom: 10px; }
@@ -188,7 +194,7 @@ def dashboard():
         </style>
         <script>
             function actionConfirm(url) {
-                if (confirm('Confirm action?')) {
+                if (confirm('Sicuro di voler procedere?')) {
                     fetch(url, {method: 'POST'}).then(() => window.location.reload());
                 }
             }
@@ -209,10 +215,10 @@ def dashboard():
     """
     
     def render_tree(current_id, all_tasks, level=0):
-        if current_id not in all_tasks:
-            return ""
+        if current_id not in all_tasks: return ""
         task = all_tasks[current_id]
         indent = ("&nbsp;" * level) + ("└─ " if level > 0 else "")
+
         task_id_link = f"<a href='/api/logs/{task['id']}' target='_blank' style='color: #00d4ff; text-decoration: none;'>{task['id']}</a>"
         
         row_html = f"""
@@ -227,6 +233,7 @@ def dashboard():
             </td>
         </tr>
         """
+        # Filtra i figli che appartengono a questo genitore
         children = [tid for tid, t in all_tasks.items() if str(t['parent']) == str(current_id)]
         for c_id in children: 
             row_html += render_tree(c_id, all_tasks, level + 1)
@@ -292,13 +299,17 @@ def apply_resources_api():
         return jsonify({"status": "error", "message": "Spec vuoto"}), 400
     try:
         (success, msg) = db.update_resources(spec)
+        print(success)
         if not success:
             return jsonify({"status": "error", "message": msg}), 409
             
-        log(f"⚙️ Cluster resources updated: {spec}")
-        return jsonify({"status": "ok", "message": msg}), 200
+        log(f"⚙️ Limiti del cluster aggiornati: {spec}")
+        return jsonify({
+            "status": "ok",
+            "message": msg    
+        }), 200
     except Exception as e:
-        log(f"❌ Errore: {e}")
+        log(f"❌ Errore aggiornamento risorse: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/workers', methods=['GET'])
@@ -321,6 +332,23 @@ def get_jobs():
     jobs = db.list_jobs()
     return jsonify(jobs)
     
+@app.route('/api/active/describe/<path:key>', methods=['GET'])
+def describe_active(key):
+    if key not in active_jobs:
+        return jsonify({"error": "Job not found"}), 404
+    
+    task = active_jobs[key]
+    # Qui descriviamo l'oggetto in memoria
+    return jsonify({
+        "key": key,
+        "id": task.id,
+        "namespace": task.namespace,
+        "tags": task.tags,
+        "params": vars(task.params) if hasattr(task.params, '__dict__') else task.params,
+        "attributes": vars(task.attributes) if hasattr(task.attributes, '__dict__') else task.attributes,
+        "resources": getattr(task, 'resources', {})
+    })
+
 @app.route('/api/logs/<task_id>', methods=['POST'])
 def receive_logs(task_id):
     data = request.json

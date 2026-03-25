@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "waluigi"
 version = "0.1.0"
 dependencies = [
+    "gunicorn",
     "requests",
     "tabulate",
     "Flask>=3.0.0",
@@ -21,6 +22,6 @@ namespaces = true
 
 [project.scripts]
 wlctl = "waluigi.cli:main"
-wlbossd = "waluigi.boss:main"
-wlworkerd = "waluigi.worker:main"
+wlboss = "waluigi.boss:main"
+wlworker = "waluigi.worker:main"
 

@@ -1,0 +1,315 @@
+import sys
+import json
+import requests
+import yaml
+import argparse
+import time
+from tabulate import tabulate
+
+class WaluigiCLI:
+    def __init__(self, base_url):
+        self.base_url = base_url.rstrip('/')
+        
+    def apply(self, descriptor_path):
+        with open(descriptor_path, 'r') as f:
+            doc = yaml.safe_load(f)
+          
+        kind = doc.get('kind')
+        spec = doc.get('spec')
+        
+        if kind == 'Job':
+            r = requests.post(f"{self.base_url}/submit", json=doc)
+            print(json.dumps(r.json(), indent=2))
+        elif kind == 'ClusterResources':
+            r = requests.post(f"{self.base_url}/api/resources", json=doc)
+            print(json.dumps(r.json(), indent=2))
+        else:
+            print(f"❌ Tipo '{kind}' non supportato")
+        return
+        
+    def describe_job(self, key):
+        try:
+            r = requests.get(f"{self.base_url}/api/active/describe/{key}")
+            if r.status_code == 200:
+                data = r.json()
+                print(f"📋 Dettagli oggetto in memoria per: {key}")
+            
+                # Formattiamo i dettagli in una tabella verticale
+                details = [[k, v] for k, v in data.items()]
+                print(tabulate(details, tablefmt="fancy_grid"))
+            else:
+                print(f"❌ Key '{key}' non trovata in memoria.")
+        except Exception as e:
+            print(f"🔌 Errore: {e}")
+    
+    
+    def get_namespaces(self):
+        try:
+            if r.status_code == 200:
+                all_tasks = r.json()
+                if not all_tasks:
+                    print("📭 Nessun namespace attivo nel database.")
+                    return
+
+                # Raggruppamento per Namespace
+                namespaces = {}
+                for t in all_tasks:
+                    ns = t['namespace']
+                    if ns not in namespaces:
+                        namespaces[ns] = {"tasks": 0, "completed": 0, "failed": 0, "running": 0}
+                
+                    namespaces[ns]["tasks"] += 1
+                    if t['status'] == 'SUCCESS': namespaces[ns]["completed"] += 1
+                    elif t['status'] == 'FAILED': namespaces[ns]["failed"] += 1
+                    elif t['status'] == 'RUNNING': namespaces[ns]["running"] += 1
+
+                # Preparazione tabella sintetica
+                table_data = []
+                for ns, stats in namespaces.items():
+                    progress = f"{stats['completed']}/{stats['tasks']}"
+                    status_str = "🟢 OK" if stats['failed'] == 0 else f"🔴 ERR ({stats['failed']})"
+                    if stats['running'] > 0: status_str = "🟡 RUNNING"
+                
+                    table_data.append([ns, stats['tasks'], progress, status_str])
+
+                headers = ["Namespace", "Total Tasks", "Progress", "State"]
+                print(tabulate(table_data, headers=headers, tablefmt="outline"))
+            else:
+                print(f"❌ Errore del server: {r.status_code}")
+        except Exception as e:
+            print(f"🔌 Errore di connessione: {e}")
+            
+    def reset(self, scope, target):
+        url = f"{self.base_url}/api/reset/{scope}/{target}"
+        r = requests.post(url)
+        print(f"Result {r.status_code}")
+
+    def delete(self, scope, target):
+        url = f"{self.base_url}/api/delete/{scope}/{target}"
+        r = requests.post(url)
+        print(f"Result {r.status_code}")
+        
+    def get_namespaces(self):
+        try:
+            r = requests.get(f"{self.base_url}/api/namespaces")
+            if r.status_code == 200:
+                data = r.json()
+                if not data:
+                    print("⚠️ No namespace found")
+                    return
+                table = []
+                for ns in data:
+                    namespace = ns.get("namespace")
+                    task_count = ns.get("task_count")
+                    table.append([namespace, task_count])
+                headers = ["NAMESPACE", "TASK COUNT" ]
+                print(tabulate(table, headers=headers, tablefmt="plain"))
+            else:
+                print(f"❌ Error: {r.status_code}")
+        except Exception as e:
+            print(f"❌ Error: {e}")
+        
+    def get_jobs(self):
+        try:
+            r = requests.get(f"{self.base_url}/api/jobs")
+            if r.status_code == 200:
+                data = r.json()
+                if not data:
+                    print("⚠️ No jobs found")
+                    return
+                table = []
+                for job in data:
+                    id = job.get("job_id")
+                    status = job.get("status")
+                    table.append([id, status])
+                headers = ["ID", "STATUS", "LOCKED_BY", "LOCKED_UNTIL" ]
+                print(tabulate(table, headers=headers, tablefmt="plain"))
+            else:
+                print(f"❌ Error: {r.status_code}")
+        except Exception as e:
+            print(f"❌ Error: {e}")
+    
+    def get_tasks(self, job_id=None, namespace=None):
+        try:
+            r = requests.get(f"{self.base_url}/api/tasks")
+            if r.status_code == 200:
+                data = r.json()
+                if job_id:
+                    data = [t for t in data if t.get("job_id") == job_id]
+                if namespace:
+                    data = [t for t in data if t.get("namespace") == namespace]
+                if not data:
+                    print("⚠️ No task found")
+                    return
+                    
+                headers = [ "ID", "JOB_ID", "PARAMS", "STATUS", "LAST UPDATE", "NAMESPACE" ]
+                table = []
+                for task in data:
+                    table.append([
+                        task["id"],
+                        task["job_id"],
+                        task["params"],
+                        task["status"],
+                        task["last_update"],
+                        task['namespace']
+                    ])
+
+                print(tabulate(table, headers=headers, tablefmt="plain"))
+                
+            else:
+                print(f"❌ Error: {r.status_code}")
+        except Exception as e:
+            print(f"❌ Error: {e}")
+   
+    def get_resources(self):
+        try:
+            r = requests.get(f"{self.base_url}/api/resources")
+            if r.status_code == 200:
+                data = r.json()
+                if not data:
+                    print("⚠️ No resources found")
+                    return
+                table = []
+                for res in data:
+                    name = res.get("name")
+                    amount = res.get("amount")
+                    usage = res.get("usage")
+                    available = res.get("available")
+                    perc = (usage / amount * 100) if amount > 0 else 0
+                    status = f"{perc:.1f}%"
+                    table.append([name, amount, usage, available, status ])
+                headers = ["NAME", "AMOUNT", "USAGE", "AVAILABLE", "STATUS"]
+                print(tabulate(table, headers=headers, tablefmt="plain"))
+            else:
+                print(f"❌ Error: {r.status_code}")
+        except Exception as e:
+            print(f"❌ Error: {e}")
+   
+    def get_workers(self):
+        try:
+            r = requests.get(f"{self.base_url}/api/workers")
+            if r.status_code == 200:
+                data = r.json()
+                if not data:
+                    print("⚠️ No worker found")
+                    return
+                table = []
+                for worker in data:
+                    url = worker.get("url")
+                    status = worker.get("status")
+                    max_slots = worker.get("max_slots")
+                    free_slots = worker.get("free_slots")
+                    last_seen = worker.get("last_seen")
+                    
+                    table.append([url, status, max_slots, free_slots, last_seen ])
+                headers = ["URL", "STATUS", "MAX_SLOTS", "FREE_SLOTS", "LAST_SEEN",]
+                print(tabulate(table, headers=headers, tablefmt="plain"))
+            else:
+                print(f"❌ Error: {r.status_code}")
+        except Exception as e:
+            print(f"❌ Error: {e}")
+
+    def get_logs(self, task_id, limit=20, follow=False):
+        last_seen_id = 0
+        
+        try:
+            while True:
+                params = {}
+                if follow and last_seen_id > 0:
+                    params = {'limit': 100, 'after_id': last_seen_id} 
+                else:
+                    params = {'limit': limit}
+                r = requests.get(f"{self.base_url}/api/logs/{task_id}", params=params)
+                if r.status_code != 200:
+                    print(f"❌ Errore: {r.status_code}")
+                    break
+                logs = r.json()
+                if not logs and not follow:
+                    break
+                new_logs = [l for l in logs if l.get('id', 0) > last_seen_id]
+                for entry in new_logs:
+                    ts = entry.get('timestamp', 'N/A')
+                    wid = entry.get('worker_id', '???')
+                    msg = entry.get('message', '')
+                    print(f"[{ts}] [{wid}] {msg}")
+                    last_seen_id = max(last_seen_id, entry.get('id', 0))
+                if not follow:
+                    break
+                
+                time.sleep(1)
+                
+        except KeyboardInterrupt:
+            print("\n👋 Follow interrotto.")
+
+def main():
+    parser = argparse.ArgumentParser(description='Waluigi CLI Control Panel')
+    parser.add_argument('--url', default='http://localhost:8082', help='Boss URL')
+    subparsers = parser.add_subparsers(dest='command', help='Comandi disponibili')
+
+    apply_p = subparsers.add_parser('apply', help='Sottomette un job o risorse')
+    apply_p.add_argument('-f', '--file', required=True, help='Path del descrittore JSON')
+    
+    describe_p = subparsers.add_parser('describe', help='Descrive gli oggetti attivi')
+    describe_p.add_argument('type', choices=['namespace', 'job'])
+    describe_p.add_argument('target', nargs='?', help='Oggetto target')
+    
+    get_p = subparsers.add_parser('get', help='Elenca gli oggetti attivi')
+    get_p.add_argument('type', choices=['namespaces', 'jobs', 'tasks', 'resources', 'workers'])
+    get_p.add_argument('-n', '--namespace', required=False, help='Namespace')
+    get_p.add_argument('-j', '--job_id', required=False, help='Job ID')
+    
+    logs_p = subparsers.add_parser('logs', help='Visualizza i log di un task')
+    logs_p.add_argument('task_id', help='ID del task di cui leggere i log')
+    logs_p.add_argument('-n', '--lines', type=int, default=20, help='Numero di righe da mostrare (default 20)')
+    logs_p.add_argument('-f', '--follow', action='store_true', help='Segui i log in tempo reale')
+    
+    reset_p = subparsers.add_parser('reset', help='Resetta task o namespace')
+    reset_p.add_argument('type', choices=['task', 'namespace'])
+    reset_p.add_argument('target', help='ID del task o nome del namespace')
+
+    del_p = subparsers.add_parser('delete', help='Elimina task o namespace')
+    del_p.add_argument('type', choices=['task', 'namespace'])
+    del_p.add_argument('target', help='ID del task o nome del namespace')
+
+    args = parser.parse_args()
+    cli = WaluigiCLI(args.url)
+
+    if args.command == 'apply':
+        cli.apply(args.file)
+    elif args.command == 'get':
+        if args.type == 'namespaces':
+            cli.get_namespaces()
+        elif args.type == 'jobs':
+            cli.get_jobs()
+        elif args.type == 'tasks':
+            cli.get_tasks(args.job_id, args.namespace)           
+        elif args.type == 'resources':
+            cli.get_resources()
+        elif args.type == 'workers':
+            cli.get_workers()
+    elif args.command == 'logs':
+        cli.get_logs(args.task_id, limit=args.lines, follow=args.follow)
+    elif args.command == 'describe':
+        if args.type == 'job':
+            if args.target:
+                cli.describe_job(args.target)
+    elif args.command == 'reset':
+        if args.type == 'namespace':
+            if args.target:
+                cli.reset('namespace', args.target)
+        if args.type == 'task':
+            if args.target:
+                cli.reset('task', args.target)
+    elif args.command == 'delete':
+        if args.type == 'namespace':
+            if args.target:
+                cli.delete('namespace', args.target)
+        if args.type == 'task':
+            if args.target:
+                cli.delete('task', args.target)
+                
+    else:
+        parser.print_help()
+
+if __name__ == "__main__":
+    main()

@@ -15,10 +15,10 @@ app = Flask(__name__)
 
 p = configargparse.ArgParser(auto_env_var_prefix='WALUIGI_WORKER_')
 
-p.add('--id', default=str(uuid.uuid4()), help='ID unico')
+p.add('--id', default=str(uuid.uuid4()), help='Unique ID')
 p.add('--port', type=int, default=5001)
-p.add('--host', default=socket.gethostname(), help='Host logico per URL')
-p.add('--bind-address', default='0.0.0.0', help='IP per Flask')
+p.add('--host', default=socket.gethostname(), help='Hostname')
+p.add('--bind-address', default='0.0.0.0', help='Binding IP')
 p.add('--boss-url', default='http://localhost:8082')
 p.add('--slots', type=int, default=2)
 p.add('--heartbeat', type=int, default=10)
@@ -50,12 +50,12 @@ def execute():
     if not command:
         return jsonify({"status": "error", "message": "No command provided"}), 400
 
-    log(f"Ricevuto ordine: {id}")
+    log(f"Order  ordine: {id}")
     
     global active_tasks_count
     with lock:
         if active_tasks_count >= SLOTS:
-            log(f"Slot non disponibile.")
+            log(f"Slot not available.")
             return jsonify({"status": "busy"}), 429
         active_tasks_count += 1
             
@@ -69,7 +69,7 @@ def execute():
         return jsonify({"status": "submitted", "id": id}), 202
     
     except Exception as e:
-        log(f"❌ Errore: {e}")
+        log(f"❌ Error: {e}")
         with lock:
             active_tasks_count -= 1
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -116,14 +116,14 @@ def run_command_async(command, id, namespace, params, attributes, resources, wor
         process.wait()
 
         if process.returncode == 0:
-            log(f"✅ Task {id} terminato con successo.")
+            log(f"✅ Task {id} succesfully terminated.")
             _update_boss(id, namespace, params, attributes, resources, "SUCCESS")
         else:
-            log(f"❌ Task {id} fallito (Exit code: {process.returncode})")
+            log(f"❌ Task {id} failed (Exit code: {process.returncode})")
             _update_boss(id, namespace, params, attributes, resources, "FAILED")
             
     except Exception as e:
-        log(f"❌ Errore: {e}")
+        log(f"❌ Error: {e}")
         _update_boss(id, namespace, params, attributes, resources, "FAILED")
     finally:
         with lock:
@@ -136,7 +136,7 @@ def _send_logs(task_id, lines):
             "logs": lines
         }, timeout=5)
     except Exception as e:
-        log(f"⚠️ Errore invio log per {task_id}: {e}")
+        log(f"⚠️ Error in sending log for {task_id}: {e}")
 
 def _post(endpoint, **kwargs):
     try:

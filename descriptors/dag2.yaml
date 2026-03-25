@@ -23,7 +23,7 @@ spec:
           source: "ERP"
           date: "${parent.params.date}"
         attributes:
-          fail_prob: "0.0"
+          fail_prob: ".8"
         resources:
           pdc: 1
         affinity:
