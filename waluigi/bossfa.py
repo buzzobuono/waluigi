@@ -64,6 +64,10 @@ def planner_loop():
 
     while True:
         try:
+            #if not engine.workers:
+            #    time.sleep(5)
+            #    continue
+
             job = db.claim_job(BOSS_ID)
             if not job:
                 time.sleep(5)
@@ -93,13 +97,13 @@ def planner_loop():
             if 'job_id' in locals():
                 db.release_job(job_id)
             time.sleep(5)
-            
+
 @app.post('/worker/register')
 async def register(request: Request):
     data = await request.json()
     engine.registerWorker(data)
     return JSONResponse({"status": "ok"})
-        
+
 @app.post('/submit')
 async def submit(request: Request):
     data = await request.json()
@@ -138,7 +142,6 @@ async def submit(request: Request):
     except Exception as e:
         log(f"❌ Error: {e}")
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
-
 
 @app.get('/', response_class=HTMLResponse)
 async def dashboard():
@@ -252,33 +255,33 @@ async def dashboard():
 
     html += "</body></html>"
     return html
-    
+
 @app.post('/api/reset/namespace/{namespace}')
 async def reset_namespace(namespace: str):
     target = None if namespace == "None" else namespace
     db.reset_namespace(target)
     return JSONResponse({"status": "ok"})
-        
+
 @app.post('/api/reset/task/{id}')
 async def reset_task(id: str):
     db.reset_task(id)
     return JSONResponse({"status": "ok"})
-        
+
 @app.post('/api/delete/namespace/{namespace}')
 async def delete_namespace(namespace: str):
     target = None if namespace == "None" else namespace
     db.delete_namespace(target)
     return JSONResponse({"status": "ok"})
-        
+
 @app.post('/api/delete/task/{id}')
 async def delete_task(id: str):
     db.delete_task(id)
     return JSONResponse({"status": "ok"})
-        
+
 @app.get('/api/resources')
 async def get_resources_api():
     return db.list_resources()
-    
+
 @app.post('/api/resources')
 async def apply_resources_api(request: Request):
     doc = await request.json()
@@ -298,7 +301,7 @@ async def apply_resources_api(request: Request):
     except Exception as e:
         log(f"❌ Error: {e}")
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
-            
+
 @app.get('/api/workers')
 async def get_workers_api():
     return db.list_workers()
@@ -306,11 +309,11 @@ async def get_workers_api():
 @app.get('/api/namespaces')
 async def get_namespaces():
     return db.list_namespaces()
-    
+
 @app.get('/api/tasks')
 async def get_tasks():
     return db.list_tasks()
-    
+
 @app.get('/api/jobs')
 async def get_jobs():
     return db.list_jobs()
@@ -328,12 +331,11 @@ async def receive_logs(task_id: str, request: Request):
         except Exception as e:
             return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
     return JSONResponse({"status": "empty"}, status_code=200)
-        
+
 @app.get('/api/logs/{task_id}')
 async def get_task_logs(task_id: str, limit: int = 20):
-    logs = db.get_logs(task_id, limit=limit)
-    return logs
-    
+    return db.get_logs(task_id, limit=limit)
+
 def main():
     log(f"Waluigi Boss:")
     log(f"    ID: {args.id}")
@@ -343,7 +345,11 @@ def main():
 
     threading.Thread(target=planner_loop, daemon=True).start()
 
-    uvicorn.run(app, host=args.bind_address, port=args.port)
+    uvicorn.run(app,
+        host=args.bind_address,
+        port=args.port
+    )
     
 if __name__ == "__main__":
     main()
+    

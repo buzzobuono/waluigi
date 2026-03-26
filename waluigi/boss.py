@@ -20,7 +20,7 @@ p.add('--port', type=int, default=8082)
 p.add('--host', default=socket.gethostname(), help='Hostname')
 p.add('--bind-address', default='0.0.0.0', help='Binding IP')
 p.add('--db-path', default=os.path.join(os.getcwd(), "db/waluigi.db"), help='Sqlite DB Path')
-  
+
 args = p.parse_args()
 
 BOSS_ID = args.id
@@ -31,7 +31,7 @@ os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 def log(msg):
     print(f"[Boss 🐢] {msg}", flush=True)
-    
+
 try:
     db = WaluigiDB(DB_PATH)
     log(f"🟣 Database ready: {DB_PATH}")
@@ -65,7 +65,7 @@ def planner_loop():
             #if not engine.workers:
             #    time.sleep(5)
             #    continue
-                
+            
             job = db.claim_job(BOSS_ID)
             if not job:
                 time.sleep(5)
@@ -75,24 +75,24 @@ def planner_loop():
             task = DynamicTask(job['spec'])
 
             res = engine.build(
-                job_metadata=job['metadata'], 
+                job_metadata=job['metadata'],
                 task=task,
                 parent_id=None
             )
-            
+
             if res is True:
                 log(f"🏁 Job completed: {job_id}")
                 db.update_job_status(job_id, "SUCCESS")
             elif res is None:
                 log(f"💀 Job {job_id} failed because blocked by an error")
                 db.update_job_status(job_id, "FAILED")
-            
+
             db.release_job(job_id)
             time.sleep(5)
 
         except Exception as e:
             log(f"❌ Error: {e}")
-            if 'job_id' in locals(): 
+            if 'job_id' in locals():
                 db.release_job(job_id)
             time.sleep(5)
 
@@ -105,35 +105,35 @@ def register():
 @app.route('/submit', methods=['POST'])
 def submit():
     data = request.json
-    
+
     if data.get("kind") != "Job" or "spec" not in data:
         return jsonify({"status": "error", "message": "Format not supported. Neef 'kind: Job' and not empty 'spec'."}), 400
     spec = data.get("spec", {})
     if not spec:
         return jsonify({"status": "error", "message": "Empty 'spec'"}), 400
-    
+
     metadata = data.get("metadata", {})
     try:
         task = DynamicTask(spec)
         job_id = f"job/{task.id}"
         status = db.get_job_status(job_id)
-        
+
         if status and status != 'SUCCESS' and status != 'FAILED':
             log(f"⚠️ Submission rejected: {job_id} is already active.")
             return jsonify({"status": "rejected", "message": "already active"}), 409
-                
+
         metadata['job_id'] = job_id
-        
+
         db.create_job(
             job_id=job_id,
             metadata=metadata,
             spec=spec
         )
-        
+
         log(f"📥 Job submitted: {job_id}")
         return jsonify({
-            "status": "submitted", 
-            "job_id": job_id, 
+            "status": "submitted",
+            "job_id": job_id,
             "task_id": task.id
         })
 
@@ -147,23 +147,23 @@ def dashboard():
     workers = db.list_workers()
     resources = db.list_resources()
     tasks = db.list_tasks()
-    
+
     namespaces = {}
     for task in tasks:
         ns = task['namespace']
         t_id = task['id']
-        
-        if ns not in namespaces: 
+
+        if ns not in namespaces:
             namespaces[ns] = {'tasks': {}}
-        
+
         namespaces[ns]['tasks'][t_id] = {
-            'id': t_id, 
-            'params': task['params'], 
-            'status': task['status'], 
-            'update': task['last_update'], 
+            'id': t_id,
+            'params': task['params'],
+            'status': task['status'],
+            'update': task['last_update'],
             'parent': task['parent_id']
         }
-    
+
     html = """
     <html>
     <head>
@@ -198,23 +198,23 @@ def dashboard():
         <h1>🟣 Waluigi Dashboard</h1>
     """
     res_status = " | ".join([
-        f"<b>{r['name'].upper()}</b>: {r['usage']}/{r['amount']}" 
+        f"<b>{r['name'].upper()}</b>: {r['usage']}/{r['amount']}"
         for r in resources
     ])
-    html = html + f"""
+    html += f"""
     <div style="background: #2b0040; padding: 10px; border-radius: 5px; margin-bottom: 10px; border-left: 4px solid #d080ff;">
         <h5>Boss Running. Workers: {len(workers)} | Running Jobs: {len(running_jobs)}</h5>
         <p style="margin: 0; font-size: 0.9em; color: #00d4ff;">📊 Risorse: {res_status if res_status else 'Nessun limite impostato'}</p>
     </div>
     """
-    
+
     def render_tree(current_id, all_tasks, level=0):
         if current_id not in all_tasks:
             return ""
         task = all_tasks[current_id]
         indent = ("&nbsp;" * level) + ("└─ " if level > 0 else "")
         task_id_link = f"<a href='/api/logs/{task['id']}' target='_blank' style='color: #00d4ff; text-decoration: none;'>{task['id']}</a>"
-        
+
         row_html = f"""
         <tr>
             <td><span class='indent'>{indent}</span>{task_id_link}</td>
@@ -228,7 +228,7 @@ def dashboard():
         </tr>
         """
         children = [tid for tid, t in all_tasks.items() if str(t['parent']) == str(current_id)]
-        for c_id in children: 
+        for c_id in children:
             row_html += render_tree(c_id, all_tasks, level + 1)
         return row_html
 
@@ -246,11 +246,11 @@ def dashboard():
                 <tr><th>Task ID</th><th>Parameters</th><th>Status</th><th>Last Update</th><th>Action</th></tr>
         """
         roots = [tid for tid, t in data['tasks'].items() if not t['parent'] or str(t['parent']) not in data['tasks']]
-        for r_id in roots: 
+        for r_id in roots:
             html += render_tree(r_id, data['tasks'])
-            
+
         html += "</table></div>"
-    
+
     html += "</body></html>"
     return html
 
@@ -278,15 +278,14 @@ def delete_task(id):
 
 @app.route('/api/resources', methods=['GET'])
 def get_resources_api():
-    resources = db.list_resources()
-    return jsonify(resources)
+    return jsonify(db.list_resources())
 
 @app.route('/api/resources', methods=['POST'])
 def apply_resources_api():
     doc = request.json
     if not doc or doc.get('kind') != 'ClusterResources':
         return jsonify({"status": "error", "message": "Expected kind: ClusterResources"}), 400
-    
+
     spec = doc.get('spec', {})
     if not spec:
         return jsonify({"status": "error", "message": "Spec vuoto"}), 400
@@ -294,7 +293,7 @@ def apply_resources_api():
         (success, msg) = db.update_resources(spec)
         if not success:
             return jsonify({"status": "error", "message": msg}), 409
-            
+
         log(f"⚙️ Cluster resources updated: {spec}")
         return jsonify({"status": "ok", "message": msg}), 200
     except Exception as e:
@@ -303,30 +302,26 @@ def apply_resources_api():
 
 @app.route('/api/workers', methods=['GET'])
 def get_workers_api():
-    workers = db.list_workers()
-    return jsonify(workers)
+    return jsonify(db.list_workers())
     
 @app.route('/api/namespaces', methods=['GET'])
 def get_namespaces():
-    ns = db.list_namespaces()
-    return jsonify(ns)
-          
+    return jsonify(db.list_namespaces())
+
 @app.route('/api/tasks', methods=['GET'])
 def get_tasks():
-    tasks = db.list_tasks()
-    return jsonify(tasks)
-      
+    return jsonify(db.list_tasks())
+
 @app.route('/api/jobs', methods=['GET'])
 def get_jobs():
-    jobs = db.list_jobs()
-    return jsonify(jobs)
+    return jsonify(db.list_jobs())
     
 @app.route('/api/logs/<task_id>', methods=['POST'])
 def receive_logs(task_id):
     data = request.json
     logs = data.get('logs', [])
     worker_id = data.get('worker_id', 'unknown')
-    
+
     if logs:
         try:
             db.insert_task_logs(task_id, logs, worker_id)
@@ -337,9 +332,7 @@ def receive_logs(task_id):
 
 @app.route('/api/logs/<task_id>', methods=['GET'])
 def get_task_logs(task_id):
-    limit = request.args.get('limit', default=20, type=int)    
-    logs = db.get_logs(task_id, limit=limit) 
-    return jsonify(logs)
+    return jsonify(db.get_logs(task_id, limit=request.args.get('limit', default=20, type=int)))
 
 def main():
     log(f"Waluigi Boss:")
@@ -347,12 +340,12 @@ def main():
     log(f"    Binding: {args.bind_address}:{args.port}")
     log(f"    URL: http://{args.host}:{args.port}")
     log(f"    DB: {args.db_path}")
-    
+
     threading.Thread(target=planner_loop, daemon=True).start()
-    
+
     app.run(
-        host=args.bind_address, 
-        port=args.port, 
+        host=args.bind_address,
+        port=args.port,
         debug=False, 
         threaded=True
     )
