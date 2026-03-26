@@ -5,6 +5,6 @@ env/
 *.out
 .vscode
 waluigi.egg-info
-work*
+work/
 db
 waluigi.db*
