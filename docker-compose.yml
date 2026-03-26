@@ -1,7 +1,7 @@
 services:
   
   boss:
-    image: buzzobuono/waluigi-bossd:latest
+    image: buzzobuono/waluigi-boss:latest
     ports:
     - target: 8082
       published: 8082
@@ -9,14 +9,13 @@ services:
       mode: ingress
     environment:
       - WALUIGI_BOSS_DB_PATH=/db/waluigi.db
-    command: ["wlbossd"]
     volumes:
       - ./db:/db
     deploy:
-      replicas: 4
+      replicas: 1
 
   worker:
-    image: buzzobuono/waluigi-workerd:latest
+    image: buzzobuono/waluigi-worker:latest
     depends_on:
       - boss
     environment:
@@ -27,4 +26,4 @@ services:
       - ./work:/work
       - ./source:/source
     deploy:
-      replicas: 16
+      replicas: 1

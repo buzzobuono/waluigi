@@ -6,13 +6,13 @@ build-backend = "setuptools.build_meta"
 name = "waluigi"
 version = "0.1.0"
 dependencies = [
-    "gunicorn",
     "requests",
     "tabulate",
-    "Flask>=3.0.0",
-    "ConfigArgParse>=1.7",
-    "requests>=2.31.0",
-    "pyyaml"
+    "ConfigArgParse",
+    "pyyaml",
+    "fastapi",
+    "uvicorn",
+    "httpx"
 ]
 
 [tool.setuptools.packages.find]

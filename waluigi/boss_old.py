@@ -6,14 +6,12 @@ import os
 import socket
 import uuid
 import configargparse
-import uvicorn
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, HTMLResponse
+from flask import Flask, request, jsonify
 from waluigi.core.db import WaluigiDB
 from waluigi.core.scheduler_engine import WaluigiSchedulerEngine
 from waluigi.core.dynamic_task import DynamicTask
 
-app = FastAPI()
+app = Flask(__name__)
 
 p = configargparse.ArgParser(auto_env_var_prefix='WALUIGI_BOSS_')
 
@@ -43,21 +41,21 @@ except Exception as e:
 
 engine = WaluigiSchedulerEngine(db=db)
 
-@app.post('/update')
-async def update(request: Request):
-    data = await request.json()
+@app.route('/update', methods=['POST'])
+def update():
+    data = request.json
     id = data['id']
     status = data['status']
     if status == "RUNNING":
         if not db.try_to_lock(id):
-            return JSONResponse({"status": "locked"}, status_code=409)
+            return jsonify({"status": "locked"}), 409
     if status in ["SUCCESS", "FAILED"]:
-        task_resources = data.get('resources', {'coin': 1.0})
+        task_resources = data.get('resources', {'coin': 1.0}) 
         db.release_resources(task_resources)
         log(f"♻️ Resources released for {id}")
         
     db.update_task(id, data.get('namespace'), data.get('params'), data.get('attributes'), status)
-    return JSONResponse({"status": "updated"}, status_code=200)
+    return jsonify({"status": "updated"}), 200
         
 def planner_loop():
     log(f"🧠 Planner Loop started: {BOSS_ID}")
@@ -67,7 +65,7 @@ def planner_loop():
             #if not engine.workers:
             #    time.sleep(5)
             #    continue
-
+            
             job = db.claim_job(BOSS_ID)
             if not job:
                 time.sleep(5)
@@ -98,21 +96,21 @@ def planner_loop():
                 db.release_job(job_id)
             time.sleep(5)
 
-@app.post('/worker/register')
-async def register(request: Request):
-    data = await request.json()
+@app.route('/worker/register', methods=['POST'])
+def register():
+    data = request.json
     engine.registerWorker(data)
-    return JSONResponse({"status": "ok"})
+    return jsonify({"status": "ok"})
 
-@app.post('/submit')
-async def submit(request: Request):
-    data = await request.json()
+@app.route('/submit', methods=['POST'])
+def submit():
+    data = request.json
 
     if data.get("kind") != "Job" or "spec" not in data:
-        return JSONResponse({"status": "error", "message": "Format not supported. Neef 'kind: Job' and not empty 'spec'."}, status_code=400)
+        return jsonify({"status": "error", "message": "Format not supported. Neef 'kind: Job' and not empty 'spec'."}), 400
     spec = data.get("spec", {})
     if not spec:
-        return JSONResponse({"status": "error", "message": "Empty 'spec'"}, status_code=400)
+        return jsonify({"status": "error", "message": "Empty 'spec'"}), 400
 
     metadata = data.get("metadata", {})
     try:
@@ -122,7 +120,7 @@ async def submit(request: Request):
 
         if status and status != 'SUCCESS' and status != 'FAILED':
             log(f"⚠️ Submission rejected: {job_id} is already active.")
-            return JSONResponse({"status": "rejected", "message": "already active"}, status_code=409)
+            return jsonify({"status": "rejected", "message": "already active"}), 409
 
         metadata['job_id'] = job_id
 
@@ -133,7 +131,7 @@ async def submit(request: Request):
         )
 
         log(f"📥 Job submitted: {job_id}")
-        return JSONResponse({
+        return jsonify({
             "status": "submitted",
             "job_id": job_id,
             "task_id": task.id
@@ -141,10 +139,10 @@ async def submit(request: Request):
 
     except Exception as e:
         log(f"❌ Error: {e}")
-        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.get('/', response_class=HTMLResponse)
-async def dashboard():
+@app.route('/')
+def dashboard():
     running_jobs = db.list_jobs("RUNNING")
     workers = db.list_workers()
     resources = db.list_resources()
@@ -256,85 +254,85 @@ async def dashboard():
     html += "</body></html>"
     return html
 
-@app.post('/api/reset/namespace/{namespace}')
-async def reset_namespace(namespace: str):
+@app.route('/api/reset/namespace/<namespace>', methods=['POST']) # CAMBIATO IN POST
+def reset_namespace(namespace):
     target = None if namespace == "None" else namespace
     db.reset_namespace(target)
-    return JSONResponse({"status": "ok"})
+    return jsonify({"status": "ok"})
 
-@app.post('/api/reset/task/{id}')
-async def reset_task(id: str):
+@app.route('/api/reset/task/<id>', methods=['POST']) # CAMBIATO IN POST
+def reset_task(id):
     db.reset_task(id)
-    return JSONResponse({"status": "ok"})
+    return jsonify({"status": "ok"})
 
-@app.post('/api/delete/namespace/{namespace}')
-async def delete_namespace(namespace: str):
+@app.route('/api/delete/namespace/<namespace>', methods=['POST']) # CAMBIATO IN POST
+def delete_namespace(namespace):
     target = None if namespace == "None" else namespace
     db.delete_namespace(target)
-    return JSONResponse({"status": "ok"})
+    return jsonify({"status": "ok"})
 
-@app.post('/api/delete/task/{id}')
-async def delete_task(id: str):
+@app.route('/api/delete/task/<id>', methods=['POST']) # CAMBIATO IN POST
+def delete_task(id):
     db.delete_task(id)
-    return JSONResponse({"status": "ok"})
+    return jsonify({"status": "ok"})
 
-@app.get('/api/resources')
-async def get_resources_api():
-    return db.list_resources()
+@app.route('/api/resources', methods=['GET'])
+def get_resources_api():
+    return jsonify(db.list_resources())
 
-@app.post('/api/resources')
-async def apply_resources_api(request: Request):
-    doc = await request.json()
+@app.route('/api/resources', methods=['POST'])
+def apply_resources_api():
+    doc = request.json
     if not doc or doc.get('kind') != 'ClusterResources':
-        return JSONResponse({"status": "error", "message": "Expected kind: ClusterResources"}, status_code=400)
+        return jsonify({"status": "error", "message": "Expected kind: ClusterResources"}), 400
 
     spec = doc.get('spec', {})
     if not spec:
-        return JSONResponse({"status": "error", "message": "Spec vuoto"}, status_code=400)
+        return jsonify({"status": "error", "message": "Spec vuoto"}), 400
     try:
         (success, msg) = db.update_resources(spec)
         if not success:
-            return JSONResponse({"status": "error", "message": msg}, status_code=409)
+            return jsonify({"status": "error", "message": msg}), 409
 
         log(f"⚙️ Cluster resources updated: {spec}")
-        return JSONResponse({"status": "ok", "message": msg}, status_code=200)
+        return jsonify({"status": "ok", "message": msg}), 200
     except Exception as e:
-        log(f"❌ Error: {e}")
-        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+        log(f"❌ Errore: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.get('/api/workers')
-async def get_workers_api():
-    return db.list_workers()
+@app.route('/api/workers', methods=['GET'])
+def get_workers_api():
+    return jsonify(db.list_workers())
     
-@app.get('/api/namespaces')
-async def get_namespaces():
-    return db.list_namespaces()
+@app.route('/api/namespaces', methods=['GET'])
+def get_namespaces():
+    return jsonify(db.list_namespaces())
 
-@app.get('/api/tasks')
-async def get_tasks():
-    return db.list_tasks()
+@app.route('/api/tasks', methods=['GET'])
+def get_tasks():
+    return jsonify(db.list_tasks())
 
-@app.get('/api/jobs')
-async def get_jobs():
-    return db.list_jobs()
+@app.route('/api/jobs', methods=['GET'])
+def get_jobs():
+    return jsonify(db.list_jobs())
     
-@app.post('/api/logs/{task_id}')
-async def receive_logs(task_id: str, request: Request):
-    data = await request.json()
+@app.route('/api/logs/<task_id>', methods=['POST'])
+def receive_logs(task_id):
+    data = request.json
     logs = data.get('logs', [])
     worker_id = data.get('worker_id', 'unknown')
 
     if logs:
         try:
             db.insert_task_logs(task_id, logs, worker_id)
-            return JSONResponse({"status": "ok"}, status_code=201)
+            return jsonify({"status": "ok"}), 201
         except Exception as e:
-            return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
-    return JSONResponse({"status": "empty"}, status_code=200)
+            return jsonify({"status": "error", "message": str(e)}), 500
+    return jsonify({"status": "empty"}), 200
 
-@app.get('/api/logs/{task_id}')
-async def get_task_logs(task_id: str, limit: int = 20):
-    return db.get_logs(task_id, limit=limit)
+@app.route('/api/logs/<task_id>', methods=['GET'])
+def get_task_logs(task_id):
+    return jsonify(db.get_logs(task_id, limit=request.args.get('limit', default=20, type=int)))
 
 def main():
     log(f"Waluigi Boss:")
@@ -345,9 +343,11 @@ def main():
 
     threading.Thread(target=planner_loop, daemon=True).start()
 
-    uvicorn.run(app,
+    app.run(
         host=args.bind_address,
-        port=args.port
+        port=args.port,
+        debug=False, 
+        threaded=True
     )
     
 if __name__ == "__main__":

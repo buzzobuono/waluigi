@@ -1,19 +1,17 @@
-import asyncio
+import requests
 import uuid
 import threading
 import time
 import socket
 import os
 import configargparse
-import uvicorn
-import httpx
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from flask import Flask, request, jsonify
+import subprocess
 
 active_tasks_count = 0
-lock = asyncio.Lock()
+lock = threading.Lock()
 
-app = FastAPI()
+app = Flask(__name__)
 
 p = configargparse.ArgParser(auto_env_var_prefix='WALUIGI_WORKER_')
 
@@ -38,9 +36,9 @@ DEFAULT_WORKDIR = args.default_workdir
 def log(msg):
     print(f"[worker 👷] {msg}", flush=True)
     
-@app.post('/execute')
-async def execute(request: Request):
-    data = await request.json()
+@app.route('/execute', methods=['POST'])
+def execute():
+    data = request.json
     workdir = data.get("workdir", DEFAULT_WORKDIR)
     command = data.get("command")
     id = data.get("id")
@@ -50,34 +48,36 @@ async def execute(request: Request):
     resources = data.get("resources")
 
     if not command:
-        return JSONResponse({"status": "error", "message": "No command provided"}, status_code=400)
+        return jsonify({"status": "error", "message": "No command provided"}), 400
 
-    log(f"Task recieved: {id}")
+    log(f"Order  ordine: {id}")
 
     global active_tasks_count
-    async with lock:
+    with lock:
         if active_tasks_count >= SLOTS:
             log(f"Slot not available.")
-            return JSONResponse({"status": "busy"}, status_code=429)
+            return jsonify({"status": "busy"}), 429
         active_tasks_count += 1
 
     try:
-        asyncio.create_task(
-            run_command_async(command, id, namespace, params, attributes, resources, workdir)
+        thread = threading.Thread(
+            target=run_command_async, 
+            args=(command, id, namespace, params, attributes, resources, workdir)
         )
-        return JSONResponse({"status": "submitted", "id": id}, status_code=202)
+        thread.start()
+        return jsonify({"status": "submitted", "id": id}), 202
 
     except Exception as e:
         log(f"❌ Error: {e}")
-        async with lock:
+        with lock:
             active_tasks_count -= 1
-        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-async def run_command_async(command, id, namespace, params, attributes, resources, workdir):
+def run_command_async(command, id, namespace, params, attributes, resources, workdir):
     global active_tasks_count
 
     try:
-        await _update_boss(id, namespace, params, attributes, resources, "RUNNING")
+        _update_boss(id, namespace, params, attributes, resources, "RUNNING")
 
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
@@ -88,62 +88,66 @@ async def run_command_async(command, id, namespace, params, attributes, resource
 
         log(f"🚀 Forking: {command}")
 
-        process = await asyncio.create_subprocess_shell(
+        process = subprocess.Popen(
             command,
+            shell=True,
             cwd=workdir,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
             env=env
         )
 
         log_buffer = []
-        async for line in process.stdout:
-            clean_line = line.decode().strip()
+        for line in iter(process.stdout.readline, ""):
+            clean_line = line.strip()
             if clean_line:
                 print(f"[{id}] {clean_line}", flush=True)
-                log_buffer.append(clean_line)
+                log_buffer.append(clean_line)                
                 if len(log_buffer) >= 5:
-                    await _send_logs(id, log_buffer)
+                    _send_logs(id, log_buffer)
                     log_buffer = []
 
         if log_buffer:
-            await _send_logs(id, log_buffer)
+            _send_logs(id, log_buffer)
 
-        await process.wait()
+        process.wait()
 
         if process.returncode == 0:
             log(f"✅ Task {id} succesfully terminated.")
-            await _update_boss(id, namespace, params, attributes, resources, "SUCCESS")
+            _update_boss(id, namespace, params, attributes, resources, "SUCCESS")
         else:
             log(f"❌ Task {id} failed (Exit code: {process.returncode})")
-            await _update_boss(id, namespace, params, attributes, resources, "FAILED")
-
+            _update_boss(id, namespace, params, attributes, resources, "FAILED")
+            
     except Exception as e:
         log(f"❌ Error: {e}")
-        await _update_boss(id, namespace, params, attributes, resources, "FAILED")
+        _update_boss(id, namespace, params, attributes, resources, "FAILED")
     finally:
-        async with lock:
+        with lock:
             active_tasks_count -= 1
 
-
-async def _send_logs(task_id, lines):
+def _send_logs(task_id, lines):
     try:
-        await _post(f"/api/logs/{task_id}", json={
+        return _post(f"/api/logs/{task_id}", json={
             "worker_id": WORKER_ID,
             "logs": lines
-        })
+        }, timeout=5)
     except Exception as e:
         log(f"⚠️ Error in sending log for {task_id}: {e}")
 
-async def _post(endpoint, **kwargs):
-    async with httpx.AsyncClient() as client:
-        r = await client.post(f"{BOSS_URL}{endpoint}", timeout=5, **kwargs)
+def _post(endpoint, **kwargs):
+    try:
+        r = requests.post(f"{BOSS_URL}{endpoint}", **kwargs)
         if 500 <= r.status_code < 600:
             raise RuntimeError(f"[bossd] Server error {r.status_code} on {endpoint}")
         return r
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"[bossd] Connection error on {endpoint}") from e
         
-async def _update_boss(id, namespace, params, attributes, resources, status):
-    return await _post("/update", json={
+def _update_boss(id, namespace, params, attributes, resources, status):
+    return _post(f"/update", json={
         "id": id,
         "namespace": namespace,
         "params": _hash(params),
@@ -158,25 +162,20 @@ def _hash(nsdict):
         for k, v in sorted(nsdict.items())
     )
     
-async def heartbeat():
-    async with httpx.AsyncClient() as client:
-        while True:
-            try:
-                await client.post(f"{BOSS_URL}/worker/register", json={
-                    "url": URL,
-                    "status": "ALIVE",
-                    "max_slots": SLOTS,
-                    "free_slots": SLOTS - active_tasks_count
-                }, timeout=5)
-                log("Registrato con successo al Boss.")
-            except Exception:
-                log("Boss non raggiungibile...")
-            await asyncio.sleep(HEARTBEAT)
-            
-@app.on_event("startup")
-async def startup():
-    asyncio.create_task(heartbeat())
-    
+def heartbeat():
+    while True:
+        try:
+            requests.post(f"{BOSS_URL}/worker/register", json={
+                "url": URL,
+                "status": "ALIVE",
+                "max_slots": SLOTS,
+                "free_slots": SLOTS - active_tasks_count
+            })
+            log("Registrato con successo al Boss.")
+        except:
+            log("Boss non raggiungibile...")
+        time.sleep(HEARTBEAT)
+
 def main():
     log(f"Waluigi Worker:")
     log(f"    ID: {args.id}")
@@ -186,10 +185,14 @@ def main():
     log(f"    Slots: {args.slots}")
     log(f"    Heartbeat: {args.heartbeat}")
     log(f"    Default Work Dir: {args.default_workdir}")
-
-    uvicorn.run(app, 
+    
+    threading.Thread(target=heartbeat, daemon=True).start()
+    
+    app.run(
         host=args.bind_address,
-        port=args.port
+        port=args.port, 
+        debug=False, 
+        threaded=True
     )
     
 if __name__ == "__main__":

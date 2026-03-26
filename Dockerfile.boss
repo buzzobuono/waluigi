@@ -16,4 +16,4 @@ RUN pip install /tmp/waluigi_src/
 
 RUN rm -rf /tmp/waluigi_src
 
-CMD ["wlbossd"]
+CMD ["wlboss"]

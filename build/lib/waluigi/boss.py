@@ -6,21 +6,23 @@ import os
 import socket
 import uuid
 import configargparse
-from flask import Flask, request, jsonify
+import uvicorn
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, HTMLResponse
 from waluigi.core.db import WaluigiDB
 from waluigi.core.scheduler_engine import WaluigiSchedulerEngine
 from waluigi.core.dynamic_task import DynamicTask
 
-app = Flask(__name__)
+app = FastAPI()
 
 p = configargparse.ArgParser(auto_env_var_prefix='WALUIGI_BOSS_')
 
-p.add('--id', default=str(uuid.uuid4()), help='ID unico')
+p.add('--id', default=str(uuid.uuid4()), help='Unique ID')
 p.add('--port', type=int, default=8082)
-p.add('--host', default=socket.gethostname(), help='Host logico per URL')
-p.add('--bind-address', default='0.0.0.0', help='IP per Flask')
-p.add('--db-path', default=os.path.join(os.getcwd(), "db/waluigi.db"), help='Path del db sqlite')
-  
+p.add('--host', default=socket.gethostname(), help='Hostname')
+p.add('--bind-address', default='0.0.0.0', help='Binding IP')
+p.add('--db-path', default=os.path.join(os.getcwd(), "db/waluigi.db"), help='Sqlite DB Path')
+
 args = p.parse_args()
 
 BOSS_ID = args.id
@@ -31,150 +33,144 @@ os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 def log(msg):
     print(f"[Boss 🐢] {msg}", flush=True)
-    
+
 try:
     db = WaluigiDB(DB_PATH)
-    log(f"🟣 Database pronto in: {DB_PATH}")
+    log(f"🟣 Database ready: {DB_PATH}")
 except Exception as e:
-    log(f"❌ Errore critico DB: {e}")
+    log(f"❌ Error: {e}")
     sys.exit(1)
 
 engine = WaluigiSchedulerEngine(db=db)
 
-@app.route('/update', methods=['POST'])
-def update():
-    data = request.json
-    #print(f"method: update, payload: {data}")
+@app.post('/update')
+async def update(request: Request):
+    data = await request.json()
     id = data['id']
     status = data['status']
     if status == "RUNNING":
-        # Tentativo di acquisizione lock atomico
         if not db.try_to_lock(id):
-            return jsonify({"status": "locked"}), 409
+            return JSONResponse({"status": "locked"}, status_code=409)
     if status in ["SUCCESS", "FAILED"]:
-        task_resources = data.get('resources', {'coin': 1.0}) 
+        task_resources = data.get('resources', {'coin': 1.0})
         db.release_resources(task_resources)
-        log(f"♻️ Risorse liberate per {id}")
+        log(f"♻️ Resources released for {id}")
         
-    # Se non è RUNNING (è SUCCESS/FAILED/PENDING), aggiorna normalmente
     db.update_task(id, data.get('namespace'), data.get('params'), data.get('attributes'), status)
-    return jsonify({"status": "updated"}), 200
+    return JSONResponse({"status": "updated"}, status_code=200)
         
 def planner_loop():
-    log(f"🧠 Planner Loop avviato: {BOSS_ID}")
+    log(f"🧠 Planner Loop started: {BOSS_ID}")
 
     while True:
         try:
             #if not engine.workers:
             #    time.sleep(5)
             #    continue
-                
+
             job = db.claim_job(BOSS_ID)
             if not job:
                 time.sleep(5)
                 continue
 
             job_id = job['job_id']
-            
             task = DynamicTask(job['spec'])
 
             res = engine.build(
-                job_metadata=job['metadata'], 
+                job_metadata=job['metadata'],
                 task=task,
                 parent_id=None
             )
-            
+
             if res is True:
                 log(f"🏁 Job completed: {job_id}")
                 db.update_job_status(job_id, "SUCCESS")
             elif res is None:
                 log(f"💀 Job {job_id} failed because blocked by an error")
                 db.update_job_status(job_id, "FAILED")
-            
-            db.release_job(job_id)
 
+            db.release_job(job_id)
             time.sleep(5)
 
         except Exception as e:
-            log(f"⚠️ Errore nel loop: {e}")
-            if 'job_id' in locals(): 
+            log(f"❌ Error: {e}")
+            if 'job_id' in locals():
                 db.release_job(job_id)
             time.sleep(5)
 
-@app.route('/worker/register', methods=['POST'])
-def register():
-    data = request.json
+@app.post('/worker/register')
+async def register(request: Request):
+    data = await request.json()
     engine.registerWorker(data)
-    return jsonify({"status": "ok"})
+    return JSONResponse({"status": "ok"})
 
-@app.route('/submit', methods=['POST'])
-def submit():
-    data = request.json
-    
+@app.post('/submit')
+async def submit(request: Request):
+    data = await request.json()
+
     if data.get("kind") != "Job" or "spec" not in data:
-        return jsonify({"status": "error", "message": "Formato non supportato. Richiesto 'kind: Job' con 'spec'."}), 400
+        return JSONResponse({"status": "error", "message": "Format not supported. Neef 'kind: Job' and not empty 'spec'."}, status_code=400)
     spec = data.get("spec", {})
     if not spec:
-        return jsonify({"status": "error", "message": "Spec vuoto"}), 400
-    
+        return JSONResponse({"status": "error", "message": "Empty 'spec'"}, status_code=400)
+
     metadata = data.get("metadata", {})
     try:
         task = DynamicTask(spec)
         job_id = f"job/{task.id}"
         status = db.get_job_status(job_id)
-        
+
         if status and status != 'SUCCESS' and status != 'FAILED':
-            log(f"⚠️ Sottomissione rifiutata: {job_id} è già in esecuzione.")
-            return jsonify({"status": "rejected", "reason": "already active"}), 409
-                
+            log(f"⚠️ Submission rejected: {job_id} is already active.")
+            return JSONResponse({"status": "rejected", "message": "already active"}, status_code=409)
+
         metadata['job_id'] = job_id
-        
+
         db.create_job(
             job_id=job_id,
             metadata=metadata,
             spec=spec
         )
-        
-        log(f"📥 Flusso sottomesso: {job_id}")
-        return jsonify({
-            "status": "submitted", 
-            "job_id": job_id, 
+
+        log(f"📥 Job submitted: {job_id}")
+        return JSONResponse({
+            "status": "submitted",
+            "job_id": job_id,
             "task_id": task.id
         })
 
     except Exception as e:
-        log(f"❌ Errore processamento YAML: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        log(f"❌ Error: {e}")
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
-@app.route('/')
-def dashboard():
+@app.get('/', response_class=HTMLResponse)
+async def dashboard():
     running_jobs = db.list_jobs("RUNNING")
     workers = db.list_workers()
     resources = db.list_resources()
     tasks = db.list_tasks()
-    
+
     namespaces = {}
     for task in tasks:
         ns = task['namespace']
         t_id = task['id']
-        
-        if ns not in namespaces: 
+
+        if ns not in namespaces:
             namespaces[ns] = {'tasks': {}}
-        
+
         namespaces[ns]['tasks'][t_id] = {
-            'id': t_id, 
-            'params': task['params'], 
-            'status': task['status'], 
-            'update': task['last_update'], 
+            'id': t_id,
+            'params': task['params'],
+            'status': task['status'],
+            'update': task['last_update'],
             'parent': task['parent_id']
         }
-    
+
     html = """
     <html>
     <head>
         <title>Waluigi Dashboard</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <!--meta http-equiv="refresh" content="5"-->
         <style>
             body { background-color: #1a0026; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; padding: 15px; margin: 0; }
             h1 { color: #d080ff; font-size: 1.8em; border-bottom: 2px solid #4b0082; padding-bottom: 10px; }
@@ -194,7 +190,7 @@ def dashboard():
         </style>
         <script>
             function actionConfirm(url) {
-                if (confirm('Sicuro di voler procedere?')) {
+                if (confirm('Confirm action?')) {
                     fetch(url, {method: 'POST'}).then(() => window.location.reload());
                 }
             }
@@ -204,23 +200,23 @@ def dashboard():
         <h1>🟣 Waluigi Dashboard</h1>
     """
     res_status = " | ".join([
-        f"<b>{r['name'].upper()}</b>: {r['usage']}/{r['amount']}" 
+        f"<b>{r['name'].upper()}</b>: {r['usage']}/{r['amount']}"
         for r in resources
     ])
-    html = html + f"""
+    html += f"""
     <div style="background: #2b0040; padding: 10px; border-radius: 5px; margin-bottom: 10px; border-left: 4px solid #d080ff;">
         <h5>Boss Running. Workers: {len(workers)} | Running Jobs: {len(running_jobs)}</h5>
         <p style="margin: 0; font-size: 0.9em; color: #00d4ff;">📊 Risorse: {res_status if res_status else 'Nessun limite impostato'}</p>
     </div>
     """
-    
+
     def render_tree(current_id, all_tasks, level=0):
-        if current_id not in all_tasks: return ""
+        if current_id not in all_tasks:
+            return ""
         task = all_tasks[current_id]
         indent = ("&nbsp;" * level) + ("└─ " if level > 0 else "")
-
         task_id_link = f"<a href='/api/logs/{task['id']}' target='_blank' style='color: #00d4ff; text-decoration: none;'>{task['id']}</a>"
-        
+
         row_html = f"""
         <tr>
             <td><span class='indent'>{indent}</span>{task_id_link}</td>
@@ -233,9 +229,8 @@ def dashboard():
             </td>
         </tr>
         """
-        # Filtra i figli che appartengono a questo genitore
         children = [tid for tid, t in all_tasks.items() if str(t['parent']) == str(current_id)]
-        for c_id in children: 
+        for c_id in children:
             row_html += render_tree(c_id, all_tasks, level + 1)
         return row_html
 
@@ -253,121 +248,93 @@ def dashboard():
                 <tr><th>Task ID</th><th>Parameters</th><th>Status</th><th>Last Update</th><th>Action</th></tr>
         """
         roots = [tid for tid, t in data['tasks'].items() if not t['parent'] or str(t['parent']) not in data['tasks']]
-        for r_id in roots: 
+        for r_id in roots:
             html += render_tree(r_id, data['tasks'])
-            
+
         html += "</table></div>"
-    
+
     html += "</body></html>"
     return html
 
-@app.route('/api/reset/namespace/<namespace>', methods=['POST']) # CAMBIATO IN POST
-def reset_namespace(namespace):
+@app.post('/api/reset/namespace/{namespace}')
+async def reset_namespace(namespace: str):
     target = None if namespace == "None" else namespace
     db.reset_namespace(target)
-    return jsonify({"status": "ok"})
+    return JSONResponse({"status": "ok"})
 
-@app.route('/api/reset/task/<id>', methods=['POST']) # CAMBIATO IN POST
-def reset_task(id):
+@app.post('/api/reset/task/{id}')
+async def reset_task(id: str):
     db.reset_task(id)
-    return jsonify({"status": "ok"})
+    return JSONResponse({"status": "ok"})
 
-@app.route('/api/delete/namespace/<namespace>', methods=['POST']) # CAMBIATO IN POST
-def delete_namespace(namespace):
+@app.post('/api/delete/namespace/{namespace}')
+async def delete_namespace(namespace: str):
     target = None if namespace == "None" else namespace
     db.delete_namespace(target)
-    return jsonify({"status": "ok"})
+    return JSONResponse({"status": "ok"})
 
-@app.route('/api/delete/task/<id>', methods=['POST']) # CAMBIATO IN POST
-def delete_task(id):
+@app.post('/api/delete/task/{id}')
+async def delete_task(id: str):
     db.delete_task(id)
-    return jsonify({"status": "ok"})
+    return JSONResponse({"status": "ok"})
 
-@app.route('/api/resources', methods=['GET'])
-def get_resources_api():
-    resources = db.list_resources()
-    return jsonify(resources)
+@app.get('/api/resources')
+async def get_resources_api():
+    return db.list_resources()
 
-@app.route('/api/resources', methods=['POST'])
-def apply_resources_api():
-    doc = request.json
+@app.post('/api/resources')
+async def apply_resources_api(request: Request):
+    doc = await request.json()
     if not doc or doc.get('kind') != 'ClusterResources':
-        return jsonify({"status": "error", "message": "Expected kind: ClusterResources"}), 400
-    
+        return JSONResponse({"status": "error", "message": "Expected kind: ClusterResources"}, status_code=400)
+
     spec = doc.get('spec', {})
     if not spec:
-        return jsonify({"status": "error", "message": "Spec vuoto"}), 400
+        return JSONResponse({"status": "error", "message": "Spec vuoto"}, status_code=400)
     try:
         (success, msg) = db.update_resources(spec)
-        print(success)
         if not success:
-            return jsonify({"status": "error", "message": msg}), 409
-            
-        log(f"⚙️ Limiti del cluster aggiornati: {spec}")
-        return jsonify({
-            "status": "ok",
-            "message": msg    
-        }), 200
+            return JSONResponse({"status": "error", "message": msg}, status_code=409)
+
+        log(f"⚙️ Cluster resources updated: {spec}")
+        return JSONResponse({"status": "ok", "message": msg}, status_code=200)
     except Exception as e:
-        log(f"❌ Errore aggiornamento risorse: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        log(f"❌ Error: {e}")
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
-@app.route('/api/workers', methods=['GET'])
-def get_workers_api():
-    workers = db.list_workers()
-    return jsonify(workers)
+@app.get('/api/workers')
+async def get_workers_api():
+    return db.list_workers()
     
-@app.route('/api/namespaces', methods=['GET'])
-def get_namespaces():
-    ns = db.list_namespaces()
-    return jsonify(ns)
-          
-@app.route('/api/tasks', methods=['GET'])
-def get_tasks():
-    tasks = db.list_tasks()
-    return jsonify(tasks)
-      
-@app.route('/api/jobs', methods=['GET'])
-def get_jobs():
-    jobs = db.list_jobs()
-    return jsonify(jobs)
-    
-@app.route('/api/active/describe/<path:key>', methods=['GET'])
-def describe_active(key):
-    if key not in active_jobs:
-        return jsonify({"error": "Job not found"}), 404
-    
-    task = active_jobs[key]
-    # Qui descriviamo l'oggetto in memoria
-    return jsonify({
-        "key": key,
-        "id": task.id,
-        "namespace": task.namespace,
-        "tags": task.tags,
-        "params": vars(task.params) if hasattr(task.params, '__dict__') else task.params,
-        "attributes": vars(task.attributes) if hasattr(task.attributes, '__dict__') else task.attributes,
-        "resources": getattr(task, 'resources', {})
-    })
+@app.get('/api/namespaces')
+async def get_namespaces():
+    return db.list_namespaces()
 
-@app.route('/api/logs/<task_id>', methods=['POST'])
-def receive_logs(task_id):
-    data = request.json
+@app.get('/api/tasks')
+async def get_tasks():
+    return db.list_tasks()
+
+@app.get('/api/jobs')
+async def get_jobs():
+    return db.list_jobs()
+    
+@app.post('/api/logs/{task_id}')
+async def receive_logs(task_id: str, request: Request):
+    data = await request.json()
     logs = data.get('logs', [])
     worker_id = data.get('worker_id', 'unknown')
-    
+
     if logs:
         try:
             db.insert_task_logs(task_id, logs, worker_id)
-            return jsonify({"status": "ok"}), 201
+            return JSONResponse({"status": "ok"}, status_code=201)
         except Exception as e:
-            return jsonify({"status": "error", "message": str(e)}), 500
-    return jsonify({"status": "empty"}), 200
+            return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+    return JSONResponse({"status": "empty"}, status_code=200)
 
-@app.route('/api/logs/<task_id>', methods=['GET'])
-def get_task_logs(task_id):
-    limit = request.args.get('limit', default=20, type=int)    
-    logs = db.get_logs(task_id, limit=limit) 
-    return jsonify(logs)
+@app.get('/api/logs/{task_id}')
+async def get_task_logs(task_id: str, limit: int = 20):
+    return db.get_logs(task_id, limit=limit)
 
 def main():
     log(f"Waluigi Boss:")
@@ -375,14 +342,12 @@ def main():
     log(f"    Binding: {args.bind_address}:{args.port}")
     log(f"    URL: http://{args.host}:{args.port}")
     log(f"    DB: {args.db_path}")
-    
+
     threading.Thread(target=planner_loop, daemon=True).start()
-    
-    app.run(
-        host=args.bind_address, 
-        port=args.port, 
-        debug=False, 
-        threaded=True
+
+    uvicorn.run(app,
+        host=args.bind_address,
+        port=args.port
     )
     
 if __name__ == "__main__":
