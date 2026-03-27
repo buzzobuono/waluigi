@@ -1,0 +1,14 @@
+kind: Job
+metadata:
+  workdir: "work"
+spec:
+  name: "CreateSalesDataset"
+  id: "create_sales_dataset"
+  namespace: "sales"
+  command: "python ../source/sales/create_sales.py"
+  params:
+    date: "2026-03-26"
+  resources:
+    coin: 1
+  affinity:
+    - python

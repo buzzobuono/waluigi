@@ -24,4 +24,5 @@ namespaces = true
 wlctl = "waluigi.cli:main"
 wlboss = "waluigi.boss:main"
 wlworker = "waluigi.worker:main"
+wlcatalog = "waluigi.catalog:main"
 
