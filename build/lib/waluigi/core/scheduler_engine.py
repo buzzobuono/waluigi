@@ -50,6 +50,7 @@ class WaluigiSchedulerEngine:
             "workdir": job_metadata['workdir'],
             "command": task.command,
             "id": task.id,
+            "job_id": job_metadata['job_id'],
             "params": vars(task.params),
             "params_hash": task.hash(task.params),
             "attributes": vars(task.attributes),

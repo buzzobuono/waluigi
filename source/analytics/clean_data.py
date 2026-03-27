@@ -1,21 +1,38 @@
 import time
 import random
 from waluigi.sdk.task import Task
+from waluigi.sdk.catalog import catalog
 
 class CleanDataTask(Task):
-
     def run(self):
-        if random.random() < float(self.attributes.fail_prob):
-            raise Exception(f"💥 Errore imprevisto durante la pulizia di {self.params.source}!")
-        print(f"🧹 Pulizia dati sorgente: {self.params.source}...")
-        
-        steps = 20
-        for step in range(steps):
-            print(f"Pulizia Step {step+1}/{steps}")
-            time.sleep(1)
+        source = self.params.source.lower()
+        input_id = f"raw_{source}"
+        output_id = f"clean_{source}"
 
-        with open(f"clean_{self.params.source}_{self.params.date}.out", "w") as f:
-            f.write(f"Dati puliti {self.params.source}")
+        if random.random() < float(self.attributes.fail_prob):
+            raise Exception(f"💥 Errore durante la pulizia di {self.params.source}!")
+
+        # Risolviamo il path dell'input (ultima versione disponibile)
+        input_path = catalog.resolve(input_id)
+        input_ver = catalog.last_version(input_id)
+        
+        print(f"🧹 Pulizia dati da: {input_path}")
+
+        # Produciamo il dato pulito dichiarando l'input per la lineage
+        with catalog.produce(output_id, 
+                             namespace=f"analytics/{source}/clean", 
+                             format="out",
+                             inputs=[(input_id, input_ver)]) as ctx:
+            
+            with open(input_path, "r") as f_in:
+                data = f_in.read()
+
+            time.sleep(2) # Simulazione lavoro
+            
+            with open(ctx.path, "w") as f_out:
+                f_out.write(f"PULITO: {data}")
+            
+            ctx.rows = 1
 
 if __name__ == "__main__":
     CleanDataTask().start()

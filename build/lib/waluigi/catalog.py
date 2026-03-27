@@ -8,8 +8,8 @@ import configargparse
 import socket
 import uvicorn
 from datetime import datetime, timezone
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Request, Query
+from fastapi.responses import JSONResponse, HTMLResponse
 
 app = FastAPI()
 
@@ -145,22 +145,35 @@ class CatalogDB:
             return cursor.rowcount > 0
 
     def list_datasets_in_namespace(self, namespace, recursive=False):
-        if recursive:
-            cursor = self.conn.execute("""
-                SELECT id, version, namespace, path, format, hash, rows,
-                       produced_by_task, produced_by_job, committed_at, status
-                FROM datasets
-                WHERE (namespace = ? OR namespace LIKE ?) AND status = 'committed'
-                ORDER BY namespace, id, version DESC
-            """, (namespace, f"{namespace}/%"))
+        if namespace in [None, "root"]:
+            ns_condition = "namespace IS NULL"
+            ns_like_condition = "namespace LIKE ?"
+            params = ["/%"] # Per il recursive in root
         else:
-            cursor = self.conn.execute("""
-                SELECT id, version, namespace, path, format, hash, rows,
-                       produced_by_task, produced_by_job, committed_at, status
+            ns_condition = "namespace = ?"
+            ns_like_condition = "namespace LIKE ?"
+            params = [namespace, f"{namespace}/%"]
+
+        query = f"""
+            WITH LatestDatasets AS (
+                SELECT *,
+                    ROW_NUMBER() OVER (PARTITION BY id ORDER BY committed_at DESC) as rn
                 FROM datasets
-                WHERE namespace = ? AND status = 'committed'
-                ORDER BY id, version DESC
-            """, (namespace,))
+                WHERE ( {ns_condition} {"OR " + ns_like_condition if recursive else ""} )
+                AND status = 'committed'
+            )
+            SELECT id, version, namespace, path, format, hash, rows, 
+                produced_by_task, produced_by_job, committed_at, status
+            FROM LatestDatasets
+            WHERE rn = 1
+            ORDER BY id ASC
+        """
+        
+        final_params = [namespace] if not recursive and namespace not in [None, "root"] else params
+        if namespace in [None, "root"] and not recursive:
+            final_params = []
+
+        cursor = self.conn.execute(query, final_params)
         return [dict(r) for r in cursor.fetchall()]
 
     # --- Datasets ---
@@ -293,8 +306,15 @@ class CatalogDB:
             except Exception:
                 pass
         return d
-
-
+    
+    def list_all_datasets(self):
+        cursor = self.conn.execute("""
+            SELECT id, version, namespace, format, rows, status, committed_at 
+            FROM datasets 
+            ORDER BY committed_at DESC
+        """)
+        return [dict(r) for r in cursor.fetchall()]
+    
 try:
     db = CatalogDB(args.db_path)
     log(f"Database pronto: {args.db_path}")
@@ -614,7 +634,302 @@ def _scan(data_path, namespace=None):
     log(f"🏁 Scan complete. {count} dataset(s) registered.")
     return count
 
+#@app.get("/", response_class=HTMLResponse)
+async def catalog_dashboard_old(
+    path: str = Query(None), 
+    view: str = Query("explorer"), # explorer, history, lineage
+    ds_id: str = Query(None), 
+    ver: str = Query(None)
+):
+    # CSS in stile Boss (Statico)
+    html = """
+    <html>
+    <head>
+        <title>Waluigi Catalog</title>
+        <style>
+            body { background-color: #1a0026; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; padding: 20px; margin: 0; }
+            .container { max-width: 1200px; margin: 0 auto; }
+            h1 { color: #d080ff; border-bottom: 2px solid #4b0082; padding-bottom: 10px; }
+            .breadcrumb { margin-bottom: 20px; color: #00d4ff; font-family: monospace; }
+            .breadcrumb a { color: #00d4ff; text-decoration: none; }
+            .card { background-color: #2b0040; border-radius: 8px; border: 1px solid #4b0082; overflow: hidden; margin-bottom: 20px; }
+            table { border-collapse: collapse; width: 100%; background-color: #360052; }
+            th { background-color: #4b0082; color: white; text-align: left; padding: 12px; font-size: 0.9em; }
+            td { padding: 12px; border-bottom: 1px solid #4b0082; font-size: 0.85em; }
+            tr:hover { background-color: #430066; }
+            .btn { text-decoration: none; font-size: 0.75em; border: 1px solid #00d4ff; color: #00d4ff; padding: 3px 8px; border-radius: 3px; margin-right: 5px; }
+            .btn:hover { background: #00d4ff; color: #1a0026; }
+            .status-committed { color: #00ff88; font-weight: bold; }
+            .status-reserved { color: #ffff00; }
+            .tag { background: #4b0082; padding: 2px 6px; border-radius: 4px; color: #d080ff; }
+            .lineage-node { background: #360052; border: 2px solid #4b0082; padding: 15px; border-radius: 8px; text-align: center; }
+            .lineage-focus { border-color: #ffcc00; background: #4b0082; }
+            .lineage-node:hover { border-color: #00d4ff; background-color: #430066; transform: translateY(-2px); transition: all 0.2s; }
+        </style>
+    </head>
+    <body><div class="container">
+        <h1>📦 Waluigi Catalog</h1>
+    """
 
+    # --- LOGICA DI NAVIGAZIONE ---
+    
+    # 1. VISTA LINEAGE
+    if view == "lineage" and ds_id and ver:
+        v_enc = ver.replace(":", "%3A")
+        upstream = db.get_upstream(ds_id, ver)
+        downstream = db.get_downstream(ds_id, ver)
+        
+        html += f"""
+        <div class='breadcrumb'><a href='/?view=history&ds_id={ds_id}'>⬅️ Torna a History</a> / Lineage di {ds_id}</div>
+        <div style='display: flex; flex-direction: column; align-items: center; gap: 20px;'>
+        """
+
+        # --- SEZIONE UPSTREAM (Padri) ---
+        if upstream:
+            html += "<div style='display: flex; gap: 15px; flex-wrap: wrap; justify-content: center;'>"
+            for item in upstream:
+                v_link = item['input_version'].replace(":", "%3A")
+                html += f"""
+                <a href='/?view=lineage&ds_id={item['input_id']}&ver={v_link}' class='lineage-node' style='text-decoration:none; color:inherit;'>
+                    <b>{item['input_id']}</b><br>
+                    <small>{item['input_version']}</small>
+                </a>
+                """
+            html += "</div>"
+            # Renderizza la freccia solo se ci sono padri
+            html += "<div style='color: #4b0082; font-size: 24px;'>▼</div>"
+
+        # --- NODO CENTRALE (Focus) ---
+        html += f"""
+        <div class='lineage-node lineage-focus'>
+            <b style='font-size: 1.3em; color: #00ff88; display: block; margin-bottom: 5px;'>{ds_id}</b>
+            <code style='color: #aaa; font-size: 0.85em;'>{ver}</code>
+            
+            <div style='margin-top: 15px; border-top: 1px solid #4b0082; padding-top: 10px;'>
+                <a href='/?view=history&ds_id={ds_id}' class='btn-history'>
+                    🕒 History
+                </a>
+            </div>
+        </div>
+        """
+
+        # --- SEZIONE DOWNSTREAM (Figli) ---
+        if downstream:
+            # Renderizza la freccia solo se ci sono figli
+            html += "<div style='color: #4b0082; font-size: 24px;'>▼</div>"
+            html += "<div style='display: flex; gap: 15px; flex-wrap: wrap; justify-content: center;'>"
+            for item in downstream:
+                v_link = item['output_version'].replace(":", "%3A")
+                html += f"""
+                <a href='/?view=lineage&ds_id={item['output_id']}&ver={v_link}' class='lineage-node' style='text-decoration:none; color:inherit;'>
+                    <b>{item['output_id']}</b><br>
+                    <small>{item['output_version']}</small>
+                </a>
+                """
+            html += "</div>"
+
+        html += "</div>" # Chiusura del flex container centrale
+
+    # 2. VISTA HISTORY (Dettaglio Dataset)
+    elif view == "history" and ds_id:
+        versions = db.get_history(ds_id)
+        metadata = db.get_metadata(ds_id)
+        html += f"<div class='breadcrumb'><a href='/?path={path or ''}'>⬅️ Explorer</a> / Dettaglio: {ds_id}</div>"
+        
+        html += f"""
+        <div class='card' style='padding:15px; margin-bottom:10px;'>
+            <b style='color:#ffcc00'>Custom Metadata:</b> {metadata if metadata else 'Nessuno'}
+        </div>
+        <div class='card'>
+            <table>
+                <tr><th>Version (Timestamp)</th><th>Status</th><th>Rows</th><th>Format</th><th>Task / Job</th><th>Actions</th></tr>
+        """
+        for v in versions:
+            v_enc = v['version'].replace(":", "%3A")
+            html += f"""
+            <tr>
+                <td style='font-family:monospace'>{v['version']}</td>
+                <td class='status-{v['status']}'>{v['status']}</td>
+                <td>{v['rows'] or '-'}</td>
+                <td><span class='tag'>{v['format']}</span></td>
+                <td><small>{v['produced_by_task']}<br>{v['produced_by_job']}</small></td>
+                <td>
+                    <a href='/?view=lineage&ds_id={ds_id}&ver={v_enc}' class='btn'>Lineage</a>
+                </td>
+            </tr>
+            """
+        html += "</table></div>"
+
+    # 3. VISTA EXPLORER (Default)
+    else:
+        current_path = path.strip("/") if path else None
+        sub_ns = db.list_namespace_children(current_path)
+        datasets = db.list_datasets_in_namespace(current_path) if current_path else db.list_datasets_in_namespace("root")
+        
+        # Breadcrumb
+        bc = "<a href='/?view=explorer'>root</a>"
+        if current_path:
+            acc = ""
+            for p_part in current_path.split("/"):
+                acc = f"{acc}/{p_part}".strip("/")
+                bc += f" / <a href='/?view=explorer&path={acc}'>{p_part}</a>"
+        html += f"<div class='breadcrumb'>{bc}</div>"
+
+        html += """
+        <div class='card'>
+            <table>
+                <tr><th>Name</th><th>Type</th><th>Latest Version</th><th>Format</th><th>Actions</th></tr>
+        """
+        for ns in sub_ns:
+            html += f"<tr><td><a href='/?view=explorer&path={ns['path']}' style='color:#ffcc00; text-decoration:none;'>📁 {ns['name']}</a></td><td>NS</td><td>-</td><td>-</td><td>-</td></tr>"
+        
+        for d in datasets:
+            v_enc = d['version'].replace(":", "%3A")
+            html += f"""
+            <tr>
+                <td><a href='/?view=history&ds_id={d['id']}&path={path or ''}' style='color:#00ff88; text-decoration:none; font-weight:bold;'>📄 {d['id']}</a></td>
+                <td>DS</td>
+                <td style='font-family:monospace'><small>{d['version'][:19]}</small></td>
+                <td><span class='tag'>{d['format']}</span></td>
+                <td>
+                    <a href='/?view=lineage&ds_id={d['id']}&ver={v_enc}&path={path or ""}' class='btn'>Lineage (Latest)</a>
+                </td>
+            </tr>
+            """
+        html += "</table></div>"
+
+    html += "</div></body></html>"
+    return html
+
+@app.get("/", response_class=HTMLResponse)
+async def catalog_dashboard(
+    path: str = Query(None), 
+    view: str = Query("explorer"), 
+    ds_id: str = Query(None), 
+    ver: str = Query(None)
+):
+    datasets = db.list_all_datasets()
+    
+    html = """
+    <html>
+    <head>
+        <title>Waluigi Catalog</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body { background-color: #1a0026; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; padding: 15px; margin: 0; }
+            h1 { color: #d080ff; font-size: 1.8em; border-bottom: 2px solid #4b0082; padding-bottom: 10px; }
+            .namespace-container { background-color: #2b0040; border-radius: 8px; margin-bottom: 25px; padding: 15px; overflow-x: auto; }
+            .namespace-header { color: #ffcc00; font-weight: bold; font-size: 1.1em; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
+            table { border-collapse: collapse; width: 100%; min-width: 650px; background-color: #360052; }
+            th { background-color: #4b0082; color: white; text-align: left; padding: 12px; }
+            td { padding: 4px 8px; border-bottom: 1px solid #4b0082; font-size: 0.85em; }
+            .actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+            .status-COMMITTED { color: #00ff88; font-weight: bold; }
+            .status-RESERVED { color: #ffff00; font-weight: bold; animation: blink 2s infinite; }
+            .status-FAILED { color: #ff4444; font-weight: bold; }
+            @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+            .btn-action { background: #4b0082; color: white; padding: 6px 10px; border-radius: 4px; border: 1px solid #d080ff; cursor: pointer; font-size: 0.8em; text-decoration: none; display: inline-block;}
+            .btn-action:hover { background: #d080ff; color: #1a0026; }
+            .breadcrumb { color: #ffcc00; font-weight: bold; font-size: 1.1em; margin-bottom: 15px; }
+            .breadcrumb a { color: #00d4ff; text-decoration: none; }
+            .lineage-node { background-color: #360052; border: 1px solid #4b0082; padding: 12px; border-radius: 8px; min-width: 220px; text-align: center; }
+            .lineage-focus { border: 2px solid #ffcc00 !important; background-color: #2b0040 !important; box-shadow: 0 0 15px #ffcc0033; }
+            .lineage-label { color: #8a2be2; font-size: 0.75em; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
+        </style>
+    </head>
+    <body>
+        <h1>📦 Waluigi Catalog</h1>
+    """
+
+    if view == "lineage" and ds_id and ver:
+        upstream = db.get_upstream(ds_id, ver)
+        downstream = db.get_downstream(ds_id, ver)
+        
+        html += f"""
+        <div class='breadcrumb'><a href='/?view=history&ds_id={ds_id}'>⬅️ History</a> / Lineage: {ds_id}</div>
+        <div style='display: flex; flex-direction: column; align-items: center; gap: 20px;'>
+        """
+        if upstream:
+            html += "<div style='display: flex; gap: 15px; flex-wrap: wrap; justify-content: center;'>"
+            for item in upstream:
+                v_link = item['input_version'].replace(":", "%3A")
+                html += f"""
+                <a href='/?view=lineage&ds_id={item['input_id']}&ver={v_link}' class='lineage-node' style='text-decoration:none; color:inherit;'>
+                    <div class='lineage-label'>Sorgente</div>
+                    <b style='color:#00ff88'>{item['input_id']}</b><br><small>{item['input_version'][:19]}</small>
+                </a>"""
+            html += "</div><div style='color: #4b0082; font-size: 24px;'>▼</div>"
+
+        html += f"""
+        <div class='lineage-node lineage-focus'>
+            <div class='lineage-label'>Focus</div>
+            <b style='font-size: 1.2em; color: #00ff88;'>{ds_id}</b><br><code>{ver[:19]}</code>
+            <div style='margin-top: 10px; border-top: 1px solid #4b0082; padding-top: 10px;'>
+                <a href='/?view=history&ds_id={ds_id}' class='btn-action' style='border-color:#ffcc00; color:#ffcc00'>🕒 History</a>
+            </div>
+        </div>
+        """
+
+        if downstream:
+            html += "<div style='color: #4b0082; font-size: 24px;'>▼</div>"
+            html += "<div style='display: flex; gap: 15px; flex-wrap: wrap; justify-content: center;'>"
+            for item in downstream:
+                v_link = item['output_version'].replace(":", "%3A")
+                html += f"""
+                <a href='/?view=lineage&ds_id={item['output_id']}&ver={v_link}' class='lineage-node' style='text-decoration:none; color:inherit;'>
+                    <div class='lineage-label'>Derivato</div>
+                    <b style='color:#00ff88'>{item['output_id']}</b><br><small>{item['output_version'][:19]}</small>
+                </a>"""
+            html += "</div>"
+        html += "</div>"
+
+    elif view == "history" and ds_id:
+        versions = db.get_history(ds_id)
+        html += f"<div class='breadcrumb'><a href='/?path={path or ''}'>⬅️ Explorer</a> / {ds_id}</div>"
+        html += "<div class='namespace-container'><table><tr><th>Version</th><th>Status</th><th>Rows</th><th>Format</th><th>Action</th></tr>"
+        for v in versions:
+            v_enc = v['version'].replace(":", "%3A")
+            html += f"""
+            <tr>
+                <td style='font-family:monospace'>{v['version']}</td>
+                <td class='status-{v['status'].upper()}'>{v['status']}</td>
+                <td>{v['rows'] or '-'}</td>
+                <td>{v['format']}</td>
+                <td><a href='/?view=lineage&ds_id={ds_id}&ver={v_enc}' class='btn-action'>Lineage</a></td>
+            </tr>"""
+        html += "</table></div>"
+
+    else:
+        current_path = path.strip("/") if path else None
+        sub_ns = db.list_namespace_children(current_path)
+        datasets = db.list_datasets_in_namespace(current_path) if current_path else db.list_datasets_in_namespace("root")
+        
+        bc = "<a href='/?view=explorer'>root</a>"
+        if current_path:
+            acc = ""
+            for p_part in current_path.split("/"):
+                acc = f"{acc}/{p_part}".strip("/")
+                bc += f" / <a href='/?view=explorer&path={acc}'>{p_part}</a>"
+        html += f"<div class='breadcrumb'>{bc}</div><div class='namespace-container'><table>"
+        html += "<tr><th>Name</th><th>Type</th><th>Latest</th><th>Format</th><th>Action</th></tr>"
+        
+        for ns in sub_ns:
+            html += f"<tr><td><a href='/?view=explorer&path={ns['path']}' style='color:#ffcc00; text-decoration:none;'>📁 {ns['name']}</a></td><td>NS</td><td>-</td><td>-</td><td>-</td></tr>"
+        
+        for d in datasets:
+            v_enc = d['version'].replace(":", "%3A")
+            html += f"""
+            <tr>
+                <td><a href='/?view=history&ds_id={d['id']}&path={path or ''}' style='color:#00ff88; text-decoration:none; font-weight:bold;'>📄 {d['id']}</a></td>
+                <td>DS</td>
+                <td style='font-family:monospace'><small>{d['version'][:19]}</small></td>
+                <td>{d['format']}</td>
+                <td><a href='/?view=lineage&ds_id={d['id']}&ver={v_enc}' class='btn-action'>Lineage</a></td>
+            </tr>"""
+        html += "</table></div>"
+
+    html += "</body></html>"
+    return html
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------

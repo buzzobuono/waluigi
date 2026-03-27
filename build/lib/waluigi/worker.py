@@ -44,6 +44,7 @@ async def execute(request: Request):
     workdir = data.get("workdir", DEFAULT_WORKDIR)
     command = data.get("command")
     id = data.get("id")
+    job_id = data.get("job_id")
     namespace = data.get("namespace")
     params = data.get("params", {})
     attributes = data.get("attributes", {})
@@ -63,7 +64,7 @@ async def execute(request: Request):
 
     try:
         asyncio.create_task(
-            run_command_async(command, id, namespace, params, attributes, resources, workdir)
+            run_command_async(command, id, job_id, namespace, params, attributes, resources, workdir)
         )
         return JSONResponse({"status": "submitted", "id": id}, status_code=202)
 
@@ -73,7 +74,7 @@ async def execute(request: Request):
             active_tasks_count -= 1
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
-async def run_command_async(command, id, namespace, params, attributes, resources, workdir):
+async def run_command_async(command, id, job_id, namespace, params, attributes, resources, workdir):
     global active_tasks_count
 
     try:
@@ -85,7 +86,8 @@ async def run_command_async(command, id, namespace, params, attributes, resource
             env[f"WALUIGI_PARAM_{k.upper()}"] = str(v)
         for k, v in attributes.items():
             env[f"WALUIGI_ATTRIBUTE_{k.upper()}"] = str(v)
-
+        env["WALUIGI_TASK_ID"] = id
+        env["WALUIGI_JOB_ID"] = job_id
         log(f"🚀 Forking: {command}")
 
         process = await asyncio.create_subprocess_shell(

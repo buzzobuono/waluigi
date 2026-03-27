@@ -186,7 +186,8 @@ async def dashboard():
             .status-SUCCESS { color: #00ff88; font-weight: bold; }
             .status-FAILED { color: #ff4444; font-weight: bold; }
             @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
-            .btn-action { background: #ff4444; color: white; padding: 12px; border-radius: 4px; border: none; cursor: pointer; font-size: 0.8em;}
+            .btn-action { background: #4b0082; color: white; padding: 6px 10px; border-radius: 4px; border: 1px solid #d080ff; cursor: pointer; font-size: 0.8em; text-decoration: none; display: inline-block;}
+            .btn-action:hover { background: #d080ff; color: #1a0026; }
         </style>
         <script>
             function actionConfirm(url) {

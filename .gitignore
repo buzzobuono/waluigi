@@ -7,4 +7,5 @@ env/
 waluigi.egg-info
 work/
 db
+data
 waluigi.db*
