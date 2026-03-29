@@ -1,4 +1,3 @@
-// app.js — Vue 3 root app
 import { router }   from './router.js';
 import { api }      from './api.js';
 import LogModal     from './components/LogModal.js';
@@ -18,7 +17,6 @@ const App = {
     const clock     = ref('');
     const logModalRef = ref(null);
 
-    // expose showLogs to all descendant components via provide
     provide('showLogs', (taskId) => {
       logModalRef.value?.show(taskId);
     });
@@ -38,7 +36,9 @@ const App = {
       { path: '/jobs',      label: 'Jobs',      icon: 'fa-briefcase', key: 'jobs'    },
       { path: '/tasks',     label: 'Tasks',      icon: 'fa-tasks',     key: 'tasks'   },
       { path: '/workers',   label: 'Workers',    icon: 'fa-server',    key: 'workers' },
-      { path: '/resources', label: 'Resources',  icon: 'fa-chart-bar', key: null      },
+      { path: '/resources', label: 'Resources', icon: 'fa-chart-bar',       key: null      },
+      { path: '/catalog',   label: 'Catalog',   icon: 'fa-database',       key: null      },
+      { path: '/lineage',   label: 'Lineage',   icon: 'fa-project-diagram',key: null      },
     ];
 
     async function refreshAll() {
@@ -54,13 +54,11 @@ const App = {
         loading.value = false;
       }
     }
-
-    // clock
+    
     setInterval(() => {
       clock.value = new Date().toLocaleTimeString();
     }, 1000);
-
-    // initial load + auto-refresh
+    
     onMounted(() => {
       refreshAll();
       setInterval(refreshAll, 10000);

@@ -531,6 +531,7 @@ async def deprecate(id: str, version: str):
 
 @app.get("/datasets/{id}/metadata")
 async def get_metadata(id: str):
+    print("***")
     return JSONResponse(db.get_metadata(id))
 
 

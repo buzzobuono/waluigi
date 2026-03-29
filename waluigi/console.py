@@ -18,26 +18,18 @@ p.add('--catalog-url', default='http://localhost:9000')
 
 args = p.parse_args()
 
-BOSS_URL = args.boss_url.rstrip('/')
+BOSS_URL    = args.boss_url.rstrip('/')
 CATALOG_URL = args.catalog_url.rstrip('/')
-
-STATIC_DIR = os.path.join(os.getcwd(), "static")
-
+STATIC_DIR  = os.path.join(os.getcwd(), "static")
 
 def log(msg):
     print(f"[Console 🖥️] {msg}", flush=True)
-
-
-# ---------------------------------------------------------------------------
-# HTTP helpers
-# ---------------------------------------------------------------------------
-
+    
 async def _boss_get(path):
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.get(f"{BOSS_URL}{path}")
         r.raise_for_status()
         return r.json()
-
 
 async def _boss_post(path, json=None):
     async with httpx.AsyncClient(timeout=10) as client:
@@ -45,11 +37,12 @@ async def _boss_post(path, json=None):
         r.raise_for_status()
         return r.json()
 
-
-# ---------------------------------------------------------------------------
-# API proxy — /api/* → boss
-# ---------------------------------------------------------------------------
-
+async def _catalog_get(path, params=None):
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{CATALOG_URL}{path}", params=params or {})
+        r.raise_for_status()
+        return r.json()
+        
 @app.get('/api/jobs')
 async def api_jobs():
     return JSONResponse(await _boss_get('/api/jobs'))
@@ -85,37 +78,48 @@ async def api_delete_task(id: str):
 @app.post('/api/delete/namespace/{namespace}')
 async def api_delete_namespace(namespace: str):
     return JSONResponse(await _boss_post(f'/api/delete/namespace/{namespace}'))
+    
+@app.get('/catalog/namespaces')
+async def catalog_namespaces():
+    return JSONResponse(await _catalog_get('/namespaces'))
 
+@app.get('/catalog/namespaces/{ns:path}/children')
+async def catalog_ns_children(ns: str):
+    return JSONResponse(await _catalog_get(f'/namespaces/{ns}/children'))
 
-# ---------------------------------------------------------------------------
-# Static assets (js, css) — must be before SPA fallback
-# ---------------------------------------------------------------------------
+@app.get('/catalog/namespaces/{ns:path}/datasets')
+async def catalog_ns_datasets(ns: str, recursive: bool = False):
+    return JSONResponse(await _catalog_get(f'/namespaces/{ns}/datasets', {'recursive': str(recursive).lower()}))
 
+@app.get('/catalog/datasets/{id}/history')
+async def catalog_dataset_history(id: str):
+    return JSONResponse(await _catalog_get(f'/datasets/{id}/history'))
+
+@app.get('/catalog/datasets/{id}/metadata')
+async def catalog_dataset_metadata(id: str):
+    return JSONResponse(await _catalog_get(f'/datasets/{id}/metadata'))
+
+@app.get('/catalog/lineage/{id}/{version}')
+async def catalog_lineage_upstream(id: str, version: str):
+    return JSONResponse(await _catalog_get(f'/lineage/{id}/{version}'))
+
+@app.get('/catalog/lineage/{id}/{version}/downstream')
+async def catalog_lineage_downstream(id: str, version: str):
+    return JSONResponse(await _catalog_get(f'/lineage/{id}/{version}/downstream'))
+    
 app.mount("/js",  StaticFiles(directory=os.path.join(STATIC_DIR, "js")),  name="js")
 app.mount("/css", StaticFiles(directory=os.path.join(STATIC_DIR, "css")), name="css")
-
-
-# ---------------------------------------------------------------------------
-# SPA fallback — all other paths return index.html so Vue Router works
-# on direct access and refresh (e.g. localhost:8080/tasks)
-# ---------------------------------------------------------------------------
 
 @app.get("/{full_path:path}")
 async def spa_fallback(full_path: str):
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
+    
 def main():
     log(f"Waluigi Console:")
     log(f"    Binding: {args.bind_address}:{args.port}")
     log(f"    Boss URL: {args.boss_url}")
     log(f"    Catalog URL: {args.catalog_url}")
     uvicorn.run(app, host=args.bind_address, port=args.port)
-
-
+    
 if __name__ == "__main__":
     main()
