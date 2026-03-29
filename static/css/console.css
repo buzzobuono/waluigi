@@ -1,0 +1,80 @@
+:root {
+  --wl-dark:   #1a0026;
+  --wl-mid:    #2b0040;
+  --wl-accent: #4b0082;
+  --wl-light:  #d080ff;
+  --wl-text:   #e0e0e0;
+  --wl-muted:  #888;
+  --wl-border: #3a005a;
+}
+
+/* Layout */
+body,
+.content-wrapper,
+.main-footer          { background: #12001e !important; }
+.wl-navbar            { background: var(--wl-dark) !important; border-bottom: 1px solid var(--wl-accent) !important; }
+.wl-sidebar,
+.wl-sidebar .sidebar  { background: var(--wl-dark) !important; }
+.wl-brand             { background: var(--wl-dark) !important; border-bottom: 1px solid var(--wl-accent) !important; }
+.wl-footer            { background: var(--wl-dark) !important; border-top: 1px solid var(--wl-accent) !important; color: var(--wl-muted) !important; }
+.wl-content           { background: #12001e !important; }
+.wl-accent            { color: var(--wl-light) !important; }
+.wl-clock             { color: var(--wl-light); font-size: 0.85em; }
+
+/* Sidebar nav */
+.nav-sidebar .nav-link            { color: #ccc !important; }
+.nav-sidebar .nav-link.active,
+.nav-sidebar .nav-link:hover      { background: var(--wl-accent) !important; color: #fff !important; }
+
+/* Cards */
+.card                             { background: var(--wl-mid) !important; border-color: var(--wl-accent) !important; color: var(--wl-text) !important; }
+.card-header                      { background: transparent !important; border-bottom: 1px solid var(--wl-accent) !important; }
+.card-title                       { color: var(--wl-light) !important; }
+
+/* Tables */
+.table                            { color: var(--wl-text) !important; }
+.table thead th                   { background: var(--wl-dark) !important; color: #ccc !important; border-color: var(--wl-accent) !important; }
+.table td, .table th              { border-color: var(--wl-border) !important; vertical-align: middle !important; }
+.table-hover tbody tr:hover       { background: rgba(107,66,193,0.15) !important; }
+
+/* Info boxes */
+.info-box                         { background: var(--wl-mid) !important; border: 1px solid var(--wl-accent) !important; }
+.info-box-text                    { color: var(--wl-muted) !important; }
+.info-box-number                  { color: var(--wl-text) !important; }
+
+/* Modal */
+.modal-content                    { background: var(--wl-dark) !important; border: 1px solid var(--wl-accent) !important; color: var(--wl-text) !important; }
+.modal-header                     { border-bottom: 1px solid var(--wl-accent) !important; }
+.modal-title                      { color: var(--wl-light) !important; }
+.close                            { color: var(--wl-text) !important; }
+
+/* Form controls */
+.form-control                     { background: var(--wl-dark) !important; color: var(--wl-text) !important; border-color: var(--wl-accent) !important; }
+
+/* Status badges */
+.badge-RUNNING                    { background: #ffc107 !important; color: #1a1a1a !important; }
+.badge-SUCCESS                    { background: #28a745 !important; color: #fff !important; }
+.badge-FAILED                     { background: #dc3545 !important; color: #fff !important; }
+.badge-PENDING                    { background: #6c757d !important; color: #fff !important; }
+.badge-READY                      { background: #17a2b8 !important; color: #fff !important; }
+.badge-ALIVE                      { background: #28a745 !important; color: #fff !important; }
+.badge-DEAD                       { background: #dc3545 !important; color: #fff !important; }
+
+/* Animations */
+.blink { animation: blink 1.4s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
+
+/* Log viewer */
+.log-entry                        { padding: 3px 10px; border-bottom: 1px solid #1a1a2e; }
+.log-ts                           { color: #6f42c1; font-size: 0.75em; }
+.log-worker                       { color: var(--wl-muted); font-size: 0.75em; margin: 0 6px; }
+.log-msg                          { font-family: monospace; font-size: 0.82em; color: var(--wl-text); white-space: pre-wrap; word-break: break-all; }
+
+/* Tree indent */
+.tree-indent                      { font-family: monospace; color: #6f42c1; }
+
+/* Responsive tables */
+.table-responsive                 { border: none !important; }
+
+/* Namespace header */
+.ns-header-yellow                 { color: #ffcc00 !important; }
