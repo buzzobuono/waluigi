@@ -22,8 +22,26 @@ services:
       - WALUIGI_WORKER_BOSS_URL=http://boss:8082
       - WALUIGI_WORKER_WORKDIR=/work
       - WALUIGI_WORKER_SLOTS=1
+      - WALUIGI_CATALOG_URL=http://catalog:9000
     volumes:
       - ./work:/work
       - ./source:/source
+      - ./data:/data
+    deploy:
+      replicas: 3
+  
+  catalog:
+    image: buzzobuono/waluigi-catalog:latest
+    ports:
+    - target: 9000
+      published: 9000
+      protocol: tcp
+      mode: ingress
+    environment:
+      - WALUIGI_CATALOG_DB_PATH=/db/catalog.db
+      - WALUIGI_CATALOG_DATA_PATH=/data
+    volumes:
+      - ./db:/db
+      - ./data:/data
     deploy:
       replicas: 1
