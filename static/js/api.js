@@ -11,7 +11,13 @@ async function _post(url) {
   return r.json();
 }
 
+// namespace slashes stay as path separators, only encode colons (version timestamps)
+function _encNs(s)  { return String(s); }
+function _encId(s)  { return encodeURIComponent(s); }
+function _encVer(s) { return String(s).replace(/:/g, '%3A'); }
+
 export const api = {
+  // --- Boss ---
   jobs:      () => _get('/api/jobs'),
   tasks:     () => _get('/api/tasks'),
   workers:   () => _get('/api/workers'),
@@ -22,13 +28,19 @@ export const api = {
   deleteTask:      (id) => _post(`/api/delete/task/${encodeURIComponent(id)}`),
   resetNamespace:  (ns) => _post(`/api/reset/namespace/${encodeURIComponent(ns)}`),
   deleteNamespace: (ns) => _post(`/api/delete/namespace/${encodeURIComponent(ns)}`),
-  
-  catalogNamespaces:       ()           => _get('/catalog/namespaces'),
-  catalogNsChildren:       (ns)         => _get(`/catalog/namespaces/${encodeURIComponent(ns)}/children`),
-  catalogNsDatasets:       (ns, recursive = false) =>
-                                           _get(`/catalog/namespaces/${encodeURIComponent(ns)}/datasets`, { recursive }),
-  catalogDatasetHistory:   (id)         => _get(`/catalog/datasets/${encodeURIComponent(id)}/history`),
-  catalogDatasetMetadata:  (id)         => _get(`/catalog/datasets/${encodeURIComponent(id)}/metadata`),
-  catalogLineageUpstream:  (id, ver)    => _get(`/catalog/lineage/${encodeURIComponent(id)}/${encodeURIComponent(ver)}`),
-  catalogLineageDownstream:(id, ver)    => _get(`/catalog/lineage/${encodeURIComponent(id)}/${encodeURIComponent(ver)}/downstream`),
+
+  // --- Catalog — namespaces ---
+  catalogNamespaces:  ()                  => _get('/catalog/namespaces'),
+  catalogNsChildren:  (ns)                => _get(`/catalog/namespaces/${_encNs(ns)}/children`),
+  catalogNsDatasets:  (ns, recursive = false) =>
+                                             _get(`/catalog/namespaces/${_encNs(ns)}/datasets`, { recursive }),
+
+  // --- Catalog — datasets (namespace + id required) ---
+  catalogDatasetHistory:  (ns, id)        => _get(`/catalog/datasets/${_encNs(ns)}/${_encId(id)}/history`),
+  catalogDatasetMetadata: (ns, id)        => _get(`/catalog/datasets/${_encNs(ns)}/${_encId(id)}/metadata`),
+  catalogDataset:         (ns, id)        => _get(`/catalog/datasets/${_encNs(ns)}/${_encId(id)}/latest`),
+
+  // --- Catalog — lineage (namespace + id + version required) ---
+  catalogLineageUpstream:   (ns, id, ver) => _get(`/catalog/lineage/${_encNs(ns)}/${_encId(id)}/${_encVer(ver)}`),
+  catalogLineageDownstream: (ns, id, ver) => _get(`/catalog/lineage/${_encNs(ns)}/${_encId(id)}/${_encVer(ver)}/downstream`),
 };

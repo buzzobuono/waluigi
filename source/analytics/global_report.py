@@ -14,18 +14,18 @@ class GlobalReport(Task):
         # Raccogliamo path e versioni dei 3 input
         for s in sources:
             ds_id = f"clean_{s}"
-            path = catalog.resolve(ds_id)
-            ver = catalog.last_version(ds_id)
+            path = catalog.resolve(f"analytics/{s}/clean", ds_id)
+            ver = catalog.last_version(f"analytics/{s}/clean", ds_id)
             
-            inputs_for_lineage.append((ds_id, ver))
+            inputs_for_lineage.append((f"analytics/{s}/clean", ds_id, ver))
             
             with open(path, "r") as f:
                 results.append(f.read())
             print(f"Letto dataset: {ds_id} (v: {ver})")
 
         # Produciamo il report finale con lineage completa
-        with catalog.produce("global_report", 
-                             namespace="analytics/reports", 
+        with catalog.produce("analytics/reports",
+                             "global_report", 
                              format="out",
                              inputs=inputs_for_lineage) as ctx:
             

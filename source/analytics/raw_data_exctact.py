@@ -9,10 +9,7 @@ class RawDataExtract(Task):
         
         print(f"📥 Estrazione dati da sorgente: {self.params.source}...")
         
-        # Usiamo produce per riservare la versione nel catalogo
-        with catalog.produce(dataset_id, 
-                             namespace=f"analytics/{source}/raw", 
-                             format="out") as ctx:
+        with catalog.produce(f"analytics/{source}/raw", dataset_id, format="out") as ctx:
             steps = 5 # Ridotto per brevità
             for step in range(steps):
                 print(f"Estrazione Step {step+1}/{steps}")

@@ -2,6 +2,9 @@ import csv
 from waluigi.sdk.task import Task
 from waluigi.sdk.catalog import catalog
 
+NAMESPACE = "sales/raw"
+
+
 class CreateSalesDataset(Task):
 
     def run(self):
@@ -15,16 +18,14 @@ class CreateSalesDataset(Task):
             {"date": self.params.date, "product": "E", "quantity":  3, "revenue":  30.0},
         ]
 
-        with catalog.produce("sales_raw",
-                             namespace="sales/raw",
-                             format="csv") as ctx:
+        with catalog.produce(NAMESPACE, "sales_raw", format="csv") as ctx:
             with open(ctx.path, "w", newline="") as f:
                 writer = csv.DictWriter(f, fieldnames=rows[0].keys())
                 writer.writeheader()
                 writer.writerows(rows)
             ctx.rows = len(rows)
 
-        print(f"✅ Dataset sales_raw scritto, righe: {ctx.rows}")
+        print(f"✅ Dataset {NAMESPACE}/sales_raw scritto, righe: {ctx.rows}")
 
 
 if __name__ == "__main__":

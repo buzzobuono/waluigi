@@ -13,16 +13,15 @@ class CleanDataTask(Task):
             raise Exception(f"💥 Errore durante la pulizia di {self.params.source}!")
 
         # Risolviamo il path dell'input (ultima versione disponibile)
-        input_path = catalog.resolve(input_id)
-        input_ver = catalog.last_version(input_id)
+        input_path = catalog.resolve(f"analytics/{source}/raw", input_id)
+        input_ver = catalog.last_version(f"analytics/{source}/raw", input_id)
         
         print(f"🧹 Pulizia dati da: {input_path}")
 
         # Produciamo il dato pulito dichiarando l'input per la lineage
-        with catalog.produce(output_id, 
-                             namespace=f"analytics/{source}/clean", 
+        with catalog.produce(f"analytics/{source}/clean", output_id, 
                              format="out",
-                             inputs=[(input_id, input_ver)]) as ctx:
+                             inputs=[(f"analytics/{source}/raw", input_id, input_ver)]) as ctx:
             
             with open(input_path, "r") as f_in:
                 data = f_in.read()
