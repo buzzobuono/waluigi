@@ -3,6 +3,9 @@ import sys
 import configargparse
 import socket
 import uvicorn
+import csv
+import httpx
+from urllib.parse import urlparse
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -88,6 +91,16 @@ class ScanRequest(BaseModel):
     data_path: Optional[str] = Field(None, example="/data/analytics")
     namespace: Optional[str] = Field(None, example="analytics/erp/raw")
 
+class MaterializeRequest(BaseModel):
+    swagger_url: str            = Field(...,
+        example="https://petstore3.swagger.io/api/v3/openapi.json")
+    endpoint:    str            = Field(...,
+        example="/pet/findByStatus")
+    params:      Dict[str, Any] = Field(default_factory=dict,
+        example={"status": "available"})
+    task_id:     str            = Field("unknown", example="ingest_orders")
+    job_id:      str            = Field("unknown", example="job/ingest")
+        
 def _dataset_path(namespace, ds_id, version, fmt):
     safe_version = version.replace(":", "-")
     ext = f".{fmt}" if fmt else ""
@@ -99,6 +112,118 @@ def _to_dict(model):
     if hasattr(model, 'model_dump'):
         return model.model_dump()
     return model.dict()
+    
+def _extract_base_url(spec: dict, swagger_url: str) -> str:
+    parsed = urlparse(swagger_url)
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+
+    # OpenAPI v3
+    servers = spec.get("servers", [])
+    if servers:
+        url = servers[0].get("url", "").rstrip("/")
+        if url.startswith("http"):
+            return url
+        # relative URL — prepend origin
+        return f"{origin}{url}"
+
+    # Swagger v2
+    host      = spec.get("host", "")
+    base_path = spec.get("basePath", "/")
+    schemes   = spec.get("schemes", ["https"])
+    if host:
+        return f"{schemes[0]}://{host}{base_path}".rstrip("/")
+
+    # fallback
+    return origin
+
+def _extract_items(body) -> list:
+    if isinstance(body, list):
+        return body
+    if isinstance(body, dict):
+        for key in ("data", "results", "items", "records", "content",
+                    "pets", "users", "orders", "entries"):
+            if key in body and isinstance(body[key], list):
+                return body[key]
+        # single-key dict whose value is a list
+        values = [v for v in body.values() if isinstance(v, list)]
+        if len(values) == 1:
+            return values[0]
+    return []
+
+
+def _next_page(body, base_url: str, endpoint: str, current_page: int):
+    if not isinstance(body, dict):
+        return None
+    for key in ("next", "next_page", "nextPage", "nextCursor"):
+        val = body.get(key)
+        if val and isinstance(val, str):
+            return val if val.startswith("http") else f"{base_url}{val}"
+    total = body.get("total_pages") or body.get("pages") or body.get("totalPages")
+    if total and current_page < int(total):
+        return f"{base_url}{endpoint}"  # caller adds page param
+    return None
+
+
+def _flatten(obj, prefix="", sep="_") -> dict:
+    out = {}
+    for k, v in obj.items():
+        key = f"{prefix}{sep}{k}" if prefix else k
+        if isinstance(v, dict):
+            out.update(_flatten(v, key, sep))
+        elif isinstance(v, list):
+            if v and isinstance(v[0], dict):
+                out[key] = str(v)          # nested array → JSON string
+            else:
+                out[key] = ",".join(str(i) for i in v)
+        else:
+            out[key] = v
+    return out
+
+
+async def _fetch_and_write(swagger_url: str, endpoint: str,
+                           params: dict, output_path: str):
+    """
+    Fetch all pages from endpoint, flatten JSON, write CSV.
+    Returns (rows_count, schema_dict).
+    """
+    async with httpx.AsyncClient(timeout=30) as client:
+        spec_r = await client.get(swagger_url)
+        spec_r.raise_for_status()
+        spec = spec_r.json()
+
+    base_url = _extract_base_url(spec, swagger_url)
+
+    records  = []
+    page     = 1
+    next_url = f"{base_url}{endpoint}"
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        while next_url:
+            call_params = {**params, "page": page} if page > 1 else params
+            r = await client.get(next_url, params=call_params)
+            r.raise_for_status()
+            body  = r.json()
+            items = _extract_items(body)
+            if not items:
+                break
+            records.extend([_flatten(item) for item in items])
+            next_url = _next_page(body, base_url, endpoint, page)
+            if next_url:
+                page += 1
+            else:
+                break
+
+    if not records:
+        return 0, {}
+
+    fieldnames = list(dict.fromkeys(k for r in records for k in r.keys()))
+    with open(output_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(records)
+
+    schema = {k: "string" for k in fieldnames}
+    return len(records), schema
     
 # ---------------------------------------------------------------------------
 # Routes — Namespaces
@@ -201,6 +326,67 @@ async def fail_version(namespace: str, id: str, version: str):
     return JSONResponse({"status": "failed"})
 
 
+@app.post("/datasets/{namespace:path}/{id}/materialize", tags=["Datasets"],
+          summary="Materialize a REST API endpoint into a dataset",
+          description=(
+              "Reads the swagger spec to locate the base URL, "
+              "fetches all pages from the given endpoint, "
+              "flattens nested JSON, writes a single CSV file "
+              "and registers it in the catalog. "
+              "Lineage source is recorded as the API URL."
+          ))
+async def materialize(namespace: str, id: str, body: MaterializeRequest):
+    version = helper.now_iso()
+    path    = _dataset_path(namespace, id, version, "csv")
+
+    try:
+        db.ensure_namespace(namespace)
+        db.reserve(namespace, id, version, path, "csv", body.task_id, body.job_id)
+
+        # lineage: source is the external API URL
+        db.insert_lineage(namespace, id, version, [{
+            "namespace": "__external__",
+            "id":        f"{body.swagger_url}#{body.endpoint}",
+            "version":   "live"
+        }])
+
+        rows, schema = await _fetch_and_write(
+            body.swagger_url, body.endpoint, body.params, path
+        )
+
+        if rows == 0:
+            db.fail(namespace, id, version)
+            return JSONResponse(
+                {"error": "no records returned from endpoint"}, status_code=422)
+
+        file_hash = helper.compute_hash(path)
+        db.commit(namespace, id, version, file_hash, rows, schema)
+
+        log(f"Materialized {namespace}/{id}@{version} rows={rows} "
+            f"from {body.endpoint}")
+
+        return JSONResponse({
+            "namespace": namespace,
+            "id":        id,
+            "version":   version,
+            "path":      path,
+            "rows":      rows,
+            "hash":      file_hash,
+            "source":    f"{body.swagger_url}#{body.endpoint}"
+        }, status_code=201)
+
+    except httpx.HTTPError as e:
+        db.fail(namespace, id, version)
+        log(f"❌ HTTP error during materialize: {e}")
+        return JSONResponse({"error": f"HTTP error: {e}"}, status_code=502)
+    except Exception as e:
+        log(f"❌ Materialize failed: {e}")
+        try:
+            db.fail(namespace, id, version)
+        except Exception:
+            pass
+        return JSONResponse({"error": str(e)}, status_code=500)
+            
 @app.get("/datasets/{namespace:path}/{id}/resolve", tags=["Datasets"],
          summary="Resolve path of latest committed version")
 async def resolve_latest(namespace: str, id: str):
