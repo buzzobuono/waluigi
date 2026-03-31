@@ -68,15 +68,14 @@ class ReserveRequest(BaseModel):
     format:  str               = Field("", example="csv")
     task_id: str               = Field("unknown", example="clean_erp")
     job_id:  str               = Field("unknown", example="job/global_report")
-    inputs:  List[LineageInput] = Field(default_factory=list)
-
 
 class CommitRequest(BaseModel):
     rows:    Optional[int]            = Field(None, example=1500)
     columns: Optional[Dict[str, Any]] = Field(None, alias="schema", example={"date": "string", "value": "float64"})
+    inputs:  List[LineageInput]       = Field(default_factory=list)
 
     model_config = {"populate_by_name": True}
-
+        
 
 class MetadataRequest(BaseModel):
     key:   str = Field(..., example="owner")
@@ -276,21 +275,24 @@ async def reserve(namespace: str, id: str, body: ReserveRequest):
     try:
         db.ensure_namespace(namespace)
         db.reserve(namespace, id, version, path, body.format, body.task_id, body.job_id)
-        if body.inputs:
-            db.insert_lineage(namespace, id, version,
-                              [_to_dict(i) for i in body.inputs])
+        # NON inserire lineage qui
         log(f"Reserved {namespace}/{id}@{version}")
         return JSONResponse(
-            {"namespace": namespace, "id": id, "version": version, "path": path},
+            {"namespace": namespace, "id": id, "version": version, 
+             "path": path, "inputs": [_to_dict(i) for i in body.inputs]},
             status_code=201)
     except Exception as e:
-        print(e)
         return JSONResponse({"error": str(e)}, status_code=500)
-
-
+            
 @app.post("/datasets/{namespace:path}/{id}/{version}/commit", tags=["Datasets"],
           summary="Commit a reserved version",
-          description="Phase 2. Catalog computes SHA256 hash from the file and finalizes.")
+          description=(
+              "Phase 2. Catalog computes SHA256 hash from the file and finalizes. "
+              "If content is identical to the LATEST committed version (same hash), "
+              "the new version is discarded and the existing one is returned with "
+              "skipped=true. If identical to an older version but not the latest, "
+              "a new version is created normally."
+          ))
 async def commit(namespace: str, id: str, version: str, body: CommitRequest):
     record = db.get_version(namespace, id, version)
     if not record:
@@ -305,17 +307,47 @@ async def commit(namespace: str, id: str, version: str, body: CommitRequest):
 
     try:
         file_hash = helper.compute_hash(path)
-        schema = body.columns or helper.infer_schema(path, record.get("format", ""))
-        ok = db.commit(namespace, id, version, file_hash, body.rows, schema)
-        if not ok:
+        schema    = body.columns or helper.infer_schema(path, record.get("format", ""))
+        result    = db.commit(namespace, id, version, file_hash, body.rows, schema)
+
+        if result is None:
             return JSONResponse({"error": "commit failed"}, status_code=409)
+
+        if result["skipped"]:
+            try:
+                os.remove(path)
+            except Exception:
+                pass
+            log(f"Skipped {namespace}/{id} — identical to latest, "
+                f"keeping version {result['version']}")
+            return JSONResponse({
+                "namespace": namespace,
+                "id":        id,
+                "version":   result["version"],
+                "skipped":   True,
+                "reason":    "identical to latest committed version"
+            })
+
+        # new version committed — insert lineage only now
+        if body.inputs:
+            db.insert_lineage(namespace, id, version,
+                              [_to_dict(i) for i in body.inputs])
+
         log(f"Committed {namespace}/{id}@{version} hash={file_hash[:8]}...")
-        return JSONResponse({"namespace": namespace, "id": id, "version": version,
-                             "path": path, "hash": file_hash, "rows": body.rows})
+        return JSONResponse({
+            "namespace": namespace,
+            "id":        id,
+            "version":   version,
+            "path":      path,
+            "hash":      file_hash,
+            "rows":      body.rows,
+            "skipped":   False
+        })
+
     except Exception as e:
+        print(e)
         return JSONResponse({"error": str(e)}, status_code=500)
-
-
+            
 @app.post("/datasets/{namespace:path}/{id}/{version}/fail", tags=["Datasets"],
           summary="Mark a reserved version as failed")
 async def fail_version(namespace: str, id: str, version: str):

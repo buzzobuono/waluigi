@@ -16,6 +16,7 @@ class CreateSalesDataset(Task):
             {"date": self.params.date, "product": "C", "quantity":  7, "revenue":  70.0},
             {"date": self.params.date, "product": "D", "quantity": 42, "revenue": 420.0},
             {"date": self.params.date, "product": "E", "quantity":  3, "revenue":  30.0},
+            {"date": self.params.date, "product": "F", "quantity":  9, "revenue":  350.0}
         ]
 
         with catalog.produce(NAMESPACE, "sales_raw", format="csv") as ctx:

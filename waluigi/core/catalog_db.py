@@ -156,7 +156,7 @@ class CatalogDB:
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'reserved')
             """, (namespace, id, version, path, fmt, task_id, job_id, version))
 
-    def commit(self, namespace, id, version, file_hash, rows, schema):
+    def commit_(self, namespace, id, version, file_hash, rows, schema):
         with self.conn:
             cursor = self.conn.execute("""
                 UPDATE datasets SET
@@ -166,6 +166,39 @@ class CatalogDB:
             """, (file_hash, rows, json.dumps(schema) if schema else None,
                   self.helper.now_iso(), namespace, id, version))
             return cursor.rowcount > 0
+
+    def commit(self, namespace, id, version, file_hash, rows, schema):
+        with self.conn:
+            # get latest committed version only
+            latest = self.conn.execute("""
+            SELECT version, hash FROM datasets
+            WHERE namespace = ? AND id = ? AND status = 'committed'
+            ORDER BY version DESC LIMIT 1
+            """, (namespace, id)).fetchone()
+
+            if latest and dict(latest)["hash"] == file_hash:
+                # identical to latest — drop reserved slot and return existing
+                self.conn.execute("""
+                DELETE FROM datasets
+                WHERE namespace = ? AND id = ? AND version = ? AND status = 'reserved'
+                """, (namespace, id, version))
+                return {"skipped": True, "version": dict(latest)["version"]}
+
+            # different from latest (or no latest exists) — commit normally
+            cursor = self.conn.execute("""
+            UPDATE datasets SET
+                hash = ?, rows = ?, schema = ?,
+                committed_at = ?, status = 'committed'
+            WHERE namespace = ? AND id = ? AND version = ? AND status = 'reserved'
+            """, (file_hash, rows,
+              json.dumps(schema) if schema else None,
+              self.helper.now_iso(), namespace, id, version))
+
+            if cursor.rowcount == 0:
+                return None
+
+            return {"skipped": False, "version": version}
+
 
     def commit_scanned(self, namespace, id, version, path, fmt, file_hash, rows, schema):
         with self.conn:
