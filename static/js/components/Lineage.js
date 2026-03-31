@@ -47,6 +47,7 @@ export default defineComponent({
           }
           ver = hist[0].version;
           current.value = hist[0];
+          verInput.value = ver;
         } else {
           current.value = { namespace: ns, id, version: ver };
         }

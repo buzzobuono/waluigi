@@ -88,14 +88,18 @@ class ScanRequest(BaseModel):
     data_path: Optional[str] = Field(None, example="/data/analytics")
     namespace: Optional[str] = Field(None, example="analytics/erp/raw")
 
-def dataset_path(self, namespace, ds_id, version, fmt):
-        safe_version = version.replace(":", "-")
-        ext = f".{fmt}" if fmt else ""
-        dataset_dir = os.path.join(self.data_path, namespace, ds_id)
-        os.makedirs(dataset_dir, exist_ok=True)
-        return os.path.join(dataset_dir, f"{safe_version}{ext}")
+def _dataset_path(namespace, ds_id, version, fmt):
+    safe_version = version.replace(":", "-")
+    ext = f".{fmt}" if fmt else ""
+    dataset_dir = os.path.join(DATA_PATH, namespace, ds_id)
+    os.makedirs(dataset_dir, exist_ok=True)
+    return os.path.join(dataset_dir, f"{safe_version}{ext}")
 
-
+def _to_dict(model):
+    if hasattr(model, 'model_dump'):
+        return model.model_dump()
+    return model.dict()
+    
 # ---------------------------------------------------------------------------
 # Routes — Namespaces
 # ---------------------------------------------------------------------------
@@ -143,18 +147,19 @@ async def update_namespace(ns: str, body: NamespaceUpdateRequest):
           description="Phase 1 of two-phase write. Returns the path to write the file to.")
 async def reserve(namespace: str, id: str, body: ReserveRequest):
     version = helper.now_iso()
-    path    = dataset_path(namespace, id, version, body.format)
+    path    = _dataset_path(namespace, id, version, body.format)
     try:
         db.ensure_namespace(namespace)
         db.reserve(namespace, id, version, path, body.format, body.task_id, body.job_id)
         if body.inputs:
             db.insert_lineage(namespace, id, version,
-                              [i.model_dump() for i in body.inputs])
+                              [_to_dict(i) for i in body.inputs])
         log(f"Reserved {namespace}/{id}@{version}")
         return JSONResponse(
             {"namespace": namespace, "id": id, "version": version, "path": path},
             status_code=201)
     except Exception as e:
+        print(e)
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
@@ -175,7 +180,7 @@ async def commit(namespace: str, id: str, version: str, body: CommitRequest):
 
     try:
         file_hash = helper.compute_hash(path)
-        schema = body.columns or _infer_schema(path, record.get("format", ""))
+        schema = body.columns or helper.infer_schema(path, record.get("format", ""))
         ok = db.commit(namespace, id, version, file_hash, body.rows, schema)
         if not ok:
             return JSONResponse({"error": "commit failed"}, status_code=409)
