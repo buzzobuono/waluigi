@@ -279,7 +279,7 @@ async def reserve(namespace: str, id: str, body: ReserveRequest):
         log(f"Reserved {namespace}/{id}@{version}")
         return JSONResponse(
             {"namespace": namespace, "id": id, "version": version, 
-             "path": path, "inputs": [_to_dict(i) for i in body.inputs]},
+             "path": path },
             status_code=201)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -294,6 +294,7 @@ async def reserve(namespace: str, id: str, body: ReserveRequest):
               "a new version is created normally."
           ))
 async def commit(namespace: str, id: str, version: str, body: CommitRequest):
+    print(f"DEBUG inputs: {body.inputs}")  # ← aggiungi
     record = db.get_version(namespace, id, version)
     if not record:
         return JSONResponse({"error": "version not found"}, status_code=404)

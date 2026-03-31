@@ -46,39 +46,45 @@ import requests
 # ---------------------------------------------------------------------------
 
 class DatasetWriter:
-
-    def __init__(self, client, namespace, id, version, path):
+        
+    def __init__(self, client, namespace, id, version, path, inputs=None):
         self._client    = client
         self._namespace = namespace
         self._id        = id
         self._version   = version
-        self.path       = path   # write your file here
-        self.rows       = None   # optional — set if you know it
-        self.schema     = None   # optional — catalog infers if omitted
-
+        self._inputs    = inputs or []   # ← salva inputs
+        self.path       = path
+        self.rows       = None
+        self.schema     = None
+        self.skipped           = False
+        self.committed_version = version
+        
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type is not None:
-            # task crashed — mark as failed, do not suppress exception
             try:
                 self._client._post(
                     f"/datasets/{_enc(self._namespace)}/{_enc(self._id)}"
-                    f"/{_enc(self._version)}/fail",
-                    json={}
-                )
+                    f"/{_enc(self._version)}/fail", json={})
             except Exception:
                 pass
             return False
 
-        # happy path — commit
-        self._client._post(
+        result = self._client._post(
             f"/datasets/{_enc(self._namespace)}/{_enc(self._id)}"
             f"/{_enc(self._version)}/commit",
-            json={"rows": self.rows, "schema": self.schema}
+            json={
+                "rows":   self.rows,
+                "schema": self.schema,
+                "inputs": self._inputs   # ← passa inputs al commit
+            }
         )
+        self.skipped           = result.get("skipped", False)
+        self.committed_version = result.get("version", self._version)
         return False
+
 
 
 # ---------------------------------------------------------------------------
@@ -125,28 +131,18 @@ class CatalogClient:
         return r["path"]
 
     def produce(self, namespace, id, format="", inputs=None):
-        """
-        Reserve a new version for dataset `id` in `namespace`.
-        Returns a DatasetWriter context manager.
-        Write your file to ctx.path inside the `with` block.
-
-        namespace: required — e.g. "sales/europe/clean"
-        id:        logical dataset name — e.g. "sales_raw"
-        format:    file extension without dot — "csv", "parquet", "pkl", etc.
-        inputs:    list of (namespace, id, version) tuples for lineage tracking
-        """
         inputs_payload = [
             {"namespace": i[0], "id": i[1], "version": i[2]}
             for i in (inputs or [])
         ]
         r = self._post(f"/datasets/{_enc(namespace)}/{_enc(id)}/reserve", json={
-            "format":   format,
-            "task_id":  self._task_id,
-            "job_id":   self._job_id,
-            "inputs":   inputs_payload,
+            "format":  format,
+            "task_id": self._task_id,
+            "job_id":  self._job_id,
         })
-        return DatasetWriter(self, namespace, id, r["version"], r["path"])
-
+        return DatasetWriter(self, namespace, id, r["version"], r["path"],
+                         inputs=inputs_payload)  # ← passati al writer
+    
     def last_version(self, namespace, id):
         """Return the latest committed version string for a dataset."""
         return self._get(f"/datasets/{_enc(namespace)}/{_enc(id)}/latest")["version"]

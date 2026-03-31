@@ -16,7 +16,7 @@ class RawDataExtract(Task):
                 time.sleep(1)
 
             with open(ctx.path, "w") as f:
-                f.write(f"Dati grezzi {self.params.source} per data {self.params.date}")
+                f.write(f"Dati grezzi nuovi {self.params.source} per data {self.params.date}")
             
             ctx.rows = 1 # Esempio
 
