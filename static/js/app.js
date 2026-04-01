@@ -61,7 +61,7 @@ const App = {
     
     onMounted(() => {
       refreshAll();
-      setInterval(refreshAll, 100000);
+      //setInterval(refreshAll, 10000);
     });
 
     return {

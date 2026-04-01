@@ -117,7 +117,7 @@ async def submit(request: Request):
     metadata = data.get("metadata", {})
     try:
         task = DynamicTask(spec)
-        job_id = f"job/{task.id}"
+        job_id = f"job:{task.id}"
         status = db.get_job_status(job_id)
 
         if status and status != 'SUCCESS' and status != 'FAILED':
@@ -201,7 +201,7 @@ async def get_namespaces():
 async def get_tasks():
     return db.list_tasks()
 
-@app.get('/api/jobs/{job_id:path}/tasks')
+@app.get('/api/jobs/{job_id}/tasks')
 async def get_job_tasks(job_id: str):
     tasks = db.list_tasks_by_job(job_id)
     return JSONResponse(tasks)
@@ -210,6 +210,9 @@ async def get_job_tasks(job_id: str):
 async def get_jobs():
     return db.list_jobs()
     
+@app.delete('/api/jobs/{job_id}')
+async def delete_job(job_id: str):
+    return db.delete_job(job_id)
    
 @app.post('/api/logs/{task_id}')
 async def receive_logs(task_id: str, request: Request):

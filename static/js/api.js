@@ -11,7 +11,12 @@ async function _post(url) {
   return r.json();
 }
 
-// namespace slashes stay as path separators, only encode colons (version timestamps)
+async function _delete(url) {
+  const r = await fetch(url, { method: 'DELETE' });
+  if (!r.ok) throw new Error(`DELETE ${url} → ${r.status}`);
+  return r.json();
+}
+
 function _encNs(s)  { return String(s); }
 function _encId(s)  { return encodeURIComponent(s); }
 function _encVer(s) { return String(s).replace(/:/g, '%3A'); }
@@ -28,6 +33,8 @@ export const api = {
   deleteTask:      (id) => _post(`/api/delete/task/${encodeURIComponent(id)}`),
   resetNamespace:  (ns) => _post(`/api/reset/namespace/${encodeURIComponent(ns)}`),
   deleteNamespace: (ns) => _post(`/api/delete/namespace/${encodeURIComponent(ns)}`),
+  
+  deleteJob: (jobId) => _delete(`/api/jobs/${encodeURIComponent(jobId)}`),
 
   // --- Catalog — namespaces ---
   catalogNamespaces:  ()                  => _get('/catalog/namespaces'),

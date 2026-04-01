@@ -67,7 +67,7 @@ class LineageInput(BaseModel):
 class ReserveRequest(BaseModel):
     format:  str               = Field("", example="csv")
     task_id: str               = Field("unknown", example="clean_erp")
-    job_id:  str               = Field("unknown", example="job/global_report")
+    job_id:  str               = Field("unknown", example="job:global_report")
 
 class CommitRequest(BaseModel):
     rows:    Optional[int]            = Field(None, example=1500)
@@ -98,7 +98,7 @@ class MaterializeRequest(BaseModel):
     params:      Dict[str, Any] = Field(default_factory=dict,
         example={"status": "available"})
     task_id:     str            = Field("unknown", example="ingest_orders")
-    job_id:      str            = Field("unknown", example="job/ingest")
+    job_id:      str            = Field("unknown", example="job:ingest")
         
 def _dataset_path(namespace, ds_id, version, fmt):
     safe_version = version.replace(":", "-")

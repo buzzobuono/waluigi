@@ -1,7 +1,10 @@
 // components/Jobs.js
+import { api } from '../api.js';
+
 export default {
   name: 'Jobs',
   props: { jobs: Array },
+  emits: ['refresh'],
   computed: {
     counts() {
       const c = { RUNNING: 0, SUCCESS: 0, FAILED: 0, PENDING: 0 };
@@ -10,17 +13,21 @@ export default {
     }
   },
   methods: {
-    statusBadge(status) {
-      const blink = status === 'RUNNING' ? ' blink' : '';
-      return `<span class="badge badge-${status}${blink}">${status}</span>`;
+    async deleteJob(jobId) {
+      if (!confirm(`Sei sicuro di voler eliminare il job "${jobId}" e tutti i suoi task?`)) return;
+      try {
+        await api.deleteJob(jobId);
+        this.$emit('refresh');
+      } catch (e) {
+        alert(`Errore durante l'eliminazione: ${e.message}`);
+      }
     }
   },
   template: `
     <div>
-      <!-- Stats -->
       <div class="row mb-3">
         <div class="col-6 col-sm-3" v-for="(val, key) in counts" :key="key">
-          <div class="info-box">
+          <div class="info-box shadow-none border">
             <span class="info-box-icon"
                   :class="{
                     'bg-warning': key==='RUNNING',
@@ -44,7 +51,6 @@ export default {
         </div>
       </div>
 
-      <!-- Table -->
       <div class="card card-outline">
         <div class="card-header">
           <h3 class="card-title"><i class="fas fa-briefcase mr-2"></i>Jobs</h3>
@@ -54,22 +60,41 @@ export default {
             <table class="table table-sm table-hover mb-0">
               <thead>
                 <tr>
-                  <th>Job ID</th>
+                  <th>Job ID (Click for DAG)</th>
                   <th>Status</th>
                   <th>Locked By</th>
                   <th>Locked Until</th>
+                  <th style="width: 80px;">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-if="!jobs || !jobs.length">
-                  <td colspan="4" class="text-center text-muted py-3">No jobs found</td>
+                  <td colspan="5" class="text-center text-muted py-3">No jobs found</td>
                 </tr>
-                <tr v-for="j in jobs" :key="j.job_id">
-                  <td style="font-family:monospace; font-size:0.8em;">{{ j.job_id }}</td>
-                  <td><span :class="['badge', 'badge-'+j.status, j.status==='RUNNING'?'blink':'']">{{ j.status }}</span></td>
-                  <td style="font-size:0.8em;">{{ j.locked_by || '—' }}</td>
-                  <td style="font-size:0.8em;">{{ j.locked_until || '—' }}</td>
+                
+                <tr v-for="j in jobs" :key="j.job_id" 
+                    style="cursor:pointer;" 
+                    @click="$router.push('/jobs/' + encodeURIComponent(j.job_id))">
+                  <td style="font-family:monospace; font-size:0.85em;">
+                    <i class="fas fa-project-diagram mr-2 text-muted"></i>
+                    <span class="text-primary font-weight-bold">{{ j.job_id }}</span>
+                  </td>
+                  <td>
+                    <span :class="['badge', 'badge-'+j.status, j.status==='RUNNING'?'blink':'']">
+                      {{ j.status }}
+                    </span>
+                  </td>
+                  <td style="font-size:0.8em;" class="text-muted">{{ j.locked_by || '—' }}</td>
+                  <td style="font-size:0.8em;" class="text-muted">{{ j.locked_until || '—' }}</td>
+                  <td class="text-center">
+                    <button class="btn btn-xs btn-outline-danger" 
+                            title="Delete Job"
+                            @click.stop="deleteJob(j.job_id)">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  </td>
                 </tr>
+
               </tbody>
             </table>
           </div>
