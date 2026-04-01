@@ -138,6 +138,17 @@ class WaluigiDB:
             columns = [column[0] for column in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
+    def list_tasks_by_job(self, job_id):
+        with self.conn:
+            cursor = self.conn.execute("""
+                SELECT id, namespace, status, last_update, parent_id, params, job_id
+                FROM tasks
+                WHERE job_id = ?
+                ORDER BY last_update ASC
+            """, (job_id,))
+            columns = [column[0] for column in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
     def list_namespaces(self):
         with self.conn:
             cursor = self.conn.execute("SELECT namespace, count(*) as task_count FROM tasks GROUP BY namespace")

@@ -201,10 +201,16 @@ async def get_namespaces():
 async def get_tasks():
     return db.list_tasks()
 
+@app.get('/api/jobs/{job_id:path}/tasks')
+async def get_job_tasks(job_id: str):
+    tasks = db.list_tasks_by_job(job_id)
+    return JSONResponse(tasks)
+ 
 @app.get('/api/jobs')
 async def get_jobs():
     return db.list_jobs()
     
+   
 @app.post('/api/logs/{task_id}')
 async def receive_logs(task_id: str, request: Request):
     data = await request.json()

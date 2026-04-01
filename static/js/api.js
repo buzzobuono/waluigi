@@ -43,4 +43,7 @@ export const api = {
   // --- Catalog — lineage (namespace + id + version required) ---
   catalogLineageUpstream:   (ns, id, ver) => _get(`/catalog/lineage/${_encNs(ns)}/${_encId(id)}/${_encVer(ver)}`),
   catalogLineageDownstream: (ns, id, ver) => _get(`/catalog/lineage/${_encNs(ns)}/${_encId(id)}/${_encVer(ver)}/downstream`),
+  
+  jobTasks: (jobId) => _get(`/api/jobs/${encodeURIComponent(jobId)}/tasks`),
+
 };

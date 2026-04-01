@@ -58,10 +58,14 @@ async def _catalog_get(path, params=None):
 async def api_jobs():
     return JSONResponse(await _boss_get('/api/jobs'))
 
+@app.get('/api/jobs/{job_id:path}/tasks')
+async def api_job_tasks(job_id: str):
+    return JSONResponse(await _boss_get(f'/api/jobs/{job_id}/tasks'))
+    
 @app.get('/api/tasks')
 async def api_tasks():
     return JSONResponse(await _boss_get('/api/tasks'))
-
+    
 @app.get('/api/workers')
 async def api_workers():
     return JSONResponse(await _boss_get('/api/workers'))

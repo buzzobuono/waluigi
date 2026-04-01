@@ -4,6 +4,7 @@ import Workers   from './components/Workers.js';
 import Resources from './components/Resources.js';
 import Catalog   from './components/Catalog.js';
 import Lineage   from './components/Lineage.js';
+import JobDag    from './components/JobDag.js';
 
 const routes = [
   { path: '/',          redirect: '/jobs' },
@@ -13,6 +14,7 @@ const routes = [
   { path: '/resources', component: Resources, meta: { title: 'Resources' } },
   { path: '/catalog',   component: Catalog,   meta: { title: 'Catalog' } },
   { path: '/lineage',   component: Lineage,   meta: { title: 'Lineage' } },
+  { path: '/jobs/:jobId', component: JobDag,  meta: { title: 'Job DAG' } },
 ];
 
 export const router = VueRouter.createRouter({
