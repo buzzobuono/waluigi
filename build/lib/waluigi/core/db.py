@@ -238,6 +238,32 @@ class WaluigiDB:
         columns = [column[0] for column in cursor.description]
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
     
+    def delete_job(self, job_id):
+        try:
+            with self.conn:
+                # 1. Tentiamo di eliminare i task associati solo se il job è cancellabile
+                # Usiamo una subquery per sicurezza: cancella task solo se il job è SUCCESS o FAILED
+                self.conn.execute("""
+                    DELETE FROM tasks 
+                    WHERE job_id = ? 
+                    AND job_id IN (SELECT job_id FROM jobs WHERE status IN ('SUCCESS', 'FAILED'))
+                """, (job_id,))
+
+                # 2. Tentiamo di eliminare il job aggiungendo lo stato nel WHERE
+                # Se è in RUNNING, rowcount sarà 0 perché la condizione non è soddisfatta
+                cursor = self.conn.execute("""
+                    DELETE FROM jobs 
+                    WHERE job_id = ? 
+                    AND status IN ('SUCCESS', 'FAILED')
+                """, (job_id,))
+
+                # Se rowcount è > 0, significa che il job esisteva ed era in uno stato valido
+                return cursor.rowcount > 0
+
+        except Exception as e:
+            print(f"Errore database: {e}")
+            return False
+        
     def register_worker(self, url, max_slots, free_slots):
         with self.conn:
             self.conn.execute("""

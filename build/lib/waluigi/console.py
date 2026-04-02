@@ -43,6 +43,12 @@ async def _boss_post(path, json=None):
         r.raise_for_status()
         return r.json()
 
+async def _boss_delete(path):
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.delete(f"{BOSS_URL}{path}")
+        r.raise_for_status()
+        return r.json()
+    
 async def _catalog_get(path, params=None):
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.get(f"{CATALOG_URL}{path}", params=params or {})
@@ -54,9 +60,14 @@ async def _catalog_get(path, params=None):
 # Boss proxy — /api/*
 # ---------------------------------------------------------------------------
 
+
 @app.get('/api/jobs/{job_id}/tasks')
 async def api_job_tasks(job_id: str):
     return JSONResponse(await _boss_get(f'/api/jobs/{job_id}/tasks'))
+
+@app.delete('/api/jobs/{job_id}')
+async def delete_job(job_id: str):
+    return JSONResponse(await _boss_delete(f'/api/jobs/{job_id}'))
 
 @app.get('/api/jobs')
 async def api_jobs():
@@ -75,7 +86,7 @@ async def api_resources():
     return JSONResponse(await _boss_get('/api/resources'))
 
 @app.get('/api/logs/{task_id}')
-async def api_logs(task_id: str, limit: int = 100):
+async def api_logs(task_id: str, limit: int = 20):
     return JSONResponse(await _boss_get(f'/api/logs/{task_id}?limit={limit}'))
 
 @app.post('/api/reset/task/{id}')

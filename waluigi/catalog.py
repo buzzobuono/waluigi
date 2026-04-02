@@ -91,14 +91,14 @@ class ScanRequest(BaseModel):
     namespace: Optional[str] = Field(None, example="analytics/erp/raw")
 
 class MaterializeRequest(BaseModel):
-    swagger_url: str            = Field(...,
-        example="https://petstore3.swagger.io/api/v3/openapi.json")
-    endpoint:    str            = Field(...,
-        example="/pet/findByStatus")
-    params:      Dict[str, Any] = Field(default_factory=dict,
-        example={"status": "available"})
-    task_id:     str            = Field("unknown", example="ingest_orders")
-    job_id:      str            = Field("unknown", example="job:ingest")
+    base_url:  str            = Field(...,
+        example="https://jsonplaceholder.typicode.com")
+    endpoint:  str            = Field(...,
+        example="/posts")
+    params:    Dict[str, Any] = Field(default_factory=dict,
+        example={"userId": 1})
+    task_id:   str            = Field("unknown", example="ingest_posts")
+    job_id:    str            = Field("unknown", example="job/ingest")
         
 def _dataset_path(namespace, ds_id, version, fmt):
     safe_version = version.replace(":", "-")
@@ -179,21 +179,10 @@ def _flatten(obj, prefix="", sep="_") -> dict:
     return out
 
 
-async def _fetch_and_write(swagger_url: str, endpoint: str,
+async def _fetch_and_write(base_url: str, endpoint: str,
                            params: dict, output_path: str):
-    """
-    Fetch all pages from endpoint, flatten JSON, write CSV.
-    Returns (rows_count, schema_dict).
-    """
-    async with httpx.AsyncClient(timeout=30) as client:
-        spec_r = await client.get(swagger_url)
-        spec_r.raise_for_status()
-        spec = spec_r.json()
-
-    base_url = _extract_base_url(spec, swagger_url)
-
-    records  = []
-    page     = 1
+    records = []
+    page    = 1
     next_url = f"{base_url}{endpoint}"
 
     async with httpx.AsyncClient(timeout=30) as client:
@@ -358,7 +347,6 @@ async def fail_version(namespace: str, id: str, version: str):
     db.fail(namespace, id, version)
     return JSONResponse({"status": "failed"})
 
-
 @app.post("/datasets/{namespace:path}/{id}/materialize", tags=["Datasets"],
           summary="Materialize a REST API endpoint into a dataset",
           description=(
@@ -366,6 +354,8 @@ async def fail_version(namespace: str, id: str, version: str):
               "fetches all pages from the given endpoint, "
               "flattens nested JSON, writes a single CSV file "
               "and registers it in the catalog. "
+              "If content is identical to the latest version, "
+              "no new version is created. "
               "Lineage source is recorded as the API URL."
           ))
 async def materialize(namespace: str, id: str, body: MaterializeRequest):
@@ -375,16 +365,9 @@ async def materialize(namespace: str, id: str, body: MaterializeRequest):
     try:
         db.ensure_namespace(namespace)
         db.reserve(namespace, id, version, path, "csv", body.task_id, body.job_id)
-
-        # lineage: source is the external API URL
-        db.insert_lineage(namespace, id, version, [{
-            "namespace": "__external__",
-            "id":        f"{body.swagger_url}#{body.endpoint}",
-            "version":   "live"
-        }])
-
+        
         rows, schema = await _fetch_and_write(
-            body.swagger_url, body.endpoint, body.params, path
+            body.base_url, body.endpoint, body.params, path
         )
 
         if rows == 0:
@@ -393,11 +376,36 @@ async def materialize(namespace: str, id: str, body: MaterializeRequest):
                 {"error": "no records returned from endpoint"}, status_code=422)
 
         file_hash = helper.compute_hash(path)
-        db.commit(namespace, id, version, file_hash, rows, schema)
+        result    = db.commit(namespace, id, version, file_hash, rows, schema)
 
-        log(f"Materialized {namespace}/{id}@{version} rows={rows} "
-            f"from {body.endpoint}")
+        if result is None:
+            db.fail(namespace, id, version)
+            return JSONResponse({"error": "commit failed"}, status_code=409)
 
+        if result["skipped"]:
+            try:
+                os.remove(path)
+            except Exception:
+                pass
+            log(f"Skipped materialize {namespace}/{id} — identical to latest, "
+                f"keeping version {result['version']}")
+            return JSONResponse({
+                "namespace": namespace,
+                "id":        id,
+                "version":   result["version"],
+                "rows":      rows,
+                "skipped":   True,
+                "reason":    "identical to latest committed version",
+                "source":    f"{body.base_url}#{body.endpoint}"
+            })
+
+        db.insert_lineage(namespace, id, version, [{
+            "namespace": "__external__",
+            "id":        f"{body.base_url}#{body.endpoint}",
+            "version":   "live"
+        }])
+
+        log(f"Materialized {namespace}/{id}@{version} rows={rows} from {body.endpoint}")
         return JSONResponse({
             "namespace": namespace,
             "id":        id,
@@ -405,7 +413,8 @@ async def materialize(namespace: str, id: str, body: MaterializeRequest):
             "path":      path,
             "rows":      rows,
             "hash":      file_hash,
-            "source":    f"{body.swagger_url}#{body.endpoint}"
+            "skipped":   False,
+            "source":    f"{body.base_url}#{body.endpoint}"
         }, status_code=201)
 
     except httpx.HTTPError as e:
@@ -419,7 +428,8 @@ async def materialize(namespace: str, id: str, body: MaterializeRequest):
         except Exception:
             pass
         return JSONResponse({"error": str(e)}, status_code=500)
-            
+
+
 @app.get("/datasets/{namespace:path}/{id}/resolve", tags=["Datasets"],
          summary="Resolve path of latest committed version")
 async def resolve_latest(namespace: str, id: str):
