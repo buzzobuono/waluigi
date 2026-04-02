@@ -112,28 +112,6 @@ def _to_dict(model):
         return model.model_dump()
     return model.dict()
     
-def _extract_base_url(spec: dict, swagger_url: str) -> str:
-    parsed = urlparse(swagger_url)
-    origin = f"{parsed.scheme}://{parsed.netloc}"
-
-    # OpenAPI v3
-    servers = spec.get("servers", [])
-    if servers:
-        url = servers[0].get("url", "").rstrip("/")
-        if url.startswith("http"):
-            return url
-        # relative URL — prepend origin
-        return f"{origin}{url}"
-
-    # Swagger v2
-    host      = spec.get("host", "")
-    base_path = spec.get("basePath", "/")
-    schemes   = spec.get("schemes", ["https"])
-    if host:
-        return f"{schemes[0]}://{host}{base_path}".rstrip("/")
-
-    # fallback
-    return origin
 
 def _extract_items(body) -> list:
     if isinstance(body, list):
@@ -350,8 +328,7 @@ async def fail_version(namespace: str, id: str, version: str):
 @app.post("/datasets/{namespace:path}/{id}/materialize", tags=["Datasets"],
           summary="Materialize a REST API endpoint into a dataset",
           description=(
-              "Reads the swagger spec to locate the base URL, "
-              "fetches all pages from the given endpoint, "
+              "Fetches all pages from the given endpoint, "
               "flattens nested JSON, writes a single CSV file "
               "and registers it in the catalog. "
               "If content is identical to the latest version, "

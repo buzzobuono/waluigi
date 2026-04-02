@@ -203,12 +203,6 @@ export default defineComponent({
       <div class="card card-outline mb-3">
         <div class="card-header d-flex justify-content-between align-items-center">
           <h3 class="card-title"><i class="fas fa-project-diagram mr-2"></i>Job: <code class="text-info">{{ jobId }}</code></h3>
-          <div class="btn-group">
-            <button class="btn btn-xs btn-outline-light" @click="loadTasks" :disabled="loading">
-              <i class="fas fa-sync-alt" :class="{'fa-spin': loading}"></i>
-            </button>
-            <router-link to="/jobs" class="btn btn-xs btn-outline-secondary">Back</router-link>
-          </div>
         </div>
       </div>
 
@@ -225,12 +219,12 @@ export default defineComponent({
         </div>
 
         <div class="card card-outline mt-4">
-          <div class="card-header"><h3 class="card-title"><i class="fas fa-sitemap mr-2"></i>Hierarchy & Details</h3></div>
+          <div class="card-header"><h3 class="card-title"><i class="fas fa-sitemap mr-2"></i>Task Hierarchy</h3></div>
           <div class="card-body p-0">
             <div class="table-responsive">
               <table class="table table-sm table-hover mb-0">
                 <thead>
-                  <tr><th>Task ID (Hierarchy)</th><th>Status</th><th>Params</th><th>Updated</th><th>Actions</th></tr>
+                  <tr><th>Task ID</th><th>Status</th><th>Params</th><th>Updated</th><th>Actions</th></tr>
                 </thead>
                 <tbody>
                   <task-row 

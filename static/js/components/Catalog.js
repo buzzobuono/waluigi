@@ -1,16 +1,20 @@
 // components/Catalog.js
 import { api } from '../api.js';
+import Materialize from './Materialize.js';
 
 const { defineComponent, ref, computed } = Vue;
 
 export default defineComponent({
   name: 'Catalog',
 
+  components: { Materialize },
+
   setup() {
     const nsStack    = ref([]);   // breadcrumb: [{path, name}]
     const children   = ref([]);   // child namespaces
     const datasets   = ref([]);   // datasets in current namespace
     const loading    = ref(false);
+    const materializeRef = ref(null);
 
     // detail panel
     const selNs      = ref(null); // selected dataset namespace
@@ -91,7 +95,7 @@ export default defineComponent({
       nsStack, children, datasets, loading,
       selNs, selId, history, metadata, detailOpen,
       currentNs,
-      navigateTo, navigateBreadcrumb, openDataset, closeDetail,
+      navigateTo, navigateBreadcrumb, openDataset, closeDetail, materializeRef,
     };
   },
 
@@ -100,7 +104,13 @@ export default defineComponent({
 
       <!-- Left: namespace tree + dataset list -->
       <div :class="detailOpen ? 'col-md-5' : 'col-12'">
-
+        <div class="card-header d-flex">
+          <span></span>
+          <button class="btn btn-xs btn-outline-light"
+                  @click="materializeRef && materializeRef.open(currentNs || '')">
+            <i class="fas fa-cloud-download-alt mr-1"></i>Materialize
+          </button>
+        </div>      
         <!-- Breadcrumb -->
         <ol class="breadcrumb" style="background:transparent; padding:0; margin-bottom:12px;">
           <li class="breadcrumb-item">
@@ -218,13 +228,7 @@ export default defineComponent({
                   </tr>
                   <tr v-for="v in history" :key="v.version">
                     <td style="font-family:monospace; font-size:0.75em;">
-                      <router-link
-                        v-if="v.version"
-                        :to="{ path: '/lineage', query: { ns: selNs, id: selId, ver: v.version } }"
-                        style="color:#d080ff;">
-                        {{ v.version }}
-                      </router-link>
-                      <span v-else>—</span>
+                      {{ v.version ? v.version.slice(0,19) : '—' }}
                     </td>
                     <td><span class="badge badge-secondary">{{ v.format || '—' }}</span></td>
                     <td style="font-size:0.82em;">
@@ -248,6 +252,7 @@ export default defineComponent({
         </div>
       </div>
 
+      <materialize ref="materializeRef" @done="loadNamespace(currentNs)"></materialize>
     </div>
   `
 });

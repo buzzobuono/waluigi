@@ -34,6 +34,7 @@ const App = {
 
     const navItems = [
       { path: '/jobs',      label: 'Jobs',      icon: 'fa-briefcase', key: 'jobs'    },
+      { path: '/namespaces',label: 'Namespaces',      icon: 'fa-tasks',     key: 'namespaces'   },
       { path: '/tasks',     label: 'Tasks',      icon: 'fa-tasks',     key: 'tasks'   },
       { path: '/workers',   label: 'Workers',    icon: 'fa-server',    key: 'workers' },
       { path: '/resources', label: 'Resources', icon: 'fa-chart-bar',       key: null      },

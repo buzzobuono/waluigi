@@ -1,3 +1,4 @@
+// components/Tasks.js
 import { api } from '../api.js';
 
 export default {
@@ -14,13 +15,32 @@ export default {
       READY: '#17a2b8',
       PENDING: '#6c757d',
     };
-    return { STATUS_COLOR };
+
+    // Estrazione del namespace dall'hash dell'URL (es: #/tasks?namespace=analytics)
+    const getFilterNs = () => {
+      const hash = window.location.hash || '';
+      const queryPart = hash.includes('?') ? hash.split('?')[1] : '';
+      const params = new URLSearchParams(queryPart);
+      return params.get('namespace');
+    };
+
+    return { 
+      STATUS_COLOR, 
+      filterNs: getFilterNs() 
+    };
   },
 
   computed: {
     byNamespace() {
       const map = {};
-      (this.tasks || []).forEach(t => {
+      const allTasks = this.tasks || [];
+      
+      // Se filterNs esiste, teniamo solo i task di quel namespace
+      const filtered = this.filterNs 
+        ? allTasks.filter(t => t.namespace === this.filterNs)
+        : allTasks;
+
+      filtered.forEach(t => {
         const ns = t.namespace || '(none)';
         if (!map[ns]) map[ns] = {};
         map[ns][t.id] = {
@@ -87,9 +107,9 @@ export default {
                 {{ task.id }}
               </a>
             </td>
-            <td class="text-muted" style="font-size:0.8em;">{{ task.params || '—' }}</td>
+            <td class="text-muted" style="font-size:0.82em;">{{ task.params || '—' }}</td>
             <td>
-              <span class="badge" :style="'background:' + (statusColors[task.status] || '#666') + '; color:#fff;'">
+              <span class="badge" :style="'background:' + (statusColors[task.status] || '#666') + '; color:#fff; font-size:0.75em; padding: 0.35em 0.6em;'">
                 {{ task.status }}
               </span>
             </td>
@@ -119,9 +139,16 @@ export default {
 
   template: `
     <div class="tasks-container">
-      <div v-if="!Object.keys(byNamespace).length" class="text-center p-5 text-muted">
-        <i class="fas fa-inbox fa-3x mb-3"></i>
-        <p>No tasks found in this view.</p>
+      <div v-if="filterNs" class="d-flex align-items-center mb-3">
+        <a href="#/namespaces" class="btn btn-xs btn-outline-light mr-3">
+          <i class="fas fa-arrow-left mr-1"></i> Back to Namespaces
+        </a>
+        <span class="text-muted">Filtered by: <code style="color:#ffc107;">{{ filterNs }}</code></span>
+      </div>
+
+      <div v-if="!Object.keys(byNamespace).length" class="text-center p-5 text-muted card card-outline">
+        <i class="fas fa-filter fa-3x mb-3" style="color: #444;"></i>
+        <p>No tasks found for namespace: <b>{{ filterNs || 'all' }}</b></p>
       </div>
 
       <div v-for="(tasks, ns) in byNamespace" :key="ns" class="card card-outline mb-4">

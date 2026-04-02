@@ -72,7 +72,11 @@ async def delete_job(job_id: str):
 @app.get('/api/jobs')
 async def api_jobs():
     return JSONResponse(await _boss_get('/api/jobs'))
-    
+
+@app.get('/api/namespaces')
+async def api_namespaces():
+    return JSONResponse(await _boss_get('/api/namespaces'))
+
 @app.get('/api/tasks')
 async def api_tasks():
     return JSONResponse(await _boss_get('/api/tasks'))

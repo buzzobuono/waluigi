@@ -1,3 +1,4 @@
+
 async function _get(url, params) {
   const qs = params ? '?' + new URLSearchParams(params).toString() : '';
   const r = await fetch(url + qs);
@@ -24,6 +25,7 @@ function _encVer(s) { return String(s).replace(/:/g, '%3A'); }
 export const api = {
   // --- Boss ---
   jobs:      () => _get('/api/jobs'),
+  namespaces: () => _get('/api/namespaces'),
   tasks:     () => _get('/api/tasks'),
   workers:   () => _get('/api/workers'),
   resources: () => _get('/api/resources'),
