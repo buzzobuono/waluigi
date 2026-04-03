@@ -21,11 +21,19 @@ const App = {
       logModalRef.value?.show(taskId);
     });
 
-    const counts = computed(() => ({
-      jobs:    jobs.value.length,
-      tasks:   tasks.value.length,
-      workers: workers.value.length,
-    }));
+    const counts = computed(() => {
+      // Calcola il numero di namespace unici presenti nei tasks
+      const uniqueNamespaces = new Set(
+        tasks.value.map(t => t.namespace).filter(ns => ns)
+      );
+
+      return {
+        jobs:       jobs.value.length,
+        tasks:      tasks.value.length,
+        workers:    workers.value.length,
+        namespaces: uniqueNamespaces.size
+      };
+    });
 
     const currentTitle = computed(() => {
       const route = router.currentRoute.value;
@@ -33,13 +41,12 @@ const App = {
     });
 
     const navItems = [
-      { path: '/jobs',      label: 'Jobs',      icon: 'fa-briefcase', key: 'jobs'    },
-      { path: '/namespaces',label: 'Namespaces',      icon: 'fa-tasks',     key: 'namespaces'   },
-      { path: '/tasks',     label: 'Tasks',      icon: 'fa-tasks',     key: 'tasks'   },
-      { path: '/workers',   label: 'Workers',    icon: 'fa-server',    key: 'workers' },
-      { path: '/resources', label: 'Resources', icon: 'fa-chart-bar',       key: null      },
-      { path: '/catalog',   label: 'Catalog',   icon: 'fa-database',       key: null      },
-      { path: '/lineage',   label: 'Lineage',   icon: 'fa-project-diagram',key: null      },
+      { path: '/jobs',       label: 'Jobs',       icon: 'fa-briefcase',     key: 'jobs'       },
+      { path: '/namespaces', label: 'Namespaces', icon: 'fa-layer-group',   key: 'namespaces' },
+      { path: '/workers',    label: 'Workers',    icon: 'fa-server',        key: 'workers'    },
+      { path: '/resources',  label: 'Resources',  icon: 'fa-chart-bar',      key: null         },
+      { path: '/catalog',    label: 'Catalog',    icon: 'fa-database',       key: null         },
+      { path: '/lineage',    label: 'Lineage',    icon: 'fa-project-diagram',key: null         },
     ];
 
     async function refreshAll() {
@@ -62,7 +69,6 @@ const App = {
     
     onMounted(() => {
       refreshAll();
-      //setInterval(refreshAll, 10000);
     });
 
     return {
@@ -75,7 +81,6 @@ const App = {
   template: `
     <div class="wrapper">
 
-      <!-- Navbar -->
       <nav class="main-header navbar navbar-expand navbar-dark wl-navbar">
         <ul class="navbar-nav">
           <li class="nav-item">
@@ -96,7 +101,6 @@ const App = {
         </ul>
       </nav>
 
-      <!-- Sidebar -->
       <aside class="main-sidebar elevation-4 wl-sidebar">
         <a href="/" class="brand-link text-center wl-brand">
           <span class="brand-text font-weight-bold wl-accent" style="font-size:1.1em;">🟣 Waluigi</span>
@@ -120,7 +124,6 @@ const App = {
         </div>
       </aside>
 
-      <!-- Content -->
       <div class="content-wrapper wl-content">
         <div class="content-header">
           <div class="container-fluid">
@@ -140,7 +143,6 @@ const App = {
         </section>
       </div>
 
-      <!-- Log Modal -->
       <log-modal ref="logModalRef"></log-modal>
 
       <footer class="main-footer wl-footer text-sm">

@@ -12,6 +12,7 @@ const routes = [
   { path: '/jobs',      component: Jobs,      meta: { title: 'Jobs' } },
   { path: '/namespaces', component: Namespaces, meta: { title: 'Namespaces' } },
   { path: '/tasks',     component: Tasks,     meta: { title: 'Tasks' } },
+  { path: '/tasks/:namespace+', component: Tasks, meta: { title: 'Tasks' } },
   { path: '/workers',   component: Workers,   meta: { title: 'Workers' } },
   { path: '/resources', component: Resources, meta: { title: 'Resources' } },
   { path: '/catalog',   component: Catalog,   meta: { title: 'Catalog' } },

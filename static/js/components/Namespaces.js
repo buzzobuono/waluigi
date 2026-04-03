@@ -2,11 +2,13 @@
 import { api } from '../api.js';
 
 const { defineComponent, ref, computed, onMounted } = Vue;
+const { useRouter } = VueRouter; // Assumendo l'uso di vue-router
 
 export default defineComponent({
   name: 'Namespaces',
 
   setup() {
+    const router     = useRouter(); 
     const items      = ref([]);   // Array di {namespace, task_count}
     const loading    = ref(false);
     const filterText = ref('');
@@ -30,9 +32,9 @@ export default defineComponent({
       return items.value.filter(it => it.namespace.toLowerCase().includes(q));
     });
 
-
+    // Navigazione programmatica al click sulla riga
     function openNamespace(nsName) {
-        window.location.hash = `#/tasks?namespace=${encodeURIComponent(nsName)}`;
+      router.push(`/tasks/${encodeURIComponent(nsName)}`);
     }
 
     onMounted(load);
@@ -79,9 +81,12 @@ export default defineComponent({
                       style="cursor:pointer;" @click="openNamespace(it.namespace)">
                     <td style="padding-left:15px;">
                       <i class="fas fa-folder mr-2" style="color:#d080ff;"></i>
-                      <span style="color: rgb(0, 212, 255); font-family: monospace; font-size: 0.82em;">
+                      
+                      <router-link :to="'/tasks/' + encodeURIComponent(it.namespace)" 
+                                   style="color: rgb(0, 212, 255); font-family: monospace; font-size: 0.82em; text-decoration:none;"
+                                   @click.stop>
                         {{ it.namespace }}
-                      </span>
+                      </router-link>
                     </td>
                     <td class="text-center">
                       <span class="badge badge-secondary" style="background:#4b0082; border:1px solid #d080ff;">
