@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from waluigi.core.catalog_db import CatalogDB
 from waluigi.core.catalog_helper import CatalogHelper
+import pandas as pd
 
 app = FastAPI(
     title="Waluigi Catalog",
@@ -233,6 +234,90 @@ async def update_namespace(ns: str, body: NamespaceUpdateRequest):
 # Routes — Datasets
 # ---------------------------------------------------------------------------
 
+@app.get("/datasets/{namespace:path}/{id}/{version}/preview", tags=["Datasets"])
+async def get_dataset_preview(
+    namespace: str, 
+    id: str, 
+    version: str, 
+    limit: int = 10, 
+    offset: int = 0
+):
+    import json
+    import numpy as np
+
+    record = db.get_version(namespace, id, version)
+    if not record:
+        return JSONResponse({"error": "version not found"}, status_code=404)
+    
+    path = record["path"]
+    fmt = record.get("format", "").lower()
+    
+    if not os.path.exists(path):
+        return JSONResponse({"error": f"file not found: {path}"}, status_code=404)
+
+    try:
+        # 1. Caricamento dati
+        if fmt == "csv":
+            # Per il CSV, leggere tutto come stringa è la prima linea di difesa
+            df = pd.read_csv(path, skiprows=range(1, offset + 1), nrows=limit, dtype=str)
+        elif fmt == "parquet":
+            full_df = pd.read_parquet(path)
+            df = full_df.iloc[offset : offset + limit]
+        else:
+            return JSONResponse({"error": f"Formato {fmt} non supportato"}, status_code=400)
+
+        # 2. Conversione in record grezzi
+        raw_records = df.to_dict(orient="records")
+        clean_data = []
+
+        # 3. BONIFICA NUCLEARE (Cella per cella)
+        # Intercettiamo i float che mandano in crash json.dumps
+        for row in raw_records:
+            clean_row = {}
+            for k, v in row.items():
+                # Gestione Nulli (NaN, None, NaT)
+                if pd.isna(v):
+                    clean_row[k] = None
+                    continue
+                
+                # Gestione Numeri "Radioattivi"
+                if isinstance(v, (float, int, np.number)):
+                    if not np.isfinite(v):
+                        clean_row[k] = None
+                    else:
+                        try:
+                            # Test di serializzazione immediato per la singola cella
+                            json.dumps(v)
+                            clean_row[k] = v
+                        except (ValueError, OverflowError):
+                            # Se il numero è reale ma "Out of range" per JSON, 
+                            # lo forziamo a stringa così non perdiamo il dato
+                            clean_row[k] = str(v)
+                else:
+                    # Stringhe e altri tipi sicuri
+                    clean_row[k] = v
+            clean_data.append(clean_row)
+
+        # 4. Risposta sicura
+        return JSONResponse({
+            "namespace": namespace,
+            "id": id,
+            "version": version,
+            "columns": df.columns.tolist(),
+            "data": clean_data,
+            "pagination": {
+                "limit": limit,
+                "offset": offset,
+                "count": len(clean_data)
+            }
+        })
+
+    except Exception as e:
+        import traceback
+        print("\n--- ERRORE DURANTE LA BONIFICA ---")
+        traceback.print_exc()
+        return JSONResponse({"error": f"Crash durante il processing: {str(e)}"}, status_code=500)
+    
 @app.post("/datasets/{namespace:path}/{id}/reserve", tags=["Datasets"],
           summary="Reserve a new dataset version",
           description="Phase 1 of two-phase write. Returns the path to write the file to.")

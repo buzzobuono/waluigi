@@ -2,7 +2,7 @@
 import { api } from '../api.js';
 import Materialize from './Materialize.js';
 
-const { defineComponent, ref, computed } = Vue;
+const { defineComponent, ref, computed, watch, onMounted } = Vue;
 
 export default defineComponent({
   name: 'Catalog',
@@ -10,6 +10,9 @@ export default defineComponent({
   components: { Materialize },
 
   setup() {
+    const route  = VueRouter.useRoute();
+    const router = VueRouter.useRouter();
+
     const nsStack    = ref([]);   // breadcrumb: [{path, name}]
     const children   = ref([]);   // child namespaces
     const datasets   = ref([]);   // datasets in current namespace
@@ -51,6 +54,7 @@ export default defineComponent({
     }
 
     async function openDataset(ns, id) {
+      router.push({ path: '/catalog', query: { ns, ds: id } });
       selNs.value      = ns;
       selId.value      = id;
       detailOpen.value = true;
@@ -63,6 +67,9 @@ export default defineComponent({
         ]);
         history.value  = Array.isArray(h) ? h : [];
         metadata.value = m || {};
+        if (history.value.length > 0) {
+            selVersion.value = history.value[0].version;
+        }
       } catch(e) {
         console.error('Dataset detail error', e);
       }
@@ -70,24 +77,78 @@ export default defineComponent({
 
     function navigateTo(ns) {
       nsStack.value.push({ path: ns.path, name: ns.name });
+      router.push({ path: '/catalog', query: { ns: ns.path } });
       loadNamespace(ns.path);
     }
 
     function navigateBreadcrumb(idx) {
       if (idx < 0) {
         nsStack.value = [];
+        router.push({ path: '/catalog' });
         loadNamespace(null);
       } else {
         nsStack.value = nsStack.value.slice(0, idx + 1);
-        loadNamespace(nsStack.value[idx].path);
+        const path = nsStack.value[idx].path;
+        router.push({ path: '/catalog', query: { ns: path } });
+        loadNamespace(path);
       }
+    }
+
+    function goBack() {
+      router.go(-1);
     }
 
     function closeDetail() {
       detailOpen.value = false;
       selNs.value = null;
       selId.value = null;
+      router.push({ path: '/catalog', query: { ns: currentNs.value || undefined } });
     }
+
+    onMounted(async () => {
+      const ns = route.query.ns;
+      const ds = route.query.ds;
+
+      if (ns) {
+        // ricostruisci il breadcrumb
+        const parts = ns.split('/');
+        nsStack.value = parts.map((name, i) => ({
+          path: parts.slice(0, i + 1).join('/'),
+          name
+        }));
+        await loadNamespace(ns);
+      } else {
+        loadNamespace(null);
+      }
+
+      if (ds && ns) {
+        await openDataset(ns, ds);
+      }
+    });
+
+    watch(() => route.query, async (q) => {
+      const ns = q.ns || null;
+      const ds = q.ds || null;
+
+      // risincronizza breadcrumb
+      if (ns) {
+        const parts = ns.split('/');
+        nsStack.value = parts.map((name, i) => ({
+          path: parts.slice(0, i + 1).join('/'),
+          name
+        }));
+        await loadNamespace(ns);
+      } else {
+        nsStack.value = [];
+        await loadNamespace(null);
+      }
+
+      if (ds && ns) {
+        await openDataset(ns, ds);
+      } else {
+        detailOpen.value = false;
+      }
+    }, { immediate: true });
 
     loadNamespace(null);
 
@@ -95,22 +156,23 @@ export default defineComponent({
       nsStack, children, datasets, loading,
       selNs, selId, history, metadata, detailOpen,
       currentNs,
-      navigateTo, navigateBreadcrumb, openDataset, closeDetail, materializeRef,
+      navigateTo, navigateBreadcrumb, openDataset, closeDetail, goBack, materializeRef,
     };
   },
 
   template: `
-    <div class="row">
+    <div class="d-flex align-items-center mb-3">
+        <button  class="btn btn-xs btn-outline-light mr-3" @click="goBack" title="Go Back">
+          <i class="fas fa-chevron-left mr-1"></i> Back
+        </button>
+        <button class="btn btn-xs btn-outline-light mr-3" @click="materializeRef && materializeRef.open(currentNs || '')">
+          <i class="fas fa-cloud-download-alt mr-1"></i>Materialize
+        </button>
+    </div>
 
+    <div class="row">
       <!-- Left: namespace tree + dataset list -->
       <div :class="detailOpen ? 'col-md-5' : 'col-12'">
-        <div class="card-header d-flex">
-          <span></span>
-          <button class="btn btn-xs btn-outline-light"
-                  @click="materializeRef && materializeRef.open(currentNs || '')">
-            <i class="fas fa-cloud-download-alt mr-1"></i>Materialize
-          </button>
-        </div>      
         <!-- Breadcrumb -->
         <ol class="breadcrumb" style="background:transparent; padding:0; margin-bottom:12px;">
           <li class="breadcrumb-item">
@@ -220,6 +282,7 @@ export default defineComponent({
                     <th>Hash</th>
                     <th>Task</th>
                     <th>Status</th>
+                    <th style="width: 80px;">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -228,7 +291,7 @@ export default defineComponent({
                   </tr>
                   <tr v-for="v in history" :key="v.version">
                     <td style="font-family:monospace; font-size:0.75em;">
-                      {{ v.version ? v.version.slice(0,19) : '—' }}
+                      {{ v.version ? v.version : '—' }}
                     </td>
                     <td><span class="badge badge-secondary">{{ v.format || '—' }}</span></td>
                     <td style="font-size:0.82em;">
@@ -242,6 +305,26 @@ export default defineComponent({
                       <span :class="['badge', v.status==='committed' ? 'badge-SUCCESS' : 'badge-PENDING']">
                         {{ v.status }}
                       </span>
+                    </td>
+                    <td class="text-center">
+                      <div class="btn-group">
+                        <router-link 
+                          :to="{ path: '/lineage', query: { ns: selNs, id: selId, ver: v.version } }"
+                          class="btn btn-xs btn-outline-primary" 
+                          title="View Lineage"
+                          style="color: #d080ff; border-color: rgba(208, 128, 255, 0.4);">
+                          <i class="fas fa-sitemap"></i>
+                        </router-link>
+
+                        <router-link 
+                          :to="'/datasets/' + selNs + '/' + selId + '/' + v.version"
+                          class="btn btn-xs btn-outline-info" 
+                          title="View Preview"
+                          style="color: #00d4ff; border-color: rgba(0, 212, 255, 0.4);">
+                          <i class="fas fa-eye"></i>
+                        </router-link>
+                        
+                      </div>
                     </td>
                   </tr>
                 </tbody>

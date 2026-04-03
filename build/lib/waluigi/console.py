@@ -3,7 +3,7 @@ import socket
 import configargparse
 import uvicorn
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -49,6 +49,12 @@ async def _boss_delete(path):
         r.raise_for_status()
         return r.json()
     
+async def _catalog_post(path, json=None):
+    async with httpx.AsyncClient(timeout=60) as client:
+        r = await client.post(f"{CATALOG_URL}{path}", json=json)
+        r.raise_for_status()
+        return r.json()
+
 async def _catalog_get(path, params=None):
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.get(f"{CATALOG_URL}{path}", params=params or {})
@@ -74,7 +80,7 @@ async def api_jobs():
     return JSONResponse(await _boss_get('/api/jobs'))
 
 @app.get('/api/namespaces')
-async def api_namespaces():
+async def api_jobs():
     return JSONResponse(await _boss_get('/api/namespaces'))
 
 @app.get('/api/tasks')
@@ -146,6 +152,11 @@ async def catalog_lineage_downstream(ns: str, id: str, version: str):
 async def catalog_lineage_upstream(ns: str, id: str, version: str):
     return JSONResponse(await _catalog_get(f'/lineage/{ns}/{id}/{version}'))
 
+
+@app.post('/catalog/datasets/{ns:path}/{id}/materialize')
+async def catalog_materialize(ns: str, id: str, request: Request):
+    body = await request.json()
+    return JSONResponse(await _catalog_post(f'/datasets/{ns}/{id}/materialize', body))
 
 # ---------------------------------------------------------------------------
 # Static assets — before SPA fallback

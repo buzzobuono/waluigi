@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from waluigi.core.catalog_db import CatalogDB
 from waluigi.core.catalog_helper import CatalogHelper
+import pandas as pd
 
 app = FastAPI(
     title="Waluigi Catalog",
@@ -266,6 +267,41 @@ async def update_namespace(ns: str, body: NamespaceUpdateRequest):
 # Routes — Datasets
 # ---------------------------------------------------------------------------
 
+@app.get("/datasets/{namespace:path}/{id}/{version}/preview", tags=["Datasets"])
+async def get_dataset_preview(namespace: str, id: str, version: str, limit: int = 10):
+    record = db.get_version(namespace, id, version)
+    if not record:
+        return JSONResponse({"error": "version not found"}, status_code=404)
+    
+    path = record["path"]
+    fmt = record.get("format", "").lower()
+    
+    if not os.path.exists(path):
+        return JSONResponse({"error": "file not found on disk"}, status_code=404)
+
+    try:
+        if fmt == "csv":
+            df = pd.read_csv(path, nrows=limit)
+        elif fmt == "parquet":
+            df = pd.read_parquet(path).head(limit)
+        elif fmt == "json":
+            df = pd.read_json(path).head(limit)
+        else:
+            return JSONResponse({"error": f"Preview not supported for format: {fmt}"}, status_code=400)
+        
+        # Convertiamo NaN in None per JSON compatibility
+        data = df.where(pd.notnull(df), None).to_dict(orient="records")
+        columns = df.columns.tolist()
+        
+        return JSONResponse({
+            "columns": columns,
+            "data": data,
+            "total_rows": record.get("rows"),
+            "format": fmt
+        })
+    except Exception as e:
+        return JSONResponse({"error": f"Failed to read file: {str(e)}"}, status_code=500)
+    
 @app.post("/datasets/{namespace:path}/{id}/reserve", tags=["Datasets"],
           summary="Reserve a new dataset version",
           description="Phase 1 of two-phase write. Returns the path to write the file to.")
