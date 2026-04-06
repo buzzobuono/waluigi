@@ -1,13 +1,21 @@
-// components/Tasks.js
 import { api } from '../api.js';
+import BasePage from './BasePage.js';
+import BasePanel from './BasePanel.js';
+import BaseTable from './BaseTable.js';
+import LogModal from './LogModal.js';
+import BaseButton from './BaseButton.js';
+import BaseButtonGroup from './BaseButtonGroup.js';
 
 export default {
   name: 'Tasks',
-  props: { tasks: Array },
+  props: { tasks: Array, loading: Boolean },
+  components: { BasePage, BasePanel, BaseTable, LogModal, BaseButton, BaseButtonGroup },
   emits: ['refresh'],
-  inject: ['showLogs'],
 
-  setup() {
+  setup(props, { emit }) {
+    const route = VueRouter.useRoute();
+    const logModalRef = Vue.ref(null);
+
     const STATUS_COLOR = {
       SUCCESS: '#28a745',
       FAILED:  '#dc3545',
@@ -16,9 +24,46 @@ export default {
       PENDING: '#6c757d',
     };
 
-    const route = VueRouter.useRoute();
+    const columns = [
+      { key: 'id', label: 'Task ID' },
+      { key: 'params', label: 'Params' },
+      { key: 'status', label: 'Status' },
+      { key: 'update', label: 'Last Update' },
+      { key: 'actions', label: 'Actions', class: 'text-right pr-3' }
+    ];
 
-    return { STATUS_COLOR, route };
+    const resetTask = async (id) => {
+      if (!confirm(`Reset task "${id}"?`)) return;
+      await api.resetTask(id);
+      emit('refresh');
+    };
+
+    const deleteTask = async (id) => {
+      if (!confirm(`Delete task "${id}"?`)) return;
+      await api.deleteTask(id);
+      emit('refresh');
+    };
+
+    const resetNs = async (ns) => {
+      if (!confirm(`Reset all in "${ns}"?`)) return;
+      await api.resetNamespace(ns);
+      emit('refresh');
+    };
+
+    const deleteNs = async (ns) => {
+      if (!confirm(`Delete all in "${ns}"?`)) return;
+      await api.deleteNamespace(ns);
+      emit('refresh');
+    };
+
+    const openLogs = (id) => {
+      if (logModalRef.value) logModalRef.value.show(id);
+    };
+
+    return { 
+      columns, STATUS_COLOR, route, logModalRef, 
+      resetTask, deleteTask, resetNs, deleteNs, openLogs 
+    };
   },
 
   computed: {
@@ -36,118 +81,126 @@ export default {
       filtered.forEach(t => {
         const ns = t.namespace || '(none)';
         if (!map[ns]) map[ns] = [];
-        map[ns].push({
-          id:     t.id,
-          params: t.params,
-          status: t.status,
-          update: t.last_update
-        });
+        map[ns].push(t);
       });
       return map;
     }
   },
 
-  methods: {
-    async resetTask(id) {
-      if (!confirm(`Reset task "${id}"?`)) return;
-      await api.resetTask(id);
-      this.$emit('refresh');
-    },
-    async deleteTask(id) {
-      if (!confirm(`Delete task "${id}"?`)) return;
-      await api.deleteTask(id);
-      this.$emit('refresh');
-    },
-    async resetNs(ns) {
-      if (!confirm(`Reset all tasks in namespace "${ns}"?`)) return;
-      await api.resetNamespace(ns);
-      this.$emit('refresh');
-    },
-    async deleteNs(ns) {
-      if (!confirm(`Delete all tasks in namespace "${ns}"?`)) return;
-      await api.deleteNamespace(ns);
-      this.$emit('refresh');
-    }
-  },
-
   template: `
-    <div>
-      <div v-if="filterNs" class="d-flex align-items-center mb-3">
-          <router-link to="/namespaces" class="btn btn-xs btn-outline-light mr-3">
-              <i class="fas fa-arrow-left mr-1"></i>Back
-          </router-link>
+    <base-page 
+      :title="filterNs ? 'Tasks in ' + filterNs : 'All Tasks'"
+      :subtitle="filterNs ? 'Namespace View' : 'Global View'"
+      icon="fas fa-tasks"
+    >
+      
+      <template #actions>
+         <base-button 
+            v-if="filterNs" 
+            label="Back" 
+            icon="fas fa-arrow-left" 
+            color="outline-light" 
+            size="sm"
+            class="mr-2"
+            @click="$router.push('/namespaces')"
+          />
+          
+          <base-button 
+            label="Update" 
+            class="ml-auto"
+            icon="fas fa-sync-alt" 
+            color="outline-primary" 
+            size="sm"
+            :loading="loading"
+            @click="$emit('refresh')"
+          />
+  
+      </template>
+
+      <div v-if="!Object.keys(byNamespace).length" class="text-center py-5 text-muted">
+        <i class="fas fa-filter fa-3x mb-3 opacity-50"></i>
+        <p>No tasks found for this selection.</p>
       </div>
 
-      <div v-if="!Object.keys(byNamespace).length" class="card card-outline text-center p-5 text-muted">
-          <i class="fas fa-filter fa-3x mb-3"></i>
-          <p>No tasks found<span v-if="filterNs"> for namespace <b>{{ filterNs }}</b></span>.</p>
-      </div>
+      <base-panel 
+        v-for="(taskList, ns) in byNamespace" 
+        :key="ns" 
+        :no-padding="true"
+        class="mb-4"
+      >
+        <template #title>
+          <i class="fas fa-layer-group mr-2 text-warning"></i>
+          <span class="font-weight-bold">Namespace: </span>
+          <code class="ml-1 text-warning">{{ ns }}</code>
+        </template>
 
-      <div v-for="(taskList, ns) in byNamespace" :key="ns" class="card card-outline mb-4">
-          <div class="card-header d-flex justify-content-between align-items-center">
-              <h3 class="card-title">
-                  <i class="fas fa-layer-group mr-2 text-warning"></i>
-                  <span class="font-weight-bold">Namespace: </span>
-                  <router-link :to="'/tasks/' + ns" class="ns-header-yellow ml-1 font-weight-bold" style="font-size: 1.1em;">
-                      {{ ns }}
-                  </router-link>
-              </h3>
-              <div class="btn-group">
-                  <button class="btn btn-xs btn-outline-warning mr-1" @click="resetNs(ns)">
-                      <i class="fas fa-history mr-1"></i>Reset All
-                  </button>
-                  <button class="btn btn-xs btn-outline-danger" @click="deleteNs(ns)">
-                      <i class="fas fa-trash-alt mr-1"></i>Delete All
-                  </button>
-              </div>
-          </div>
+        <template #tools>
+          <base-button-group class="ml-auto">
+            <base-button 
+              label="Reset"
+              size="sm"
+              icon="fas fa-history" 
+              color="outline-warning" 
+              @click="resetNs(ns)"
+            />
+            <base-button 
+              label="Delete"
+              size="sm"
+              icon="fas fa-trash-alt" 
+              color="outline-danger" 
+              @click="deleteNs(ns)"
+            />
+          </base-button-group>
+        </template>
 
-          <div class="card-body p-0">
-              <div class="table-responsive">
-                  <table class="table table-sm table-hover mb-0">
-                      <thead>
-                          <tr>
-                              <th style="width:35%; padding-left:15px;">Task ID</th>
-                              <th style="width:25%">Params</th>
-                              <th style="width:10%">Status</th>
-                              <th style="width:20%">Last Update</th>
-                              <th style="width:10%" class="text-right pr-3">Actions</th>
-                          </tr>
-                      </thead>
-                      <tbody>
-                          <tr v-for="task in taskList" :key="task.id">
-                              <td class="pl-3" style="font-family: monospace; font-size: 0.85em;">
-                                  <a href="#" @click.prevent="showLogs(task.id)" style="color: #00d4ff; font-weight: 500;">
-                                      {{ task.id }}
-                                  </a>
-                              </td>
-                              <td class="info-box-text" style="font-size: 0.82em;">
-                                  {{ task.params || '—' }}
-                              </td>
-                              <td>
-                                  <span class="badge" :class="'badge-' + task.status" style="font-size: 0.75em; padding: 0.35em 0.6em;">
-                                      {{ task.status }}
-                                  </span>
-                              </td>
-                              <td class="info-box-text" style="font-size: 0.8em;">
-                                  {{ task.update || '—' }}
-                              </td>
-                              <td class="text-right pr-3">
-                                  <div class="btn-group">
-                                      <button class="btn btn-xs btn-outline-warning" title="Reset" @click="resetTask(task.id)">
-                                          <i class="fas fa-undo"></i>
-                                      </button>
-                                      <button class="btn btn-xs btn-outline-danger" title="Delete" @click="deleteTask(task.id)">
-                                          <i class="fas fa-trash"></i>
-                                      </button>
-                                  </div>
-                              </td>
-                          </tr>
-                      </tbody>
-                  </table>
-              </div>
-          </div>
-      </div>
-    </div>
+        <base-table :columns="columns" :items="taskList">
+          
+          <template #cell(id)="{ item }">
+            <a href="#" @click.prevent="openLogs(item.id)" 
+               class="wl-accent font-weight-bold">
+              {{ item.id }}
+            </a>
+          </template>
+
+          <template #cell(params)="{ item }">
+            <span class="text-muted small" style="word-break: break-all;">
+              {{ item.params || '—' }}
+            </span>
+          </template>
+
+          <template #cell(status)="{ item }">
+            <span class="badge shadow-sm" :style="{ background: STATUS_COLOR[item.status], color: '#fff', minWidth: '70px' }">
+              {{ item.status }}
+            </span>
+          </template>
+
+          <template #cell(update)="{ item }">
+            <span class="text-muted small">
+              <i class="far fa-clock mr-1"></i>{{ item.last_update || '—' }}
+            </span>
+          </template>
+
+          <template #cell(actions)="{ item }">
+            <base-button-group>
+              <base-button 
+                icon="fas fa-undo" 
+                color="outline-warning" 
+                title="Reset Task"
+                @click="resetTask(item.id)"
+              />
+              <base-button 
+                icon="fas fa-trash" 
+                color="outline-danger" 
+                title="Delete Task"
+                @click="deleteTask(item.id)"
+              />
+            </base-button-group>
+          </template>
+
+        </base-table>
+      </base-panel>
+
+      <log-modal ref="logModalRef" />
+    </base-page>
   `
 };

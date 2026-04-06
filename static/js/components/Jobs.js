@@ -1,17 +1,50 @@
-// components/Jobs.js
 import { api } from '../api.js';
+import BasePage from './BasePage.js';
+import BasePanel from './BasePanel.js';
+import BaseTable from './BaseTable.js';
+import BaseInfoBox from './BaseInfoBox.js';
+import BaseButton from './BaseButton.js';
+import BaseButtonGroup from './BaseButtonGroup.js';
 
 export default {
   name: 'Jobs',
-  props: { jobs: Array },
+  props: { 
+    jobs: { type: Array, default: () => [] },
+    loading: { type: Boolean, default: false }
+  },
+  components: { 
+    BasePage, BasePanel, BaseTable, BaseInfoBox, 
+    BaseButton, BaseButtonGroup 
+  },
   emits: ['refresh'],
+
+  setup() {
+    const columns = [
+      { key: 'job_id', label: 'Job ID' },
+      { key: 'status', label: 'Status' },
+      { key: 'locked_by', label: 'Locked By' },
+      { key: 'locked_until', label: 'Locked Until' },
+      { key: 'actions', label: 'Actions', class: 'text-right pr-3' }
+    ];
+
+    const STATUS_MAP = {
+      RUNNING: { color: 'warning', icon: 'fas fa-spinner fa-spin' },
+      SUCCESS: { color: 'success', icon: 'fas fa-check' },
+      FAILED:  { color: 'danger',  icon: 'fas fa-times' },
+      PENDING: { color: 'secondary', icon: 'fas fa-clock' }
+    };
+
+    return { columns, STATUS_MAP };
+  },
+
   computed: {
     counts() {
       const c = { RUNNING: 0, SUCCESS: 0, FAILED: 0, PENDING: 0 };
-      (this.jobs || []).forEach(j => { if (c[j.status] !== undefined) c[j.status]++; });
+      this.jobs.forEach(j => { if (c[j.status] !== undefined) c[j.status]++; });
       return c;
     }
   },
+
   methods: {
     async deleteJob(jobId) {
       if (!confirm(`Sei sicuro di voler eliminare il job "${jobId}" e tutti i suoi task?`)) return;
@@ -23,83 +56,84 @@ export default {
       }
     }
   },
+
   template: `
-    <div>
-      <div class="row mb-3">
-        <div class="col-6 col-sm-3" v-for="(val, key) in counts" :key="key">
-          <div class="info-box shadow-none border">
-            <span class="info-box-icon"
-                  :class="{
-                    'bg-warning': key==='RUNNING',
-                    'bg-success': key==='SUCCESS',
-                    'bg-danger':  key==='FAILED',
-                    'bg-secondary': key==='PENDING'
-                  }">
-              <i class="fas"
-                 :class="{
-                   'fa-spinner fa-spin': key==='RUNNING',
-                   'fa-check':  key==='SUCCESS',
-                   'fa-times':  key==='FAILED',
-                   'fa-clock':  key==='PENDING'
-                 }"></i>
-            </span>
-            <div class="info-box-content">
-              <span class="info-box-text">{{ key }}</span>
-              <span class="info-box-number">{{ val }}</span>
+    <base-page 
+      title="Jobs" 
+      subtitle="Job monitoring and managememt"
+      icon="fas fa-briefcase"
+      :loading="loading && !jobs.length"
+    >
+      
+      <template #actions>
+        <div class="row w-100 m-0">
+          <div class="col-6 col-md-3 px-1" v-for="(val, key) in counts" :key="key">
+            <base-info-box 
+              :label="key" 
+              :value="val" 
+              :icon="STATUS_MAP[key].icon" 
+              :color="STATUS_MAP[key].color" 
+            />
+          </div>
+        </div>
+        
+         <base-button 
+            label="Update"
+            icon="fas fa-sync-alt" 
+            color="outline-primary" 
+            size="sm"
+            class="ml-auto"
+            :loading="loading"
+            @click="$emit('refresh')"
+          />
+  
+      </template>
+
+      <base-panel :no-padding="true">
+        <base-table 
+          :columns="columns" 
+          :items="jobs"
+        >
+          
+          <template #cell(job_id)="{ item }">
+            <div class="py-1 text-nowrap">
+              <i class="fas fa-project-diagram mr-2 text-muted"></i>
+              <router-link 
+                :to="'/jobs/' + encodeURIComponent(item.job_id)" 
+                class="wl-accent font-weight-bold"
+              >
+                {{ item.job_id }}
+              </router-link>
             </div>
-          </div>
-        </div>
-      </div>
+          </template>
 
-      <div class="card card-outline">
-        <div class="card-header">
-          <h3 class="card-title"><i class="fas fa-briefcase mr-2"></i>Jobs</h3>
-        </div>
-        <div class="card-body p-0">
-          <div class="table-responsive">
-            <table class="table table-sm table-hover mb-0">
-              <thead>
-                <tr>
-                  <th>Job ID (Click for DAG)</th>
-                  <th>Status</th>
-                  <th>Locked By</th>
-                  <th>Locked Until</th>
-                  <th style="width: 80px;">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-if="!jobs || !jobs.length">
-                  <td colspan="5" class="text-center text-muted py-3">No jobs found</td>
-                </tr>
-                
-                <tr v-for="j in jobs" :key="j.job_id" 
-                    style="cursor:pointer;" 
-                    @click="$router.push('/jobs/' + encodeURIComponent(j.job_id))">
-                  <td style="font-family:monospace; font-size:0.85em;">
-                    <i class="fas fa-project-diagram mr-2 text-muted"></i>
-                    <span class="text-primary font-weight-bold">{{ j.job_id }}</span>
-                  </td>
-                  <td>
-                    <span :class="['badge', 'badge-'+j.status, j.status==='RUNNING'?'blink':'']">
-                      {{ j.status }}
-                    </span>
-                  </td>
-                  <td style="font-size:0.8em;" class="text-muted">{{ j.locked_by || '—' }}</td>
-                  <td style="font-size:0.8em;" class="text-muted">{{ j.locked_until || '—' }}</td>
-                  <td class="text-center">
-                    <button class="btn btn-xs btn-outline-danger" 
-                            title="Delete Job"
-                            @click.stop="deleteJob(j.job_id)">
-                      <i class="fas fa-trash"></i>
-                    </button>
-                  </td>
-                </tr>
+          <template #cell(status)="{ item }">
+            <span :class="['badge shadow-sm', 'badge-' + STATUS_MAP[item.status].color, item.status === 'RUNNING' ? 'blink' : '']"
+                  style="min-width: 80px;">
+              {{ item.status }}
+            </span>
+          </template>
 
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
+          <template #cell(locked_by)="{ item }">
+            <span class="text-muted small">{{ item.locked_by || '—' }}</span>
+          </template>
+
+          <template #cell(locked_until)="{ item }">
+            <span class="text-muted small">{{ item.locked_until || '—' }}</span>
+          </template>
+
+          <template #cell(actions)="{ item }">
+            <base-button 
+              icon="fas fa-trash" 
+              color="outline-danger" 
+              title="Delete Job"
+              @click.stop="deleteJob(item.job_id)"
+            />
+          </template>
+
+        </base-table>
+      </base-panel>
+
+    </base-page>
   `
 };

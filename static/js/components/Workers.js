@@ -1,87 +1,100 @@
-// components/Workers.js
+import BasePage from './BasePage.js';
+import BasePanel from './BasePanel.js';
+import BaseTable from './BaseTable.js';
+import BaseInfoBox from './BaseInfoBox.js';
+import BaseButton from './BaseButton.js';
+
 export default {
   name: 'Workers',
-  props: { workers: Array },
+  props: { 
+    workers: { type: Array, default: () => [] },
+    loading: { type: Boolean, default: false } 
+  },
+  components: { BasePage, BasePanel, BaseTable, BaseInfoBox, BaseButton },
+
+  setup() {
+    const columns = [
+      { key: 'url', label: 'URL' },
+      { key: 'status', label: 'Status' },
+      { key: 'slots', label: 'Slots (Used/Max)', class: 'text-center' },
+      { key: 'last_seen', label: 'Last Seen' }
+    ];
+
+    return { columns };
+  },
+
   computed: {
-    totalSlots() { return (this.workers || []).reduce((s, w) => s + (w.max_slots || 0), 0); },
-    freeSlots()  { return (this.workers || []).reduce((s, w) => s + (w.free_slots || 0), 0); },
+    totalSlots() { return this.workers.reduce((s, w) => s + (w.max_slots || 0), 0); },
+    freeSlots()  { return this.workers.reduce((s, w) => s + (w.free_slots || 0), 0); },
     busySlots()  { return this.totalSlots - this.freeSlots; }
   },
-  template: `
-    <div>
-      <!-- Stats -->
-      <div class="row mb-3">
-        <div class="col-6 col-sm-3">
-          <div class="info-box">
-            <span class="info-box-icon bg-success"><i class="fas fa-server"></i></span>
-            <div class="info-box-content">
-              <span class="info-box-text">Workers</span>
-              <span class="info-box-number">{{ (workers || []).length }}</span>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-sm-3">
-          <div class="info-box">
-            <span class="info-box-icon bg-info"><i class="fas fa-puzzle-piece"></i></span>
-            <div class="info-box-content">
-              <span class="info-box-text">Total Slots</span>
-              <span class="info-box-number">{{ totalSlots }}</span>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-sm-3">
-          <div class="info-box">
-            <span class="info-box-icon bg-warning"><i class="fas fa-circle"></i></span>
-            <div class="info-box-content">
-              <span class="info-box-text">Free Slots</span>
-              <span class="info-box-number">{{ freeSlots }}</span>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-sm-3">
-          <div class="info-box">
-            <span class="info-box-icon bg-danger"><i class="fas fa-minus-circle"></i></span>
-            <div class="info-box-content">
-              <span class="info-box-text">Busy Slots</span>
-              <span class="info-box-number">{{ busySlots }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <!-- Table -->
-      <div class="card card-outline">
-        <div class="card-header">
-          <h3 class="card-title"><i class="fas fa-server mr-2"></i>Workers</h3>
-        </div>
-        <div class="card-body p-0">
-          <div class="table-responsive">
-            <table class="table table-sm table-hover mb-0">
-              <thead>
-                <tr>
-                  <th>URL</th>
-                  <th>Status</th>
-                  <th>Max Slots</th>
-                  <th>Free Slots</th>
-                  <th>Last Seen</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-if="!workers || !workers.length">
-                  <td colspan="5" class="text-center text-muted py-3">No workers registered</td>
-                </tr>
-                <tr v-for="w in workers" :key="w.url">
-                  <td style="font-family:monospace; font-size:0.85em;">{{ w.url }}</td>
-                  <td><span :class="['badge', 'badge-'+(w.status||'ALIVE')]">{{ w.status || 'ALIVE' }}</span></td>
-                  <td>{{ w.max_slots }}</td>
-                  <td>{{ w.free_slots }}</td>
-                  <td style="font-size:0.8em;">{{ w.last_seen || '—' }}</td>
-                </tr>
-              </tbody>
-            </table>
+  template: `
+    <base-page 
+      title="Workers" 
+      subtitle="Stato dei nodi e degli slot"
+      icon="fas fa-server"
+      :loading="loading && !workers.length"
+    >
+      
+      <template #actions>
+        <div class="row w-100 m-0">
+          <div class="col-6 col-md-3 px-1">
+            <base-info-box label="Workers" :value="workers.length" icon="fas fa-server" color="success" />
+          </div>
+          <div class="col-6 col-md-3 px-1">
+            <base-info-box label="Busy Slots" :value="busySlots" icon="fas fa-th-large" color="danger" />
+          </div>
+          <div class="col-6 col-md-3 px-1">
+            <base-info-box label="Free Slots" :value="freeSlots" icon="fas fa-check-circle" color="warning" />
+          </div>
+          <div class="col-6 col-md-3 px-1">
+            <base-info-box label="Total" :value="totalSlots" icon="fas fa-layer-group" color="info" />
           </div>
         </div>
-      </div>
-    </div>
+        
+          <base-button 
+            icon="fas fa-sync-alt" 
+            color="outline-primary" 
+            size="sm"
+            label="Update"
+            class="ml-auto"
+            :loading="loading"
+            @click="$emit('refresh')"
+          />
+        
+      </template>
+
+      <base-panel :no-padding="true">
+        <base-table :columns="columns" :items="workers">
+          
+          <template #cell(url)="{ item }">
+            <code class="wl-accent">{{ item.url }}</code>
+          </template>
+
+          <template #cell(status)="{ item }">
+            <span :class="['badge', item.status === 'ALIVE' ? 'badge-success' : 'badge-danger']">
+              {{ item.status || 'ALIVE' }}
+            </span>
+          </template>
+
+          <template #cell(slots)="{ item }">
+            <div class="text-center">
+              <span class="text-danger font-weight-bold">{{ item.max_slots - item.free_slots }}</span>
+              <span class="text-mutedmx-1">/</span>
+              <span class="text-info font-weight-bold">{{ item.max_slots }}</span>
+            </div>
+          </template>
+
+          <template #cell(last_seen)="{ item }">
+            <span class="text-muted small">
+              <i class="far fa-clock mr-1"></i>{{ item.last_seen || '—' }}
+            </span>
+          </template>
+
+        </base-table>
+      </base-panel>
+
+    </base-page>
   `
 };

@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from waluigi.core.catalog_db import CatalogDB
 from waluigi.core.catalog_helper import CatalogHelper
-import pandas as pd
+#import pandas as pd
 
 app = FastAPI(
     title="Waluigi Catalog",

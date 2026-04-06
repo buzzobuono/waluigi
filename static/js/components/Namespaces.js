@@ -1,26 +1,37 @@
-// components/Namespaces.js
 import { api } from '../api.js';
+import BasePage from './BasePage.js';
+import BasePanel from './BasePanel.js';
+import BaseTable from './BaseTable.js';
+import BaseButton from './BaseButton.js';
+import BaseSearch from './BaseSearch.js'; // <-- Import nuovo
 
 const { defineComponent, ref, computed, onMounted } = Vue;
-const { useRouter } = VueRouter; // Assumendo l'uso di vue-router
+const { useRouter } = VueRouter;
 
 export default defineComponent({
   name: 'Namespaces',
+  components: { BasePage, BasePanel, BaseTable, BaseButton, BaseSearch },
 
   setup() {
-    const router     = useRouter(); 
-    const items      = ref([]);   // Array di {namespace, task_count}
-    const loading    = ref(false);
+    const router = useRouter();
+    const items = ref([]);
+    const loading = ref(false);
+    const error = ref('');
     const filterText = ref('');
+
+    const columns = [
+      { key: 'namespace', label: 'Namespace' },
+      { key: 'task_count', label: 'Tasks', class: 'text-center', style: 'width: 120px;' }
+    ];
 
     async function load() {
       loading.value = true;
+      error.value = '';
       try {
         const data = await api.namespaces();
         items.value = Array.isArray(data) ? data : [];
-      } catch(e) {
-        console.error('Namespaces load error', e);
-        items.value = [];
+      } catch (e) {
+        error.value = `API Error: ${e.message}`;
       } finally {
         loading.value = false;
       }
@@ -32,75 +43,63 @@ export default defineComponent({
       return items.value.filter(it => it.namespace.toLowerCase().includes(q));
     });
 
-    // Navigazione programmatica al click sulla riga
-    function openNamespace(nsName) {
-      router.push(`/tasks/${encodeURIComponent(nsName)}`);
-    }
-
     onMounted(load);
 
     return {
-      items, loading, filterText,
-      filteredItems, openNamespace, load
+      items, loading, error, filterText, columns,
+      filteredItems, load
     };
   },
 
   template: `
-    <div class="row">
-      <div class="col-12">
-        
-        <div class="card card-outline">
-          <div class="card-header d-flex justify-content-between align-items-center">
-            <h3 class="card-title">
-              <i class="fas fa-layer-group mr-2"></i>Namespaces
-            </h3>
-            <div class="card-tools d-flex">
-              <div class="input-group input-group-sm" style="width: 200px;">
-                <input type="text" v-model="filterText" class="form-control" placeholder="Filter...">
-              </div>
-              <button class="btn btn-xs btn-outline-light ml-2" @click="load">
-                <i class="fas fa-sync"></i>
-              </button>
-            </div>
-          </div>
+    <base-page 
+      title="Namespaces" 
+      icon="fas fa-layer-group"
+      :loading="loading && !items.length"
+      :error="error"
+    >
+      
+      <template #actions>
+          <base-search 
+            v-model="filterText" 
+            placeholder="Find namespace..." 
+          />
+          
+          <base-button 
+            label="Update" 
+            icon="fas fa-sync-alt" 
+            color="outline-primary" 
+            size="sm"
+            class="ml-auto"
+            @click="load"
+          />
+      </template>
 
-          <div class="card-body p-0">
-            <div v-if="loading" class="text-muted p-3">Loading...</div>
-            <div v-else-if="!filteredItems.length" class="text-muted p-3">No namespaces found.</div>
-            
-            <div v-else class="table-responsive">
-              <table class="table table-sm table-hover mb-0">
-                <thead>
-                  <tr>
-                    <th style="padding-left:15px;">Namespace</th>
-                    <th class="text-center" style="width:100px;">Tasks</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="it in filteredItems" :key="it.namespace"
-                      style="cursor:pointer;" @click="openNamespace(it.namespace)">
-                    <td style="padding-left:15px;">
-                      <i class="fas fa-folder mr-2" style="color:#d080ff;"></i>
-                      
-                      <router-link :to="'/tasks/' + encodeURIComponent(it.namespace)" 
-                                   style="color: rgb(0, 212, 255); font-family: monospace; font-size: 0.82em; text-decoration:none;"
-                                   @click.stop>
-                        {{ it.namespace }}
-                      </router-link>
-                    </td>
-                    <td class="text-center">
-                      <span class="badge badge-secondary" style="background:#4b0082; border:1px solid #d080ff;">
-                        {{ it.task_count }}
-                      </span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+      <base-panel :no-padding="true">
+        <base-table :columns="columns" :items="filteredItems">
+          
+          <template #cell(namespace)="{ item }">
+            <div class="py-1">
+              <i class="fas fa-folder mr-2 text-warning opacity-75"></i>
+              <router-link 
+                :to="'/tasks/' + encodeURIComponent(item.namespace)" 
+                class="wl-accent font-weight-bold"
+              > 
+                {{ item.namespace }}
+              </router-link>
             </div>
-          </div>
-        </div>
+          </template>
 
-      </div>
-    </div>
+          <template #cell(task_count)="{ item }">
+            <span class="badge" 
+                  style="background: rgba(75, 0, 130, 0.4); border: 1px solid #d080ff; color: #d080ff; min-width: 45px; padding: 0.45em;">
+              {{ item.task_count }}
+            </span>
+          </template>
+
+        </base-table>
+      </base-panel>
+
+    </base-page>
   `
 });

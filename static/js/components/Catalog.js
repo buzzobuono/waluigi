@@ -1,5 +1,8 @@
-// components/Catalog.js
 import { api } from '../api.js';
+import BasePage from './BasePage.js';
+import BasePanel from './BasePanel.js';
+import BaseButton from './BaseButton.js';
+import BaseTable from './BaseTable.js';
 import Materialize from './Materialize.js';
 
 const { defineComponent, ref, computed, watch, onMounted } = Vue;
@@ -7,15 +10,23 @@ const { defineComponent, ref, computed, watch, onMounted } = Vue;
 export default defineComponent({
   name: 'Catalog',
 
-  components: { Materialize },
+  components: { BasePage, BasePanel, BaseButton, BaseTable, Materialize },
 
   setup() {
+    const columns = [
+      { key: 'name', label: 'Name' },
+      { key: 'description', label: 'Description' },
+      { key: 'format', label: 'Format' },
+      { key: 'committed_at', label: 'Committed' }
+    ];
+    
     const route  = VueRouter.useRoute();
     const router = VueRouter.useRouter();
 
     const nsStack    = ref([]);   // breadcrumb: [{path, name}]
     const children   = ref([]);   // child namespaces
     const datasets   = ref([]);   // datasets in current namespace
+    const items   = ref([]);
     const loading    = ref(false);
     const materializeRef = ref(null);
 
@@ -34,8 +45,11 @@ export default defineComponent({
       loading.value = true;
       try {
         if (!path) {
-          children.value = await api.catalogNamespaces();
+          const nsData = await api.catalogNamespaces();
+          const nsItems = (nsData || []).map(n => ({ ...n, type: 'ns' }));
+          children.value = nsItems;
           datasets.value = [];
+          items.value = nsItems;
         } else {
           const [nsData, dsData] = await Promise.all([
             api.catalogNsChildren(path),
@@ -43,11 +57,17 @@ export default defineComponent({
           ]);
           children.value = nsData.children || [];
           datasets.value = dsData.datasets || [];
+          
+          const nsItems = (nsData.children || []).map(n => ({ ...n, type: 'ns' }));
+          const dsItems = (dsData.datasets || []).map(d => ({ ...d, type: 'ds', name: d.id }));
+          items.value = [...nsItems, ...dsItems];
+          
         }
       } catch(e) {
         console.error('Catalog load error', e);
         children.value = [];
         datasets.value = [];
+        items.value = [];
       } finally {
         loading.value = false;
       }
@@ -118,7 +138,7 @@ export default defineComponent({
         }));
         await loadNamespace(ns);
       } else {
-        loadNamespace(null);
+        await loadNamespace(null);
       }
 
       if (ds && ns) {
@@ -153,7 +173,7 @@ export default defineComponent({
     loadNamespace(null);
 
     return {
-      nsStack, children, datasets, loading,
+      columns, items, nsStack, children, datasets, loading,
       selNs, selId, history, metadata, detailOpen,
       currentNs,
       navigateTo, navigateBreadcrumb, openDataset, closeDetail, goBack, materializeRef,
@@ -161,20 +181,39 @@ export default defineComponent({
   },
 
   template: `
-    <div class="d-flex align-items-center mb-3">
-        <button  class="btn btn-xs btn-outline-light mr-3" @click="goBack" title="Go Back">
-          <i class="fas fa-chevron-left mr-1"></i> Back
-        </button>
-        <button class="btn btn-xs btn-outline-light mr-3" @click="materializeRef && materializeRef.open(currentNs || '')">
-          <i class="fas fa-cloud-download-alt mr-1"></i>Materialize
-        </button>
-    </div>
-
-    <div class="row">
-      <!-- Left: namespace tree + dataset list -->
-      <div :class="detailOpen ? 'col-md-5' : 'col-12'">
-        <!-- Breadcrumb -->
-        <ol class="breadcrumb" style="background:transparent; padding:0; margin-bottom:12px;">
+    <base-page 
+      title="Catalog" 
+      subtitle="Browse datasets"
+      icon="fas fa-table"
+    >
+  
+      <template #actions>
+  
+        <div class="d-flex align-items-center w-100">
+          <base-button 
+            label="Back" 
+            icon="fas fa-arrow-left" 
+            color="outline-light" 
+            size="sm"
+            class="mr-2"
+            @click="goBack"
+          />
+          <base-button 
+            label="Materialize" 
+            icon="fas fa-cloud-download-alt" 
+            color="outline-primary" 
+            size="sm"
+            class="ml-auto"
+            @click="materializeRef && materializeRef.open(currentNs || '')"
+          />
+        </div>
+      </template>
+    
+      <base-panel
+        :no-padding="true">
+  
+        <template #title>
+          <ol class="breadcrumb" style="background:transparent; padding:0; margin-bottom:12px;">
           <li class="breadcrumb-item">
             <a href="#" @click.prevent="navigateBreadcrumb(-1)" style="color:#d080ff;">🏠 root</a>
           </li>
@@ -185,72 +224,49 @@ export default defineComponent({
                style="color:#d080ff;">{{ crumb.name }}</a>
             <span v-else style="color:#e0e0e0;">{{ crumb.name }}</span>
           </li>
-        </ol>
-
-        <!-- Child namespaces -->
-        <div v-if="children.length" class="card card-outline mb-3">
-          <div class="card-header">
-            <h3 class="card-title"><i class="fas fa-folder-open mr-2"></i>Namespaces</h3>
-          </div>
-          <div class="card-body p-0">
-            <div class="table-responsive">
-              <table class="table table-sm table-hover mb-0">
-                <thead><tr><th>Name</th><th>Description</th></tr></thead>
-                <tbody>
-                  <tr v-for="ns in children" :key="ns.path"
-                      style="cursor:pointer;" @click="navigateTo(ns)">
-                    <td style="color:#d080ff;">
-                      <i class="fas fa-folder mr-2"></i>{{ ns.name }}
-                    </td>
-                    <td style="font-size:0.82em; color:#aaa;">{{ ns.description || '—' }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <!-- Datasets -->
-        <div v-if="currentNs" class="card card-outline">
-          <div class="card-header">
-            <h3 class="card-title"><i class="fas fa-database mr-2"></i>Datasets</h3>
-          </div>
-          <div class="card-body p-0">
-            <div v-if="loading" class="text-muted p-3">Loading...</div>
-            <div v-else-if="!datasets.length" class="text-muted p-3">No datasets in this namespace.</div>
-            <div v-else class="table-responsive">
-              <table class="table table-sm table-hover mb-0">
-                <thead>
-                  <tr><th>ID</th><th>Format</th><th>Rows</th><th>Committed</th></tr>
-                </thead>
-                <tbody>
-                  <tr v-for="d in datasets" :key="d.namespace + '/' + d.id"
-                      style="cursor:pointer;"
-                      :class="selId===d.id && selNs===d.namespace ? 'table-active' : ''"
-                      @click="openDataset(d.namespace, d.id)">
-                    <td style="color:#00d4ff; font-family:monospace; font-size:0.82em;">{{ d.id }}</td>
-                    <td><span class="badge badge-secondary">{{ d.format || '—' }}</span></td>
-                    <td style="font-size:0.82em;">{{ d.rows != null ? d.rows.toLocaleString() : '—' }}</td>
-                    <td style="font-size:0.78em;">{{ d.committed_at ? d.committed_at.slice(0,19) : '—' }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="!currentNs && !children.length && !loading" class="text-muted mt-3">
-          No namespaces found. Run <code>wlcatalog --scan</code> to populate the catalog.
-        </div>
-
-      </div>
-
-      <!-- Right: dataset detail -->
-      <div v-if="detailOpen" class="col-md-7">
+          </ol>
+        </template>
+  
+        <base-table 
+          :columns="columns" 
+          :items="items"
+        >
+          <template #cell(name)="{ item }" >
+             <div v-if="item.type === 'ns'" class="text-nowrap">
+              <a href="#" @click.prevent="navigateTo(item)" 
+               class="wl-accent font-weight-bold">
+              <i class="fas fa-folder mr-2 text-warning opacity-75"></i>{{ item.name }}
+              </a>
+             </div>
+             <div v-if="item.type === 'ds'" class="text-nowrap">
+              <a href="#" @click.prevent="openDataset(item.namespace, item.id)" 
+               class="wl-accent font-weight-bold">
+              <i class="fas fa-table mr-2 text-warning opacity-75"></i>{{ item.id }}
+              </a>
+             </div>
+          </template>
+  
+          <template #cell(description)="{ item }">
+            {{ item.description || '—' }}
+          </template>
+          
+          <template #cell(format)="{ item }">
+            {{ item.format || '—' }}
+          </template>
+  
+          <template #cell(committed_at)="{ item }">
+            {{ item.committed_at || '—' }}
+          </template>
+  
+        </base-table>
+       </base-panel>
+  
+    <div class="row">
+        <div v-if="detailOpen" class="col-md-12">
         <div class="card card-outline">
           <div class="card-header d-flex justify-content-between align-items-center">
             <h3 class="card-title">
-              <i class="fas fa-database mr-2"></i>
+              <i class="fas fa-table mr-2"></i>
               <span style="color:#aaa; font-size:0.85em;">{{ selNs }}/</span>
               <code style="color:#00d4ff;">{{ selId }}</code>
             </h3>
@@ -337,5 +353,8 @@ export default defineComponent({
 
       <materialize ref="materializeRef" @done="loadNamespace(currentNs)"></materialize>
     </div>
+  
+      
+    </base-page>
   `
 });
