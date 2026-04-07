@@ -32,10 +32,9 @@ export default {
   template: `
     <base-page 
       title="Workers" 
-      subtitle="Stato dei nodi e degli slot"
+      subtitle="orker status and slot availability"
       icon="fas fa-server"
-      :loading="loading && !workers.length"
-    >
+      :loading="loading && !workers.length">
       
       <template #actions>
         <div class="row w-100 m-0">
@@ -56,7 +55,6 @@ export default {
           <base-button 
             icon="fas fa-sync-alt" 
             color="outline-primary" 
-            size="sm"
             label="Update"
             class="ml-auto"
             :loading="loading"
@@ -67,10 +65,6 @@ export default {
 
       <base-panel :no-padding="true">
         <base-table :columns="columns" :items="workers">
-          
-          <template #cell(url)="{ item }">
-            <code class="wl-accent">{{ item.url }}</code>
-          </template>
 
           <template #cell(status)="{ item }">
             <span :class="['badge', item.status === 'ALIVE' ? 'badge-success' : 'badge-danger']">
@@ -79,17 +73,15 @@ export default {
           </template>
 
           <template #cell(slots)="{ item }">
-            <div class="text-center">
+            
               <span class="text-danger font-weight-bold">{{ item.max_slots - item.free_slots }}</span>
               <span class="text-mutedmx-1">/</span>
               <span class="text-info font-weight-bold">{{ item.max_slots }}</span>
-            </div>
+            
           </template>
 
           <template #cell(last_seen)="{ item }">
-            <span class="text-muted small">
-              <i class="far fa-clock mr-1"></i>{{ item.last_seen || '—' }}
-            </span>
+            <i class="far fa-clock mr-1"></i>{{ item.last_seen || '—' }}
           </template>
 
         </base-table>

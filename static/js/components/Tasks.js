@@ -100,7 +100,6 @@ export default {
             label="Back" 
             icon="fas fa-arrow-left" 
             color="outline-secondary" 
-            size="sm"
             class="mr-2"
             @click="$router.push('/namespaces')"
           />
@@ -110,7 +109,6 @@ export default {
             class="ml-auto"
             icon="fas fa-sync-alt" 
             color="outline-primary" 
-            size="sm"
             :loading="loading"
             @click="$emit('refresh')"
           />
@@ -118,34 +116,31 @@ export default {
       </template>
 
       <div v-if="!Object.keys(byNamespace).length" class="text-center py-5 text-muted">
-        <i class="fas fa-filter fa-3x mb-3 opacity-50"></i>
+        <i class="fas fa-filter fa-3x mb-3 opacity-75"></i>
         <p>No tasks found for this selection.</p>
       </div>
 
       <base-panel 
         v-for="(taskList, ns) in byNamespace" 
         :key="ns" 
-        :no-padding="true"
-        class="mb-4"
-      >
+        :no-padding="true">
+
         <template #title>
-          <i class="fas fa-layer-group mr-2 text-warning"></i>
+          <i class="fas fa-layer-group mr-2"></i>
           <span class="font-weight-bold">Namespace: </span>
-          <code class="ml-1 text-warning">{{ ns }}</code>
+          <code class="ml-2">{{ ns }}</code>
         </template>
 
         <template #tools>
           <base-button-group class="ml-auto">
             <base-button 
               label="Reset"
-              size="sm"
               icon="fas fa-history" 
               color="outline-warning" 
               @click="resetNs(ns)"
             />
             <base-button 
               label="Delete"
-              size="sm"
               icon="fas fa-trash-alt" 
               color="outline-danger" 
               @click="deleteNs(ns)"
@@ -156,28 +151,19 @@ export default {
         <base-table :columns="columns" :items="taskList">
           
           <template #cell(id)="{ item }">
-            <a href="#" @click.prevent="openLogs(item.id)" 
-               class="wl-accent font-weight-bold">
+            <a href="#" @click.prevent="openLogs(item.id)">
               {{ item.id }}
             </a>
           </template>
 
-          <template #cell(params)="{ item }">
-            <span class="text-muted small" style="word-break: break-all;">
-              {{ item.params || '—' }}
-            </span>
-          </template>
-
           <template #cell(status)="{ item }">
-            <span class="badge shadow-sm" :style="{ background: STATUS_COLOR[item.status], color: '#fff', minWidth: '70px' }">
+            <span class="badge shadow" :style="{ background: STATUS_COLOR[item.status], color: '#fff', minWidth: '70px' }">
               {{ item.status }}
             </span>
           </template>
 
           <template #cell(update)="{ item }">
-            <span class="text-muted small">
-              <i class="far fa-clock mr-1"></i>{{ item.last_update || '—' }}
-            </span>
+            <i class="far fa-clock mr-1"></i>{{ item.last_update || '—' }}
           </template>
 
           <template #cell(actions)="{ item }">

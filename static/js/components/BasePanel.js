@@ -3,8 +3,6 @@ export default {
   props: {
     title: String,
     icon: String,
-    // In AdminLTE 'type' può essere: primary, success, info, warning, danger
-    // Usando 'card-outline' con questi colori si ottiene il look professionale
     type: { type: String, default: 'primary' }, 
     noPadding: Boolean
   },

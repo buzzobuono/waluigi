@@ -32,7 +32,6 @@ export default {
           <base-button 
             icon="fas fa-sync-alt" 
             color="outline-primary" 
-            size="sm"
             label="Update"
             :loading="loading"
             class="ml-auto"
@@ -56,11 +55,11 @@ export default {
             </template>
 
             <div class="card-body p-0">
-              <div class="d-flex justify-content-between mb-2" style="color:#ccc; font-size:0.9em;">
+              <div class="d-flex justify-content-between mb-2">
                 <span>Usage: <b>{{ r.usage }}</b> / {{ r.amount }}</span>
                 <span>Available: <b>{{ r.amount - r.usage }}</b></span>
               </div>
-              <div class="progress progress-sm shadow-sm" style="background: rgba(0,0,0,0.2);">
+              <div class="progress shadow">
                 <div 
                   class="progress-bar" 
                   :class="'bg-'+color(r)"

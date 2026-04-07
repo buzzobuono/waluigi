@@ -81,7 +81,6 @@ export default {
             label="Update"
             icon="fas fa-sync-alt" 
             color="outline-primary" 
-            size="sm"
             class="ml-auto"
             :loading="loading"
             @click="$emit('refresh')"
@@ -92,35 +91,23 @@ export default {
       <base-panel :no-padding="true">
         <base-table 
           :columns="columns" 
-          :items="jobs"
-        >
+          :items="jobs">
           
           <template #cell(job_id)="{ item }">
-            <div class="py-1 text-nowrap">
-              <i class="fas fa-project-diagram mr-2 text-muted"></i>
-              <router-link 
-                :to="'/jobs/' + encodeURIComponent(item.job_id)" 
-                class="wl-accent font-weight-bold"
-              >
-                {{ item.job_id }}
+            <div>
+              <i class="fas fa-project-diagram mr-2 mr-2 opacity-75"></i>
+              <router-link :to="'/jobs/' + encodeURIComponent(item.job_id)" >
+                  {{ item.job_id }}
               </router-link>
             </div>
           </template>
 
           <template #cell(status)="{ item }">
-            <span :class="['badge shadow-sm', 'badge-' + STATUS_MAP[item.status].color, item.status === 'RUNNING' ? 'blink' : '']"
-                  style="min-width: 80px;">
+            <span :class="['badge shadow', 'badge-' + STATUS_MAP[item.status].color, item.status === 'RUNNING' ? 'blink' : '']">
               {{ item.status }}
             </span>
           </template>
 
-          <template #cell(locked_by)="{ item }">
-            <span class="text-muted small">{{ item.locked_by || '—' }}</span>
-          </template>
-
-          <template #cell(locked_until)="{ item }">
-            <span class="text-muted small">{{ item.locked_until || '—' }}</span>
-          </template>
 
           <template #cell(actions)="{ item }">
             <base-button 

@@ -90,9 +90,8 @@ export default {
       <div v-if="tasks.length">
         <base-panel class="mb-4">
           <template #title>
-            <i class="fas fa-project-diagram mr-2 text-warning"></i>
-            <span>Job: </span>
-            <code class="wl-accent ml-1" style="font-size: 1.1em;">{{ jobId }}</code>
+            <i class="fas fa-project-diagram mr-2 text-primary"></i>
+            <span>{{ jobId }}</span>
           </template>
           
           <dag-chart :tasks="tasks" :colors="STATUS_COLOR" />

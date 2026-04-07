@@ -3,10 +3,7 @@ export default {
   props: {
     label: String,
     icon: String,
-    // Colori standard: primary, success, info, warning, danger, default, dark
-    // Prefissi standard: 'btn-primary' (pieno) o 'btn-outline-primary' (bordo)
     color: { type: String, default: 'primary' },
-    // Taglie standard AdminLTE: lg, sm, xs (AdminLTE aggiunge xs a Bootstrap)
     size: { type: String, default: 'sm' }, 
     loading: Boolean,
     disabled: Boolean,

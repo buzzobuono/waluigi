@@ -201,7 +201,6 @@ export default defineComponent({
             label="Back" 
             icon="fas fa-arrow-left" 
             color="outline-light" 
-            size="sm"
             class="mr-2"
             @click="goBack"
           />
@@ -209,7 +208,6 @@ export default defineComponent({
             label="Materialize" 
             icon="fas fa-cloud-download-alt" 
             color="outline-primary" 
-            size="sm"
             class="ml-auto"
             @click="materializeRef && materializeRef.open(currentNs || '')"
           />
@@ -219,16 +217,14 @@ export default defineComponent({
         :no-padding="true">
   
         <template #title>
-          <ol class="breadcrumb" style="background:transparent; padding:0; margin-bottom:12px;">
+          <ol class="breadcrumb" style="background:transparent; padding:0;">
           <li class="breadcrumb-item">
-            <a href="#" @click.prevent="navigateBreadcrumb(-1)" style="color:#d080ff;">🏠 root</a>
+            <a href="#" @click.prevent="navigateBreadcrumb(-1)">🏠</a>
           </li>
           <li v-for="(crumb, idx) in nsStack" :key="crumb.path"
               :class="['breadcrumb-item', idx===nsStack.length-1 ? 'active' : '']">
-            <a v-if="idx < nsStack.length-1"
-               href="#" @click.prevent="navigateBreadcrumb(idx)"
-               style="color:#d080ff;">{{ crumb.name }}</a>
-            <span v-else style="color:#e0e0e0;">{{ crumb.name }}</span>
+            <a v-if="idx < nsStack.length-1" href="#" @click.prevent="navigateBreadcrumb(idx)" >{{ crumb.name }}</a>
+            <span v-else >{{ crumb.name }}</span>
           </li>
           </ol>
         </template>
@@ -239,21 +235,19 @@ export default defineComponent({
   
           <template #cell(name)="{ item }" >
              <div v-if="item.type === 'ns'" class="text-nowrap">
-              <a href="#" @click.prevent="navigateTo(item)" 
-               class="wl-accent font-weight-bold">
+              <a href="#" @click.prevent="navigateTo(item)">
                <i class="fas fa-folder mr-2 text-warning opacity-75"></i>{{ item.name }}
               </a>
              </div>
              <div v-if="item.type === 'ds'" class="text-nowrap">
-              <a href="#" @click.prevent="openDataset(item.namespace, item.id)" 
-               class="wl-accent font-weight-bold">
-               <i class="fas fa-table mr-2 text-warning opacity-75"></i>{{ item.id }}
+              <a href="#" @click.prevent="openDataset(item.namespace, item.id)">
+               <i class="fas fa-table mr-2 opacity-75"></i>{{ item.id }}
               </a>
              </div>
           </template>
   
           <template #cell(type)="{ item }" >
-             <span class="badge badge-secondary">
+             <span class="badge badge-info">
                {{ item.type }}
              </span>
           </template>
@@ -277,7 +271,6 @@ export default defineComponent({
           <base-button
             icon="fas fa-times" 
             color="outline-secondary" 
-            size="sm"
             class="ml-auto"
             @click="closeDetail"/>
         </template>
@@ -287,7 +280,7 @@ export default defineComponent({
           :items="history">
           
            <template #cell(format)="{ item }" >
-             <span class="badge badge-secondary">
+             <span class="badge badge-info">
                {{ item.format }}
              </span>
            </template>

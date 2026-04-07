@@ -11,14 +11,14 @@ export default {
       <table :class="['table table-sm m-0', { 'table-hover': hover, 'table-striped': striped }]">
         <thead>
           <tr>
-            <th v-for="col in columns" :key="col.key" :class="col.class">
+            <th v-for="col in columns" :key="col.key" :class="[col.class]">
               {{ col.label }}
             </th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="(item, index) in items" :key="index">
-            <td v-for="col in columns" :key="col.key" :class="col.class">
+            <td v-for="col in columns" :key="col.key" :class="[col.class]">
               <slot :name="'cell(' + col.key + ')'" :item="item">
                 {{ item[col.key] || '-' }}
               </slot>
