@@ -6,9 +6,12 @@ export default {
     isGroupActive: Function
   },
   template: `
-    <aside class="main-sidebar elevation-4 wl-sidebar">
-      <a href="/" class="brand-link text-center wl-brand">
-        <span class="brand-text font-weight-bold wl-accent" style="font-size:1.1em;">🟣 Waluigi</span>
+    <aside class="main-sidebar sidebar-dark-primary elevation-4">
+      
+      <a href="/" class="brand-link text-center">
+        <span class="brand-text font-weight-light" style="font-size:1.1em;">
+          <i class="fas fa-table mr-1 text-primary"></i> <strong>Waluigi</strong>
+        </span>
       </a>
       
       <div class="sidebar">
@@ -17,24 +20,24 @@ export default {
             
             <li v-for="item in navItems" :key="item.label" 
                 :class="['nav-item', { 'menu-open': isGroupActive(item) }]">
-              
+  
               <router-link v-if="!item.children" :to="item.path" 
-                           class="nav-link d-flex align-items-center text-nowrap" 
+                           class="nav-link" 
                            active-class="active">
                 <i :class="['nav-icon fas', item.icon]"></i>
-                <p class="ml-2 mb-0">
+                <p>
                   {{ item.label }}
-                  <span v-if="item.key" class="badge badge-secondary right">
+                  <span v-if="item.key && counts[item.key]" class="badge badge-info right">
                     {{ counts[item.key] }}
                   </span>
                 </p>
               </router-link>
 
               <template v-else>
-                <a href="#" class="nav-link d-flex align-items-center text-nowrap" 
+                <a href="#" class="nav-link" 
                    :class="{ 'active': isGroupActive(item) }">
                   <i :class="['nav-icon fas', item.icon]"></i>
-                  <p class="ml-2 mb-0">
+                  <p>
                     {{ item.label }}
                     <i class="right fas fa-angle-left"></i>
                   </p>
@@ -43,13 +46,12 @@ export default {
                 <ul class="nav nav-treeview">
                   <li v-for="sub in item.children" :key="sub.path" class="nav-item">
                     <router-link :to="sub.path" 
-                                 class="nav-link d-flex align-items-center text-nowrap" 
-                                 active-class="active" 
-                                 style="padding-left: 2rem;">
-                      <i :class="['nav-icon fas fa-xs', sub.icon]"></i>
-                      <p class="ml-2 mb-0">
+                                 class="nav-link" 
+                                 active-class="active">
+                      <i :class="['nav-icon fas fa-circle fa-xs', sub.icon ? sub.icon : '']"></i>
+                      <p>
                         {{ sub.label }}
-                        <span v-if="sub.key" class="badge badge-secondary right">
+                        <span v-if="sub.key && counts[sub.key]" class="badge badge-info right">
                           {{ counts[sub.key] }}
                         </span>
                       </p>

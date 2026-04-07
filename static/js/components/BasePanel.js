@@ -3,27 +3,29 @@ export default {
   props: {
     title: String,
     icon: String,
-    type: { type: String, default: 'outline' },
+    // In AdminLTE 'type' può essere: primary, success, info, warning, danger
+    // Usando 'card-outline' con questi colori si ottiene il look professionale
+    type: { type: String, default: 'primary' }, 
     noPadding: Boolean
   },
   template: `
-    <div :class="['card', 'card-' + type, 'mb-3']">
-      <div class="card-header d-flex align-items-center w-100">
+    <div :class="['card', 'card-' + type, 'card-outline']">
+      
+      <div v-if="title || $slots.title || $slots.tools" class="card-header">
         
-        <div class="d-flex align-items-center">
-          <i v-if="icon" :class="[icon, 'mr-2']"></i>
-          <h3 class="card-title mb-0">
+        <h3 class="card-title">
+          <i v-if="icon" :class="['fas mr-1', icon]"></i>
+          <slot name="title">
             <span v-if="title" v-html="title"></span>
-            <slot name="title"></slot>
-          </h3>
-        </div>
+          </slot>
+        </h3>
 
-        <div class="card-tools d-flex align-items-center flex-grow-1">
+        <div class="card-tools">
           <slot name="tools"></slot>
         </div>
         
       </div>
-
+  
       <div :class="['card-body', { 'p-0': noPadding }]">
         <slot></slot>
       </div>

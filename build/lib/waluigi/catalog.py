@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from waluigi.core.catalog_db import CatalogDB
 from waluigi.core.catalog_helper import CatalogHelper
-import pandas as pd
+#import pandas as pd
 
 app = FastAPI(
     title="Waluigi Catalog",
@@ -92,14 +92,14 @@ class ScanRequest(BaseModel):
     namespace: Optional[str] = Field(None, example="analytics/erp/raw")
 
 class MaterializeRequest(BaseModel):
-    swagger_url: str            = Field(...,
-        example="https://petstore3.swagger.io/api/v3/openapi.json")
-    endpoint:    str            = Field(...,
-        example="/pet/findByStatus")
-    params:      Dict[str, Any] = Field(default_factory=dict,
-        example={"status": "available"})
-    task_id:     str            = Field("unknown", example="ingest_orders")
-    job_id:      str            = Field("unknown", example="job:ingest")
+    base_url:  str            = Field(...,
+        example="https://jsonplaceholder.typicode.com")
+    endpoint:  str            = Field(...,
+        example="/posts")
+    params:    Dict[str, Any] = Field(default_factory=dict,
+        example={"userId": 1})
+    task_id:   str            = Field("unknown", example="ingest_posts")
+    job_id:    str            = Field("unknown", example="job/ingest")
         
 def _dataset_path(namespace, ds_id, version, fmt):
     safe_version = version.replace(":", "-")
@@ -113,28 +113,6 @@ def _to_dict(model):
         return model.model_dump()
     return model.dict()
     
-def _extract_base_url(spec: dict, swagger_url: str) -> str:
-    parsed = urlparse(swagger_url)
-    origin = f"{parsed.scheme}://{parsed.netloc}"
-
-    # OpenAPI v3
-    servers = spec.get("servers", [])
-    if servers:
-        url = servers[0].get("url", "").rstrip("/")
-        if url.startswith("http"):
-            return url
-        # relative URL — prepend origin
-        return f"{origin}{url}"
-
-    # Swagger v2
-    host      = spec.get("host", "")
-    base_path = spec.get("basePath", "/")
-    schemes   = spec.get("schemes", ["https"])
-    if host:
-        return f"{schemes[0]}://{host}{base_path}".rstrip("/")
-
-    # fallback
-    return origin
 
 def _extract_items(body) -> list:
     if isinstance(body, list):
@@ -180,21 +158,10 @@ def _flatten(obj, prefix="", sep="_") -> dict:
     return out
 
 
-async def _fetch_and_write(swagger_url: str, endpoint: str,
+async def _fetch_and_write(base_url: str, endpoint: str,
                            params: dict, output_path: str):
-    """
-    Fetch all pages from endpoint, flatten JSON, write CSV.
-    Returns (rows_count, schema_dict).
-    """
-    async with httpx.AsyncClient(timeout=30) as client:
-        spec_r = await client.get(swagger_url)
-        spec_r.raise_for_status()
-        spec = spec_r.json()
-
-    base_url = _extract_base_url(spec, swagger_url)
-
-    records  = []
-    page     = 1
+    records = []
+    page    = 1
     next_url = f"{base_url}{endpoint}"
 
     async with httpx.AsyncClient(timeout=30) as client:
@@ -268,7 +235,16 @@ async def update_namespace(ns: str, body: NamespaceUpdateRequest):
 # ---------------------------------------------------------------------------
 
 @app.get("/datasets/{namespace:path}/{id}/{version}/preview", tags=["Datasets"])
-async def get_dataset_preview(namespace: str, id: str, version: str, limit: int = 10):
+async def get_dataset_preview(
+    namespace: str, 
+    id: str, 
+    version: str, 
+    limit: int = 10, 
+    offset: int = 0
+):
+    import json
+    import numpy as np
+
     record = db.get_version(namespace, id, version)
     if not record:
         return JSONResponse({"error": "version not found"}, status_code=404)
@@ -277,30 +253,70 @@ async def get_dataset_preview(namespace: str, id: str, version: str, limit: int 
     fmt = record.get("format", "").lower()
     
     if not os.path.exists(path):
-        return JSONResponse({"error": "file not found on disk"}, status_code=404)
+        return JSONResponse({"error": f"file not found: {path}"}, status_code=404)
 
     try:
+        # 1. Caricamento dati
         if fmt == "csv":
-            df = pd.read_csv(path, nrows=limit)
+            # Per il CSV, leggere tutto come stringa è la prima linea di difesa
+            df = pd.read_csv(path, skiprows=range(1, offset + 1), nrows=limit, dtype=str)
         elif fmt == "parquet":
-            df = pd.read_parquet(path).head(limit)
-        elif fmt == "json":
-            df = pd.read_json(path).head(limit)
+            full_df = pd.read_parquet(path)
+            df = full_df.iloc[offset : offset + limit]
         else:
-            return JSONResponse({"error": f"Preview not supported for format: {fmt}"}, status_code=400)
-        
-        # Convertiamo NaN in None per JSON compatibility
-        data = df.where(pd.notnull(df), None).to_dict(orient="records")
-        columns = df.columns.tolist()
-        
+            return JSONResponse({"error": f"Formato {fmt} non supportato"}, status_code=400)
+
+        # 2. Conversione in record grezzi
+        raw_records = df.to_dict(orient="records")
+        clean_data = []
+
+        # 3. BONIFICA NUCLEARE (Cella per cella)
+        # Intercettiamo i float che mandano in crash json.dumps
+        for row in raw_records:
+            clean_row = {}
+            for k, v in row.items():
+                # Gestione Nulli (NaN, None, NaT)
+                if pd.isna(v):
+                    clean_row[k] = None
+                    continue
+                
+                # Gestione Numeri "Radioattivi"
+                if isinstance(v, (float, int, np.number)):
+                    if not np.isfinite(v):
+                        clean_row[k] = None
+                    else:
+                        try:
+                            # Test di serializzazione immediato per la singola cella
+                            json.dumps(v)
+                            clean_row[k] = v
+                        except (ValueError, OverflowError):
+                            # Se il numero è reale ma "Out of range" per JSON, 
+                            # lo forziamo a stringa così non perdiamo il dato
+                            clean_row[k] = str(v)
+                else:
+                    # Stringhe e altri tipi sicuri
+                    clean_row[k] = v
+            clean_data.append(clean_row)
+
+        # 4. Risposta sicura
         return JSONResponse({
-            "columns": columns,
-            "data": data,
-            "total_rows": record.get("rows"),
-            "format": fmt
+            "namespace": namespace,
+            "id": id,
+            "version": version,
+            "columns": df.columns.tolist(),
+            "data": clean_data,
+            "pagination": {
+                "limit": limit,
+                "offset": offset,
+                "count": len(clean_data)
+            }
         })
+
     except Exception as e:
-        return JSONResponse({"error": f"Failed to read file: {str(e)}"}, status_code=500)
+        import traceback
+        print("\n--- ERRORE DURANTE LA BONIFICA ---")
+        traceback.print_exc()
+        return JSONResponse({"error": f"Crash durante il processing: {str(e)}"}, status_code=500)
     
 @app.post("/datasets/{namespace:path}/{id}/reserve", tags=["Datasets"],
           summary="Reserve a new dataset version",
@@ -394,14 +410,14 @@ async def fail_version(namespace: str, id: str, version: str):
     db.fail(namespace, id, version)
     return JSONResponse({"status": "failed"})
 
-
 @app.post("/datasets/{namespace:path}/{id}/materialize", tags=["Datasets"],
           summary="Materialize a REST API endpoint into a dataset",
           description=(
-              "Reads the swagger spec to locate the base URL, "
-              "fetches all pages from the given endpoint, "
+              "Fetches all pages from the given endpoint, "
               "flattens nested JSON, writes a single CSV file "
               "and registers it in the catalog. "
+              "If content is identical to the latest version, "
+              "no new version is created. "
               "Lineage source is recorded as the API URL."
           ))
 async def materialize(namespace: str, id: str, body: MaterializeRequest):
@@ -411,16 +427,9 @@ async def materialize(namespace: str, id: str, body: MaterializeRequest):
     try:
         db.ensure_namespace(namespace)
         db.reserve(namespace, id, version, path, "csv", body.task_id, body.job_id)
-
-        # lineage: source is the external API URL
-        db.insert_lineage(namespace, id, version, [{
-            "namespace": "__external__",
-            "id":        f"{body.swagger_url}#{body.endpoint}",
-            "version":   "live"
-        }])
-
+        
         rows, schema = await _fetch_and_write(
-            body.swagger_url, body.endpoint, body.params, path
+            body.base_url, body.endpoint, body.params, path
         )
 
         if rows == 0:
@@ -429,11 +438,36 @@ async def materialize(namespace: str, id: str, body: MaterializeRequest):
                 {"error": "no records returned from endpoint"}, status_code=422)
 
         file_hash = helper.compute_hash(path)
-        db.commit(namespace, id, version, file_hash, rows, schema)
+        result    = db.commit(namespace, id, version, file_hash, rows, schema)
 
-        log(f"Materialized {namespace}/{id}@{version} rows={rows} "
-            f"from {body.endpoint}")
+        if result is None:
+            db.fail(namespace, id, version)
+            return JSONResponse({"error": "commit failed"}, status_code=409)
 
+        if result["skipped"]:
+            try:
+                os.remove(path)
+            except Exception:
+                pass
+            log(f"Skipped materialize {namespace}/{id} — identical to latest, "
+                f"keeping version {result['version']}")
+            return JSONResponse({
+                "namespace": namespace,
+                "id":        id,
+                "version":   result["version"],
+                "rows":      rows,
+                "skipped":   True,
+                "reason":    "identical to latest committed version",
+                "source":    f"{body.base_url}#{body.endpoint}"
+            })
+
+        db.insert_lineage(namespace, id, version, [{
+            "namespace": "__external__",
+            "id":        f"{body.base_url}#{body.endpoint}",
+            "version":   "live"
+        }])
+
+        log(f"Materialized {namespace}/{id}@{version} rows={rows} from {body.endpoint}")
         return JSONResponse({
             "namespace": namespace,
             "id":        id,
@@ -441,7 +475,8 @@ async def materialize(namespace: str, id: str, body: MaterializeRequest):
             "path":      path,
             "rows":      rows,
             "hash":      file_hash,
-            "source":    f"{body.swagger_url}#{body.endpoint}"
+            "skipped":   False,
+            "source":    f"{body.base_url}#{body.endpoint}"
         }, status_code=201)
 
     except httpx.HTTPError as e:
@@ -455,7 +490,8 @@ async def materialize(namespace: str, id: str, body: MaterializeRequest):
         except Exception:
             pass
         return JSONResponse({"error": str(e)}, status_code=500)
-            
+
+
 @app.get("/datasets/{namespace:path}/{id}/resolve", tags=["Datasets"],
          summary="Resolve path of latest committed version")
 async def resolve_latest(namespace: str, id: str):
@@ -484,23 +520,23 @@ async def history(namespace: str, id: str):
     return JSONResponse(versions)
 
 
-@app.get("/datasets/{namespace:path}/{id}/metadata", tags=["Datasets"],
+@app.get("/datasets/{namespace:path}/{id}/{version}/metadata", tags=["Datasets"],
          summary="Get custom metadata for a dataset")
-async def get_metadata(namespace: str, id: str):
-    return JSONResponse(db.get_metadata(namespace, id))
+async def get_metadata(namespace: str, id: str, version: str):
+    return JSONResponse(db.get_metadata(namespace, id, version))
 
 
-@app.post("/datasets/{namespace:path}/{id}/metadata", tags=["Datasets"],
+@app.post("/datasets/{namespace:path}/{id}/{version}/metadata", tags=["Datasets"],
           summary="Set a custom metadata key")
-async def set_metadata(namespace: str, id: str, body: MetadataRequest):
-    db.set_metadata(namespace, id, body.key, body.value)
+async def set_metadata(namespace: str, id: str, version: str, body: MetadataRequest):
+    db.set_metadata(namespace, id, version, body.key, body.value)
     return JSONResponse({"status": "ok"})
 
 
-@app.delete("/datasets/{namespace:path}/{id}/metadata/{key}", tags=["Datasets"],
+@app.delete("/datasets/{namespace:path}/{id}/{version}/metadata/{key}", tags=["Datasets"],
             summary="Delete a custom metadata key")
-async def delete_metadata(namespace: str, id: str, key: str):
-    ok = db.delete_metadata(namespace, id, key)
+async def delete_metadata(namespace: str, id: str, version: str, key: str):
+    ok = db.delete_metadata(namespace, id, version, key)
     if not ok:
         return JSONResponse({"error": "key not found"}, status_code=404)
     return JSONResponse({"status": "ok"})

@@ -132,6 +132,11 @@ async def catalog_ns_children(ns: str):
 async def catalog_ns_datasets(ns: str, recursive: bool = False):
     return JSONResponse(await _catalog_get(f'/namespaces/{ns}/datasets', {'recursive': str(recursive).lower()}))
 
+@app.get('/catalog/datasets/{ns:path}/{id}/{version}/preview')
+async def catalog_dataset_preview(ns: str, id: str, version: str, limit: int = 10, offset: int = 0):
+    print(offset)
+    return JSONResponse(await _catalog_get(f'/datasets/{ns}/{id}/{version}/preview', {'limit': limit, 'offset': offset}))
+
 @app.get('/catalog/datasets/{ns:path}/{id}/history')
 async def catalog_dataset_history(ns: str, id: str):
     return JSONResponse(await _catalog_get(f'/datasets/{ns}/{id}/history'))

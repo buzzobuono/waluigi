@@ -99,7 +99,7 @@ export default {
             v-if="filterNs" 
             label="Back" 
             icon="fas fa-arrow-left" 
-            color="outline-light" 
+            color="outline-secondary" 
             size="sm"
             class="mr-2"
             @click="$router.push('/namespaces')"

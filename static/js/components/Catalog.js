@@ -16,8 +16,18 @@ export default defineComponent({
     const columns = [
       { key: 'name', label: 'Name' },
       { key: 'description', label: 'Description' },
-      { key: 'format', label: 'Format' },
+      { key: 'type', label: 'Type' },
       { key: 'committed_at', label: 'Committed' }
+    ];
+    
+    const columns_history = [
+      { key: 'version', label: 'Version' },
+      { key: 'format', label: 'Format' },
+      { key: 'rows', label: 'Rows' },
+      { key: 'hash', label: 'Hash' },
+      { key: 'produced_by_task', label: 'Task' },
+      { key: 'status', label: 'Status' },
+      { key: 'actions', label: 'Actions' }
     ];
     
     const route  = VueRouter.useRoute();
@@ -174,7 +184,7 @@ export default defineComponent({
 
     return {
       columns, items, nsStack, children, datasets, loading,
-      selNs, selId, history, metadata, detailOpen,
+      selNs, selId, columns_history, history, metadata, detailOpen,
       currentNs,
       navigateTo, navigateBreadcrumb, openDataset, closeDetail, goBack, materializeRef,
     };
@@ -184,13 +194,10 @@ export default defineComponent({
     <base-page 
       title="Catalog" 
       subtitle="Browse datasets"
-      icon="fas fa-table"
-    >
+      icon="fas fa-table">
   
       <template #actions>
-  
-        <div class="d-flex align-items-center w-100">
-          <base-button 
+         <base-button 
             label="Back" 
             icon="fas fa-arrow-left" 
             color="outline-light" 
@@ -206,7 +213,6 @@ export default defineComponent({
             class="ml-auto"
             @click="materializeRef && materializeRef.open(currentNs || '')"
           />
-        </div>
       </template>
     
       <base-panel
@@ -229,51 +235,93 @@ export default defineComponent({
   
         <base-table 
           :columns="columns" 
-          :items="items"
-        >
+          :items="items">
+  
           <template #cell(name)="{ item }" >
              <div v-if="item.type === 'ns'" class="text-nowrap">
               <a href="#" @click.prevent="navigateTo(item)" 
                class="wl-accent font-weight-bold">
-              <i class="fas fa-folder mr-2 text-warning opacity-75"></i>{{ item.name }}
+               <i class="fas fa-folder mr-2 text-warning opacity-75"></i>{{ item.name }}
               </a>
              </div>
              <div v-if="item.type === 'ds'" class="text-nowrap">
               <a href="#" @click.prevent="openDataset(item.namespace, item.id)" 
                class="wl-accent font-weight-bold">
-              <i class="fas fa-table mr-2 text-warning opacity-75"></i>{{ item.id }}
+               <i class="fas fa-table mr-2 text-warning opacity-75"></i>{{ item.id }}
               </a>
              </div>
           </template>
   
-          <template #cell(description)="{ item }">
-            {{ item.description || '—' }}
-          </template>
-          
-          <template #cell(format)="{ item }">
-            {{ item.format || '—' }}
-          </template>
-  
-          <template #cell(committed_at)="{ item }">
-            {{ item.committed_at || '—' }}
+          <template #cell(type)="{ item }" >
+             <span class="badge badge-secondary">
+               {{ item.type }}
+             </span>
           </template>
   
         </base-table>
        </base-panel>
   
-    <div class="row">
-        <div v-if="detailOpen" class="col-md-12">
-        <div class="card card-outline">
-          <div class="card-header d-flex justify-content-between align-items-center">
-            <h3 class="card-title">
-              <i class="fas fa-table mr-2"></i>
-              <span style="color:#aaa; font-size:0.85em;">{{ selNs }}/</span>
-              <code style="color:#00d4ff;">{{ selId }}</code>
-            </h3>
-            <button class="btn btn-xs btn-outline-secondary" @click="closeDetail">
-              <i class="fas fa-times"></i>
-            </button>
+     <base-panel
+        :no-padding="true" 
+        v-if="detailOpen">
+  
+        <template #title>
+          <div class="d-flex align-items-center">
+            <i class="fas fa-table mr-2"></i>
+            <span style="color:#aaa; font-size:0.85em;">{{ selNs }}/</span>
+            <code style="color:#00d4ff;">{{ selId }}</code>
           </div>
+        </template>
+  
+        <template #tools>
+          <base-button
+            icon="fas fa-times" 
+            color="outline-secondary" 
+            size="sm"
+            class="ml-auto"
+            @click="closeDetail"/>
+        </template>
+        
+        <base-table 
+          :columns="columns_history" 
+          :items="history">
+          
+           <template #cell(format)="{ item }" >
+             <span class="badge badge-secondary">
+               {{ item.format }}
+             </span>
+           </template>
+  
+           <template #cell(hash)="{ item }" >
+             {{ item.hash ? item.hash.slice(0,8) : '—' }}
+           </template>
+        
+           <template #cell(status)="{ item }" >
+             <span :class="['badge', item.status==='committed' ? 'badge-SUCCESS' : 'badge-PENDING']">
+               {{ item.status }}
+             </span>
+           </template>
+  
+           <template #cell(actions)="{ item }">
+             <base-button-group>
+              <base-button 
+                icon="fas fa-sitemap" 
+                color="outline-primary" 
+                title="Lineage"
+                @click="$router.push({ path: '/lineage', query: { ns: selNs, id: selId, ver: item.version } })"
+              />
+              <base-button 
+                icon="fas fa-eye" 
+                color="outline-info" 
+                title="Preview"
+                @click="$router.push({ path: '/datasets/' + selNs + '/' + selId + '/' + item.version })"
+              />
+             </base-button-group>
+           </template>
+  
+        </base-table>
+  
+        <div class="card card-outline">
           <div class="card-body p-0">
 
             <!-- Custom metadata -->
@@ -287,74 +335,13 @@ export default defineComponent({
               </div>
             </div>
 
-            <!-- Version history -->
-            <div class="table-responsive">
-              <table class="table table-sm mb-0">
-                <thead>
-                  <tr>
-                    <th>Version</th>
-                    <th>Format</th>
-                    <th>Rows</th>
-                    <th>Hash</th>
-                    <th>Task</th>
-                    <th>Status</th>
-                    <th style="width: 80px;">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-if="!history.length">
-                    <td colspan="6" class="text-muted text-center py-3">No versions found</td>
-                  </tr>
-                  <tr v-for="v in history" :key="v.version">
-                    <td style="font-family:monospace; font-size:0.75em;">
-                      {{ v.version ? v.version : '—' }}
-                    </td>
-                    <td><span class="badge badge-secondary">{{ v.format || '—' }}</span></td>
-                    <td style="font-size:0.82em;">
-                      {{ v.rows != null ? v.rows.toLocaleString() : '—' }}
-                    </td>
-                    <td style="font-family:monospace; font-size:0.72em; color:#888;">
-                      {{ v.hash ? v.hash.slice(0,8) : '—' }}
-                    </td>
-                    <td style="font-size:0.75em; color:#aaa;">{{ v.produced_by_task || '—' }}</td>
-                    <td>
-                      <span :class="['badge', v.status==='committed' ? 'badge-SUCCESS' : 'badge-PENDING']">
-                        {{ v.status }}
-                      </span>
-                    </td>
-                    <td class="text-center">
-                      <div class="btn-group">
-                        <router-link 
-                          :to="{ path: '/lineage', query: { ns: selNs, id: selId, ver: v.version } }"
-                          class="btn btn-xs btn-outline-primary" 
-                          title="View Lineage"
-                          style="color: #d080ff; border-color: rgba(208, 128, 255, 0.4);">
-                          <i class="fas fa-sitemap"></i>
-                        </router-link>
-
-                        <router-link 
-                          :to="'/datasets/' + selNs + '/' + selId + '/' + v.version"
-                          class="btn btn-xs btn-outline-info" 
-                          title="View Preview"
-                          style="color: #00d4ff; border-color: rgba(0, 212, 255, 0.4);">
-                          <i class="fas fa-eye"></i>
-                        </router-link>
-                        
-                      </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
           </div>
         </div>
-      </div>
-
-      <materialize ref="materializeRef" @done="loadNamespace(currentNs)"></materialize>
-    </div>
   
-      
+     </base-panel>
+     
+     <materialize ref="materializeRef" @done="loadNamespace(currentNs)"></materialize>
+    
     </base-page>
   `
 });

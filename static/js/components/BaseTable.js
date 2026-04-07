@@ -8,7 +8,7 @@ export default {
   },
   template: `
     <div class="table-responsive">
-      <table :class="['table table-sm mb-0', { 'table-hover': hover, 'table-striped': striped }]">
+      <table :class="['table table-sm m-0', { 'table-hover': hover, 'table-striped': striped }]">
         <thead>
           <tr>
             <th v-for="col in columns" :key="col.key" :class="col.class">
@@ -20,13 +20,13 @@ export default {
           <tr v-for="(item, index) in items" :key="index">
             <td v-for="col in columns" :key="col.key" :class="col.class">
               <slot :name="'cell(' + col.key + ')'" :item="item">
-                {{ item[col.key] }}
+                {{ item[col.key] || '-' }}
               </slot>
             </td>
           </tr>
           <tr v-if="!items.length">
-            <td :colspan="columns.length" class="text-center p-4 text-muted">
-              Nessun dato disponibile
+            <td :colspan="columns.length" class="text-center py-5 text-muted">
+              <i class="fas fa-info-circle mr-1"></i> No data
             </td>
           </tr>
         </tbody>

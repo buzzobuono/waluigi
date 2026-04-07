@@ -54,9 +54,10 @@ class CatalogDB:
                 CREATE TABLE IF NOT EXISTS dataset_metadata (
                     namespace  TEXT NOT NULL,
                     dataset_id TEXT NOT NULL,
+                    version    TEXT NOT NULL,
                     key        TEXT NOT NULL,
                     value      TEXT,
-                    PRIMARY KEY (namespace, dataset_id, key)
+                    PRIMARY KEY (namespace, dataset_id, version, key)
                 );
 
                 CREATE TABLE IF NOT EXISTS lineage (
@@ -287,27 +288,30 @@ class CatalogDB:
 
     # --- Metadata ---
 
-    def set_metadata(self, namespace, dataset_id, key, value):
+    def set_metadata(self, namespace, dataset_id, version, key, value):
         with self.conn:
             self.conn.execute("""
-                INSERT INTO dataset_metadata (namespace, dataset_id, key, value)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(namespace, dataset_id, key) DO UPDATE SET value = excluded.value
-            """, (namespace, dataset_id, key, str(value)))
+                INSERT INTO dataset_metadata (namespace, dataset_id, version, key, value)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(namespace, dataset_id, version, key)
+                DO UPDATE SET value = excluded.value
+                """, (namespace, dataset_id, version, key, str(value)))
 
-    def delete_metadata(self, namespace, dataset_id, key):
+    def delete_metadata(self, namespace, dataset_id, version, key):
         with self.conn:
             cursor = self.conn.execute("""
-                DELETE FROM dataset_metadata WHERE namespace = ? AND dataset_id = ? AND key = ?
-            """, (namespace, dataset_id, key))
+                DELETE FROM dataset_metadata
+                WHERE namespace = ? AND dataset_id = ? AND version = ? AND key = ?
+            """, (namespace, dataset_id, version, key))
             return cursor.rowcount > 0
 
-    def get_metadata(self, namespace, dataset_id):
+    def get_metadata(self, namespace, dataset_id, version):
         cursor = self.conn.execute("""
-            SELECT key, value FROM dataset_metadata WHERE namespace = ? AND dataset_id = ?
-        """, (namespace, dataset_id))
+            SELECT key, value FROM dataset_metadata
+            WHERE namespace = ? AND dataset_id = ? AND version = ?
+        """, (namespace, dataset_id, version))
         return {r["key"]: r["value"] for r in cursor.fetchall()}
-
+            
     def list_all_datasets(self):
         cursor = self.conn.execute("""
             SELECT namespace, id, version, format, rows, status, committed_at

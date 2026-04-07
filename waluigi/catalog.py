@@ -520,23 +520,23 @@ async def history(namespace: str, id: str):
     return JSONResponse(versions)
 
 
-@app.get("/datasets/{namespace:path}/{id}/metadata", tags=["Datasets"],
+@app.get("/datasets/{namespace:path}/{id}/{version}/metadata", tags=["Datasets"],
          summary="Get custom metadata for a dataset")
-async def get_metadata(namespace: str, id: str):
-    return JSONResponse(db.get_metadata(namespace, id))
+async def get_metadata(namespace: str, id: str, version: str):
+    return JSONResponse(db.get_metadata(namespace, id, version))
 
 
-@app.post("/datasets/{namespace:path}/{id}/metadata", tags=["Datasets"],
+@app.post("/datasets/{namespace:path}/{id}/{version}/metadata", tags=["Datasets"],
           summary="Set a custom metadata key")
-async def set_metadata(namespace: str, id: str, body: MetadataRequest):
-    db.set_metadata(namespace, id, body.key, body.value)
+async def set_metadata(namespace: str, id: str, version: str, body: MetadataRequest):
+    db.set_metadata(namespace, id, version, body.key, body.value)
     return JSONResponse({"status": "ok"})
 
 
-@app.delete("/datasets/{namespace:path}/{id}/metadata/{key}", tags=["Datasets"],
+@app.delete("/datasets/{namespace:path}/{id}/{version}/metadata/{key}", tags=["Datasets"],
             summary="Delete a custom metadata key")
-async def delete_metadata(namespace: str, id: str, key: str):
-    ok = db.delete_metadata(namespace, id, key)
+async def delete_metadata(namespace: str, id: str, version: str, key: str):
+    ok = db.delete_metadata(namespace, id, version, key)
     if not ok:
         return JSONResponse({"error": "key not found"}, status_code=404)
     return JSONResponse({"status": "ok"})

@@ -167,14 +167,14 @@ class CatalogClient:
         return self._get(
             f"/lineage/{_enc(namespace)}/{_enc(id)}/{_enc(version)}/downstream")
 
-    def set_metadata(self, namespace, id, key, value):
+    def set_metadata(self, namespace, id, key, version, value):
         """Set a custom metadata key on a dataset (not version-specific)."""
-        self._post(f"/datasets/{_enc(namespace)}/{_enc(id)}/metadata",
+        self._post(f"/datasets/{_enc(namespace)}/{_enc(id)}/{_enc(version)}/metadata",
                    json={"key": key, "value": value})
 
-    def get_metadata(self, namespace, id):
+    def get_metadata(self, namespace, id, version):
         """Return all custom metadata for a dataset."""
-        return self._get(f"/datasets/{_enc(namespace)}/{_enc(id)}/metadata")
+        return self._get(f"/datasets/{_enc(namespace)}/{_enc(id)}/{_enc(version)}/metadata")
 
     # ------------------------------------------------------------------
     # Internal

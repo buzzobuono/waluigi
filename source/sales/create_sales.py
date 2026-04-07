@@ -4,7 +4,6 @@ from waluigi.sdk.catalog import catalog
 
 NAMESPACE = "sales/raw"
 
-
 class CreateSalesDataset(Task):
 
     def run(self):
@@ -19,15 +18,25 @@ class CreateSalesDataset(Task):
             {"date": self.params.date, "product": "F", "quantity":  9, "revenue":  350.0}
         ]
 
+        # 1. Produzione del dataset
         with catalog.produce(NAMESPACE, "sales_raw", format="csv") as ctx:
             with open(ctx.path, "w", newline="") as f:
                 writer = csv.DictWriter(f, fieldnames=rows[0].keys())
                 writer.writeheader()
                 writer.writerows(rows)
             ctx.rows = len(rows)
+        
+        # Una volta usciti dal blocco 'with', la versione è committata.
+        # Ora ctx.committed_version contiene la versione definitiva (o quella nuova o quella recuperata)
 
-        print(f"✅ Dataset {NAMESPACE}/sales_raw scritto, righe: {ctx.rows}")
+        # 2. Aggiunta dei CUSTOM METADATA associati alla versione specifica
+        ver = ctx.committed_version
+        
+        catalog.set_metadata(NAMESPACE, "sales_raw", "source", ver, "SAP_EXTRACT")
+        catalog.set_metadata(NAMESPACE, "sales_raw", "owner", ver, "sales_team")
+        catalog.set_metadata(NAMESPACE, "sales_raw", "date_ref", ver, self.params.date)
 
+        print(f"✅ Dataset {NAMESPACE}/sales_raw@{ver} scritto con metadati storicizzati.")
 
 if __name__ == "__main__":
     CreateSalesDataset().start()
