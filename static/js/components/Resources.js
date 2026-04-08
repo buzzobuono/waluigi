@@ -25,8 +25,7 @@ export default {
     <base-page 
       title="Resources"
       subtitle="Cluster resources consumption"
-      icon="fas fa-microchip"
-    >
+      icon="fas fa-microchip">
       
       <template #actions>
           <base-button 

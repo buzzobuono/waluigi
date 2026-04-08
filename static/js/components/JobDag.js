@@ -67,14 +67,13 @@ export default {
       title="Job Details" 
       :subtitle="'Workflow DAG for ' + jobId"
       icon="fas fa-sitemap"
-      :loading="loading && !tasks.length"
-    >
+      :loading="loading && !tasks.length">
+  
       <template #actions>
          <base-button 
             label="Back" 
             icon="fas fa-arrow-left" 
-            color="outline-light" 
-            size="sm"
+            color="outline-secondary"
             @click="$router.push('/jobs')"
           />
           <base-button 

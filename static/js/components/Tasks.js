@@ -2,19 +2,21 @@ import { api } from '../api.js';
 import BasePage from './BasePage.js';
 import BasePanel from './BasePanel.js';
 import BaseTable from './BaseTable.js';
-import LogModal from './LogModal.js';
 import BaseButton from './BaseButton.js';
 import BaseButtonGroup from './BaseButtonGroup.js';
+import BaseModal from './BaseModal.js';
+import LogModal from './LogModal.js';
 
 export default {
   name: 'Tasks',
   props: { tasks: Array, loading: Boolean },
-  components: { BasePage, BasePanel, BaseTable, LogModal, BaseButton, BaseButtonGroup },
+  components: { BasePage, BasePanel, BaseTable, LogModal, BaseButton, BaseButtonGroup, BaseModal },
   emits: ['refresh'],
 
   setup(props, { emit }) {
     const route = VueRouter.useRoute();
     const logModalRef = Vue.ref(null);
+    const baseModalRef = Vue.ref(null);
 
     const STATUS_COLOR = {
       SUCCESS: '#28a745',
@@ -61,7 +63,7 @@ export default {
     };
 
     return { 
-      columns, STATUS_COLOR, route, logModalRef, 
+      columns, STATUS_COLOR, route, logModalRef, baseModalRef,
       resetTask, deleteTask, resetNs, deleteNs, openLogs 
     };
   },
@@ -91,16 +93,14 @@ export default {
     <base-page 
       :title="filterNs ? 'Tasks in ' + filterNs : 'All Tasks'"
       :subtitle="filterNs ? 'Namespace View' : 'Global View'"
-      icon="fas fa-tasks"
-    >
+      icon="fas fa-tasks">
       
       <template #actions>
          <base-button 
             v-if="filterNs" 
             label="Back" 
             icon="fas fa-arrow-left" 
-            color="outline-secondary" 
-            class="mr-2"
+            color="outline-secondary"
             @click="$router.push('/namespaces')"
           />
           
@@ -187,6 +187,29 @@ export default {
       </base-panel>
 
       <log-modal ref="logModalRef" />
+      
+  <BaseButton 
+        label="Apri Modale" 
+        icon="fa-plus" 
+        color="success" 
+        @click="$refs.mioModal.open()" 
+      />
+
+      <!-- 2. Il componente Modal con il riferimento 'ref' -->
+      <BaseModal 
+        ref="mioModal" 
+        title="Inserimento Dati" 
+        variant="primary"
+        size="lg"
+      >
+        <p>Contenuto del modal personalizzato qui...</p>
+        
+        <template #footer>
+          <button class="btn btn-secondary" @click="$refs.mioModal.close()">Annulla</button>
+          <BaseButton label="Salva Modifiche" color="primary" />
+        </template>
+      </BaseModal>
+  
     </base-page>
   `
 };
