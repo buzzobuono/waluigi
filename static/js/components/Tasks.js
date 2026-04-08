@@ -188,28 +188,6 @@ export default {
 
       <log-modal ref="logModalRef" />
       
-  <BaseButton 
-        label="Apri Modale" 
-        icon="fa-plus" 
-        color="success" 
-        @click="$refs.mioModal.open()" 
-      />
-
-      <!-- 2. Il componente Modal con il riferimento 'ref' -->
-      <BaseModal 
-        ref="mioModal" 
-        title="Inserimento Dati" 
-        variant="primary"
-        size="lg"
-      >
-        <p>Contenuto del modal personalizzato qui...</p>
-        
-        <template #footer>
-          <button class="btn btn-secondary" @click="$refs.mioModal.close()">Annulla</button>
-          <BaseButton label="Salva Modifiche" color="primary" />
-        </template>
-      </BaseModal>
-  
     </base-page>
   `
 };

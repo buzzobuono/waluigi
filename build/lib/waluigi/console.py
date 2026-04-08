@@ -141,9 +141,9 @@ async def catalog_dataset_preview(ns: str, id: str, version: str, limit: int = 1
 async def catalog_dataset_history(ns: str, id: str):
     return JSONResponse(await _catalog_get(f'/datasets/{ns}/{id}/history'))
 
-@app.get('/catalog/datasets/{ns:path}/{id}/metadata')
-async def catalog_dataset_metadata(ns: str, id: str):
-    return JSONResponse(await _catalog_get(f'/datasets/{ns}/{id}/metadata'))
+@app.get('/catalog/datasets/{ns:path}/{id}/{version}/metadata')
+async def catalog_dataset_metadata(ns: str, id: str, version: str):
+    return JSONResponse(await _catalog_get(f'/datasets/{ns}/{id}/{version}/metadata'))
 
 @app.get('/catalog/datasets/{ns:path}/{id}')
 async def catalog_dataset_latest(ns: str, id: str):
