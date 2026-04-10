@@ -2,6 +2,7 @@ import { api } from '../api.js';
 import BasePage from './BasePage.js';
 import BasePanel from './BasePanel.js';
 import BaseButton from './BaseButton.js';
+import BaseButtonGroup from './BaseButtonGroup.js';
 import BaseTable from './BaseTable.js';
 import Materialize from './Materialize.js';
 
@@ -10,7 +11,7 @@ const { defineComponent, ref, computed, watch, onMounted } = Vue;
 export default defineComponent({
   name: 'Catalog',
 
-  components: { BasePage, BasePanel, BaseButton, BaseTable, Materialize },
+  components: { BasePage, BasePanel, BaseButton, BaseButtonGroup, BaseTable, Materialize },
 
   setup() {
     const columns = [
@@ -100,6 +101,7 @@ export default defineComponent({
         if (history.value.length > 0) {
             selVersion.value = history.value[0].version;
         }
+        detailOpen.value = true;
       } catch(e) {
         console.error('Dataset detail error', e);
       }
@@ -200,8 +202,7 @@ export default defineComponent({
          <base-button 
             label="Back" 
             icon="fas fa-arrow-left" 
-            color="outline-light" 
-            class="mr-2"
+            color="outline-secondary"
             @click="goBack"
           />
           <base-button 

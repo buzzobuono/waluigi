@@ -27,6 +27,11 @@ export default {
       <div :class="['card-body', { 'p-0': noPadding }]">
         <slot></slot>
       </div>
+
+      <div class="card-footer">
+        <slot name="footer"></slot>
+      </div>
+
     </div>
   `
 };
