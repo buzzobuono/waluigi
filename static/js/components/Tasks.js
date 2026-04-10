@@ -6,17 +6,18 @@ import BaseButton from './BaseButton.js';
 import BaseButtonGroup from './BaseButtonGroup.js';
 import BaseModal from './BaseModal.js';
 import LogModal from './LogModal.js';
+import ConfirmDialog from './ConfirmDialog.js';
 
 export default {
   name: 'Tasks',
   props: { tasks: Array, loading: Boolean },
-  components: { BasePage, BasePanel, BaseTable, LogModal, BaseButton, BaseButtonGroup, BaseModal },
+  components: { BasePage, BasePanel, BaseTable, LogModal, BaseButton, BaseButtonGroup, BaseModal, ConfirmDialog },
   emits: ['refresh'],
 
   setup(props, { emit }) {
     const route = VueRouter.useRoute();
     const logModalRef = Vue.ref(null);
-    const baseModalRef = Vue.ref(null);
+    const confirmRef = Vue.ref(null);
 
     const STATUS_COLOR = {
       SUCCESS: '#28a745',
@@ -35,27 +36,51 @@ export default {
     ];
 
     const resetTask = async (id) => {
-      if (!confirm(`Reset task "${id}"?`)) return;
-      await api.resetTask(id);
-      emit('refresh');
+      confirmRef.value.ask(
+        `Reset task "${id}"?`,
+        async (ok) => {
+          if (ok) {
+            await api.resetTask(id);
+            emit('refresh');
+          }
+        }
+      );
     };
-
+    
     const deleteTask = async (id) => {
-      if (!confirm(`Delete task "${id}"?`)) return;
-      await api.deleteTask(id);
-      emit('refresh');
+      confirmRef.value.ask(
+        `Delete task "${id}"?`,
+        async (ok) => {
+          if (ok) {
+            await api.deleteTask(id);
+            emit('refresh');
+          }
+        }
+      );
     };
-
-    const resetNs = async (ns) => {
-      if (!confirm(`Reset all in "${ns}"?`)) return;
-      await api.resetNamespace(ns);
-      emit('refresh');
+    
+    const resetNs = (ns) => {
+      confirmRef.value.ask(
+        `Reset all in "${ns}"?`,
+        async (ok) => {
+          if (ok) {
+            await api.resetNamespace(ns);
+            emit('refresh');
+          }
+        }
+      );
     };
-
+    
     const deleteNs = async (ns) => {
-      if (!confirm(`Delete all in "${ns}"?`)) return;
-      await api.deleteNamespace(ns);
-      emit('refresh');
+      confirmRef.value.ask(
+        `Delete all in "${ns}"?`,
+        async (ok) => {
+          if (ok) {
+            await api.deleteNamespace(ns);
+            emit('refresh');
+          }
+        }
+      );
     };
 
     const openLogs = (id) => {
@@ -63,7 +88,7 @@ export default {
     };
 
     return { 
-      columns, STATUS_COLOR, route, logModalRef, baseModalRef,
+      columns, STATUS_COLOR, route, logModalRef, confirmRef,
       resetTask, deleteTask, resetNs, deleteNs, openLogs 
     };
   },
@@ -187,7 +212,8 @@ export default {
       </base-panel>
 
       <log-modal ref="logModalRef" />
-      
+      <confirm-dialog title="Confirm" ref="confirmRef" />
+  
     </base-page>
   `
 };

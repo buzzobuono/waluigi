@@ -60,10 +60,6 @@ export default {
         </span>
       </template>
 
-      <template #cell(params)="{ item }">
-        <span class="text-muted small">{{ item.params || '—' }}</span>
-      </template>
-
       <template #cell(actions)="{ item }">
         <base-button-group>
           <base-button 

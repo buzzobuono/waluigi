@@ -6,13 +6,13 @@ export default {
   components: { BaseModal },
   
   setup() {
-  const taskId = Vue.ref('');
-  const logs = Vue.ref([]);
-  const loading = Vue.ref(false);
-  const error = Vue.ref('');
-  const logModal = Vue.ref(null);
+    const taskId = Vue.ref('');
+    const logs = Vue.ref([]);
+    const loading = Vue.ref(false);
+    const error = Vue.ref('');
+    const logModal = Vue.ref(null);
 
-  const show = async (id) => {
+    const show = async (id) => {
       taskId.value = id;
       logs.value = [];
       loading.value = true;

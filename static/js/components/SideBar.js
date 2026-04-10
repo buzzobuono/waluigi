@@ -6,7 +6,7 @@ export default {
     isGroupActive: Function
   },
   template: `
-    <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <aside class="main-sidebar sidebar-light-primary elevation-4">
       
       <a href="/" class="brand-link text-center">
         <span class="brand-text font-weight-light" style="font-size:1.1em;">

@@ -5,6 +5,7 @@ import BaseTable from './BaseTable.js';
 import BaseInfoBox from './BaseInfoBox.js';
 import BaseButton from './BaseButton.js';
 import BaseButtonGroup from './BaseButtonGroup.js';
+import ConfirmDialog from './ConfirmDialog.js';
 
 export default {
   name: 'Jobs',
@@ -14,11 +15,13 @@ export default {
   },
   components: { 
     BasePage, BasePanel, BaseTable, BaseInfoBox, 
-    BaseButton, BaseButtonGroup 
+    BaseButton, BaseButtonGroup, ConfirmDialog
   },
   emits: ['refresh'],
 
-  setup() {
+  setup(props, { emit }) {
+    const confirmRef = Vue.ref(null);
+
     const columns = [
       { key: 'job_id', label: 'Job ID' },
       { key: 'status', label: 'Status' },
@@ -34,7 +37,19 @@ export default {
       PENDING: { color: 'secondary', icon: 'fas fa-clock' }
     };
 
-    return { columns, STATUS_MAP };
+    const deleteJob = async (jobId) => {
+      confirmRef.value.ask(
+        `Delete job "${jobId}"?`,
+        async (ok) => {
+          if (ok) {
+            await api.deleteJob(jobId);
+            emit('refresh');
+          }
+        }
+      );
+    }
+    
+    return { columns, STATUS_MAP, deleteJob, confirmRef };
   },
 
   computed: {
@@ -44,26 +59,13 @@ export default {
       return c;
     }
   },
-
-  methods: {
-    async deleteJob(jobId) {
-      if (!confirm(`Sei sicuro di voler eliminare il job "${jobId}" e tutti i suoi task?`)) return;
-      try {
-        await api.deleteJob(jobId);
-        this.$emit('refresh');
-      } catch (e) {
-        alert(`Errore durante l'eliminazione: ${e.message}`);
-      }
-    }
-  },
-
+  
   template: `
     <base-page 
       title="Jobs" 
       subtitle="Job monitoring and managememt"
       icon="fas fa-briefcase"
-      :loading="loading && !jobs.length"
-    >
+      :loading="loading && !jobs.length">
       
       <template #actions>
         <div class="row w-100 m-0">
@@ -121,6 +123,8 @@ export default {
         </base-table>
       </base-panel>
 
+      <confirm-dialog title="Confirm" ref="confirmRef" />
+  
     </base-page>
   `
 };

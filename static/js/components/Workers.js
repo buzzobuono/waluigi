@@ -32,7 +32,7 @@ export default {
   template: `
     <base-page 
       title="Workers" 
-      subtitle="orker status and slot availability"
+      subtitle="Worker status and slot availability"
       icon="fas fa-server"
       :loading="loading && !workers.length">
       

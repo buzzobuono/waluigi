@@ -42,7 +42,7 @@ export default {
           scrollable ? 'modal-dialog-scrollable' : ''
         ]"
         style="
-          max-width: 80vw;
+          max-width: 96vw;
           width: fit-content;
           margin: 1.75rem auto;
         "

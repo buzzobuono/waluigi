@@ -1,23 +1,22 @@
-// components/Lineage.js
 import { api } from '../api.js';
+import BasePage from './BasePage.js';
+import BasePanel from './BasePanel.js';
 
-const { defineComponent, ref, onMounted } = Vue;
-
-export default defineComponent({
+export default {
   name: 'Lineage',
-
+  components: { BasePage, BasePanel },
   setup() {
-    const nsInput    = ref('');   // e.g. "sales/raw"
-    const idInput    = ref('');   // e.g. "sales_raw"
-    const verInput   = ref('');   // optional
-    const upstream   = ref([]);
-    const downstream = ref([]);
-    const current    = ref(null);
-    const loading    = ref(false);
-    const error      = ref('');
+    const nsInput    = Vue.ref('');   // e.g. "sales/raw"
+    const idInput    = Vue.ref('');   // e.g. "sales_raw"
+    const verInput   = Vue.ref('');   // optional
+    const upstream   = Vue.ref([]);
+    const downstream = Vue.ref([]);
+    const current    = Vue.ref(null);
+    const loading    = Vue.ref(false);
+    const error      = Vue.ref('');
     
     const route = VueRouter.useRoute();
-    onMounted(() => {
+    Vue.onMounted(() => {
       if (route.query.ns)  nsInput.value  = route.query.ns;
       if (route.query.id)  idInput.value  = route.query.id;
       if (route.query.ver) verInput.value = route.query.ver;
@@ -82,17 +81,13 @@ export default defineComponent({
   },
 
   template: `
-    <div>
-
-      <!-- Search bar -->
-      <div class="card card-outline mb-3">
-        <div class="card-header">
-          <h3 class="card-title">
-            <i class="fas fa-project-diagram mr-2"></i>Lineage Explorer
-          </h3>
-        </div>
-        <div class="card-body">
-          <div class="form-row align-items-end">
+    <base-page 
+      title="Lineage" 
+      subtitle="Explore dataset lineage"
+      icon="fas fa-project-diagram">
+    
+      <template #actions>
+         <div class="form-row align-items-end">
             <div class="col-12 col-sm-4">
               <label style="color:#aaa; font-size:0.85em;">Namespace</label>
               <input class="form-control form-control-sm"
@@ -124,22 +119,17 @@ export default defineComponent({
             </div>
           </div>
           <div v-if="error" class="text-danger mt-2" style="font-size:0.85em;">{{ error }}</div>
-        </div>
-      </div>
+      </template>
 
       <!-- Lineage graph: upstream | current | downstream -->
       <div v-if="current" class="row">
 
         <!-- Upstream -->
-        <div class="col-12 col-md-4">
-          <div class="card card-outline h-100">
-            <div class="card-header">
-              <h3 class="card-title" style="color:#17a2b8;">
+          <base-panel :no-padding="true">
+            <template #title>
                 <i class="fas fa-arrow-up mr-2"></i>Upstream
                 <span class="badge badge-info ml-2">{{ upstream.length }}</span>
-              </h3>
-            </div>
-            <div class="card-body p-0">
+            </template>
               <div v-if="!upstream.length" class="text-muted p-3 text-center">
                 No upstream — source dataset
               </div>
@@ -160,20 +150,14 @@ export default defineComponent({
                   </span>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
+          </base-panel>
 
         <!-- Current -->
-        <div class="col-12 col-md-4 mt-3 mt-md-0">
-          <div class="card card-outline h-100" style="border-color:#d080ff !important;">
-            <div class="card-header" style="border-color:#d080ff !important;">
-              <h3 class="card-title" style="color:#d080ff;">
-                <i class="fas fa-database mr-2"></i>Current
-              </h3>
-            </div>
-            <div class="card-body text-center" style="padding-top:24px;">
-              <div style="color:#aaa; font-size:0.8em;">{{ current.namespace }}</div>
+        <base-panel :no-padding="true">
+          <template #title>
+             <i class="fas fa-database mr-2"></i>Current
+          </template>
+             <div style="color:#aaa; font-size:0.8em;">{{ current.namespace }}</div>
               <div style="font-size:1.1em; color:#00d4ff; font-family:monospace;
                           word-break:break-all; margin-top:4px;">
                 {{ current.id }}
@@ -197,9 +181,7 @@ export default defineComponent({
                    style="margin-top:4px; font-size:0.7em; color:#555; font-family:monospace;">
                 {{ current.hash.slice(0,16) }}...
               </div>
-            </div>
-          </div>
-        </div>
+        </base-panel>
 
         <!-- Downstream -->
         <div class="col-12 col-md-4 mt-3 mt-md-0">
@@ -244,6 +226,6 @@ export default defineComponent({
         Enter namespace and dataset ID to explore lineage
       </div>
 
-    </div>
+    </base-page>
   `
-});
+};
