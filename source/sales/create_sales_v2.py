@@ -1,0 +1,40 @@
+import csv
+from waluigi.sdk.task import Task
+from waluigi.sdk.catalog_v2 import catalog
+
+COLLECTION = "sales/raw"
+DATASET_ID = "sales_raw"
+
+
+class CreateSalesDataset(Task):
+
+    def run(self):
+        print(f"📊 Creazione dataset vendite per data: {self.params.date}")
+
+        rows = [
+            {"date": self.params.date, "product": "A", "quantity": 10, "revenue": 100.0},
+            {"date": self.params.date, "product": "B", "quantity": 25, "revenue": 250.0},
+            {"date": self.params.date, "product": "C", "quantity":  7, "revenue":  70.0},
+            {"date": self.params.date, "product": "D", "quantity": 42, "revenue": 420.0},
+            {"date": self.params.date, "product": "E", "quantity":  3, "revenue":  30.0},
+            {"date": self.params.date, "product": "F", "quantity":  9, "revenue": 350.0},
+        ]
+
+        with catalog.produce(COLLECTION, DATASET_ID, format="csv") as ctx:
+            with open(ctx.path, "w", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=rows[0].keys())
+                writer.writeheader()
+                writer.writerows(rows)
+            ctx.rows = len(rows)
+            ctx.meta["source"]   = "SAP_EXTRACT"
+            ctx.meta["date_ref"] = self.params.date
+
+        if ctx.skipped:
+            print(f"⏭️  Contenuto invariato — versione esistente: {ctx.committed_version}")
+            return
+
+        print(f"✅ {COLLECTION}/{DATASET_ID}@{ctx.committed_version} scritto.")
+
+
+if __name__ == "__main__":
+    CreateSalesDataset().start()
