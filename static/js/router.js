@@ -5,6 +5,7 @@ import Workers   from './components/Workers.js';
 import Resources from './components/Resources.js';
 import Catalog   from './components/Catalog.js';
 import Lineage   from './components/Lineage.js';
+import Catalog2   from './components/Catalog2.js';
 import JobDag    from './components/JobDag.js';
 import DatasetPreview    from './components/DatasetPreview.js';
 
@@ -17,6 +18,7 @@ const routes = [
   { path: '/workers',   component: Workers,   meta: { title: 'Workers' } },
   { path: '/resources', component: Resources, meta: { title: 'Resources' } },
   { path: '/catalog',   component: Catalog,   meta: { title: 'Catalog' } },
+  { path: '/catalog2',   component: Catalog2,   meta: { title: 'Catalog2' } },
   { path: '/datasets/:namespace+/:id/:version', component: DatasetPreview, meta: { title: 'Dataset Preview'} },
   { path: '/lineage',   component: Lineage,   meta: { title: 'Lineage' } },
   { path: '/jobs/:jobId', component: JobDag,  meta: { title: 'Job DAG' } }

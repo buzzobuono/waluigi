@@ -3,57 +3,43 @@ waluigi.sdk.catalog
 
 Format-agnostic data catalog SDK for Waluigi Catalog v2.
 
-Collection + id always identify a dataset. The SDK unwraps the
-{data, diagnostic} response contract automatically and raises
-CatalogWarning for WARN results so callers can decide whether to
-act on them.
+Dataset identity
+----------------
+Every dataset has a single slash-separated id, e.g. "sales/raw/sales_raw".
+No collections — navigation is virtual, exactly like S3.
 
 Usage:
 
     from waluigi.sdk.catalog import catalog
 
-    # READ — resolve connection info, open with native libraries
-    info = catalog.resolve("finance/erp", "fatture")
-    # info.path          → local file path  (source_type == "local")
-    # info.dsn           → SQLAlchemy DSN   (source_type == "sql")
-    # info.query         → SQL query        (source_type == "sql")
-    # info.uri           → s3:// URI        (source_type == "s3")
-    # info.remote_path   → remote path      (source_type == "sftp")
-    # info.pii_columns   → list of PII col names (always present)
+    # WRITE
+    with catalog.produce("sales/raw/sales_raw", format="csv") as ctx:
+        writer.writerows(rows)
+        ctx.rows = len(rows)
+        ctx.meta["source"] = "SAP_EXTRACT"
 
-    # WRITE — context manager handles reserve → write → commit
-    with catalog.produce("finance/erp", "fatture_clean",
-                         format="parquet",
-                         inputs=[catalog.ref("finance/erp", "fatture")]) as ctx:
-        df.to_parquet(ctx.path)
-        ctx.rows = len(df)
-    # on __exit__: hash computed + commit called automatically
-    # on exception: version is marked failed
+    # READ
+    info = catalog.resolve("sales/raw/sales_raw")
+    df = pd.read_csv(info.path)
 
-    # VIRTUAL — register an external dataset (no local copy)
-    catalog.register_virtual(
-        "finance/erp", "fatture_pg",
+    # BROWSE (S3-style)
+    result = catalog.browse("sales/raw/")
+    # result["datasets"]  → direct child datasets
+    # result["prefixes"]  → virtual sub-prefixes
+
+    # VIRTUAL
+    catalog.register_virtual("finance/erp/fatture_pg",
         source_id="pg-dwh",
         location="SELECT * FROM finance.fatture",
-        format="sql",
-    )
+        format="sql")
 
-    # MATERIALIZE — fetch a REST API endpoint into a local CSV
-    result = catalog.materialize(
-        "crm/raw", "orders",
-        base_url="https://api.crm.com",
-        endpoint="/v1/orders",
-        params={"status": "closed"},
-    )
+    # SCHEMA (data steward)
+    schema = catalog.get_schema("sales/raw/sales_raw")
+    catalog.patch_column("sales/raw/sales_raw", "email",
+                         pii=True, pii_type="direct")
+    catalog.publish_schema("sales/raw/sales_raw", published_by="mario.rossi")
 
-    # SCHEMA — read and patch PII flags
-    schema = catalog.get_schema("finance/erp", "fatture")
-    catalog.patch_column("finance/erp", "fatture", "email",
-                         pii=True, pii_type="direct",
-                         description="Customer email address")
-    catalog.publish_schema("finance/erp", "fatture", published_by="mario.rossi")
-
-Environment variables (injected by the worker):
+Environment variables:
     WALUIGI_CATALOG_URL   default: http://localhost:9000
     WALUIGI_TASK_ID
     WALUIGI_JOB_ID
@@ -85,11 +71,7 @@ class CatalogWarning(UserWarning):
 
 @dataclass
 class ResolveInfo:
-    """
-    Typed result of catalog.resolve().
-    Attributes are populated based on source_type; unused ones are None.
-    """
-    collection:   str
+    """Typed result of catalog.resolve()."""
     dataset_id:   str
     version:      str
     source_type:  str
@@ -97,28 +79,24 @@ class ResolveInfo:
     rows:         Optional[int]
     committed_at: Optional[str]
     pii_columns:  List[str] = field(default_factory=list)
-
-    # local / sftp
-    path:        Optional[str] = None
-    remote_path: Optional[str] = None
-
+    # local
+    path:         Optional[str] = None
+    # sftp
+    remote_path:  Optional[str] = None
     # s3
     uri:          Optional[str] = None
     endpoint_url: Optional[str] = None
     region:       Optional[str] = None
-
     # sql
-    dsn:   Optional[str] = None
-    query: Optional[str] = None
-
+    dsn:          Optional[str] = None
+    query:        Optional[str] = None
     # api
-    url: Optional[str] = None
+    url:          Optional[str] = None
 
     @classmethod
     def from_response(cls, data: dict) -> "ResolveInfo":
         ci = data.get("connection_info", {})
         return cls(
-            collection=data["collection"],
             dataset_id=data["dataset_id"],
             version=data["version"],
             source_type=data["source_type"],
@@ -126,18 +104,13 @@ class ResolveInfo:
             rows=data.get("rows"),
             committed_at=data.get("committed_at"),
             pii_columns=data.get("pii_columns", []),
-            # local
             path=ci.get("path"),
-            # sftp
             remote_path=ci.get("remote_path"),
-            # s3
             uri=ci.get("uri"),
             endpoint_url=ci.get("endpoint_url"),
             region=ci.get("region"),
-            # sql
             dsn=ci.get("dsn"),
             query=ci.get("query"),
-            # api
             url=ci.get("url"),
         )
 
@@ -149,20 +122,18 @@ class ResolveInfo:
 class DatasetWriter:
 
     def __init__(self, client: "CatalogClient",
-                 collection: str, dataset_id: str,
-                 version: str, path: str,
+                 dataset_id: str, version: str, path: str,
                  inputs: List[dict] = None):
         self._client     = client
-        self._collection = collection
         self._dataset_id = dataset_id
         self._version    = version
         self._inputs     = inputs or []
-        self.path        = path
-        self.rows: Optional[int]        = None
-        self.columns: Optional[dict]    = None   # optional schema override
-        self.meta: Dict[str, str]       = {}     # business metadata — written by task
-        self.skipped           = False
-        self.committed_version = version
+        self.path               = path
+        self.rows: Optional[int]     = None
+        self.columns: Optional[dict] = None
+        self.meta: Dict[str, str]    = {}
+        self.skipped                 = False
+        self.committed_version       = version
 
     def __enter__(self) -> "DatasetWriter":
         return self
@@ -171,20 +142,14 @@ class DatasetWriter:
         if exc_type is not None:
             try:
                 self._client._post(
-                    f"/datasets/{_path(self._collection)}"
-                    f"/{_seg(self._dataset_id)}"
-                    f"/{_seg(self._version)}/fail",
-                    json={},
-                    unwrap=False,
-                )
+                    f"/datasets/{self._dataset_id}/fail/{self._version}",
+                    json={}, unwrap=False)
             except Exception:
                 pass
-            return False   # re-raise original exception
+            return False
 
         result = self._client._post(
-            f"/datasets/{_path(self._collection)}"
-            f"/{_seg(self._dataset_id)}"
-            f"/{_seg(self._version)}/commit",
+            f"/datasets/{self._dataset_id}/commit/{self._version}",
             json={
                 "rows":          self.rows,
                 "columns":       self.columns,
@@ -212,91 +177,76 @@ class CatalogClient:
         self._job_id  = os.environ.get("WALUIGI_JOB_ID",  "unknown")
 
     # ------------------------------------------------------------------
-    # Helpers for building lineage refs
+    # Lineage helpers
     # ------------------------------------------------------------------
 
-    def ref(self, collection: str, dataset_id: str,
-            version: str = None) -> dict:
+    def ref(self, dataset_id: str, version: str = None) -> dict:
         """
         Build a lineage input ref.
         If version is omitted, resolves the latest committed version.
-
-            inputs=[catalog.ref("finance/erp", "fatture")]
         """
         if version is None:
-            version = self.last_version(collection, dataset_id)
-        return {"collection": collection,
-                "dataset_id": dataset_id,
-                "version":    version}
+            version = self.last_version(dataset_id)
+        return {"dataset_id": dataset_id, "version": version}
+
+    # ------------------------------------------------------------------
+    # Browse (S3-style)
+    # ------------------------------------------------------------------
+
+    def browse(self, prefix: str = "") -> dict:
+        """
+        List datasets and virtual sub-prefixes under a prefix.
+        Use trailing slash: browse("sales/raw/")
+        Returns {"prefix", "datasets", "prefixes"}.
+        """
+        prefix = prefix.rstrip("/")
+        if prefix:
+            return self._get(f"/datasets/{prefix}/")
+        return self._get("/datasets/")
 
     # ------------------------------------------------------------------
     # Read
     # ------------------------------------------------------------------
 
-    def resolve(self, collection: str, dataset_id: str,
-                version: str = None) -> ResolveInfo:
-        """
-        Return connection info for the latest (or specific) committed version.
-        Emits CatalogWarning if the dataset contains PII columns.
-        """
-        if version:
-            data = self._get(
-                f"/datasets/{_path(collection)}"
-                f"/{_seg(dataset_id)}"
-                f"/{_seg(version)}/preview",   # use version endpoint
-            )
-            # for a specific version we still want resolve-style info
-            data = self._get(
-                f"/datasets/{_path(collection)}/{_seg(dataset_id)}/resolve"
-            )
-        else:
-            data = self._get(
-                f"/datasets/{_path(collection)}/{_seg(dataset_id)}/resolve"
-            )
+    def resolve(self, dataset_id: str) -> ResolveInfo:
+        """Return connection info for the latest committed version."""
+        data = self._get(f"/datasets/{dataset_id}/resolve")
         return ResolveInfo.from_response(data)
 
-    def last_version(self, collection: str, dataset_id: str) -> str:
+    def last_version(self, dataset_id: str) -> str:
         """Return the latest committed version string."""
-        data = self._get(
-            f"/datasets/{_path(collection)}/{_seg(dataset_id)}/versions"
-        )
+        data = self._get(f"/datasets/{dataset_id}/versions")
         versions = data.get("versions", [])
         if not versions:
-            raise CatalogError(
-                f"No committed versions for {collection}/{dataset_id}")
+            raise CatalogError(f"No committed versions for {dataset_id}")
         return versions[0]["version"]
 
-    def get_dataset(self, collection: str, dataset_id: str) -> dict:
+    def get_dataset(self, dataset_id: str) -> dict:
         """Return dataset entity + latest version metadata."""
-        return self._get(
-            f"/datasets/{_path(collection)}/{_seg(dataset_id)}")
+        return self._get(f"/datasets/{dataset_id}")
 
-    def history(self, collection: str, dataset_id: str) -> List[dict]:
+    def history(self, dataset_id: str) -> List[dict]:
         """Return all committed versions (newest first)."""
-        data = self._get(
-            f"/datasets/{_path(collection)}/{_seg(dataset_id)}/versions")
+        data = self._get(f"/datasets/{dataset_id}/versions")
         return data.get("versions", [])
 
-    def lineage(self, collection: str, dataset_id: str,
-                version: str = None) -> dict:
+    def lineage(self, dataset_id: str, version: str = None) -> dict:
         """Return upstream and downstream lineage."""
-        params = f"?version={_seg(version)}" if version else ""
-        return self._get(
-            f"/datasets/{_path(collection)}/{_seg(dataset_id)}/lineage{params}")
+        params = f"?version={version}" if version else ""
+        return self._get(f"/datasets/{dataset_id}/lineage{params}")
 
-    def preview(self, collection: str, dataset_id: str,
-                version: str, limit: int = 10, offset: int = 0) -> dict:
+    def preview(self, dataset_id: str, version: str,
+                limit: int = 10, offset: int = 0) -> dict:
         """Return a paginated row preview for a local version."""
         return self._get(
-            f"/datasets/{_path(collection)}/{_seg(dataset_id)}"
-            f"/{_seg(version)}/preview?limit={limit}&offset={offset}"
-        )
+            f"/datasets/{dataset_id}/preview/{version}"
+            f"?limit={limit}&offset={offset}")
 
     # ------------------------------------------------------------------
     # Write — local (2-phase)
     # ------------------------------------------------------------------
 
-    def produce(self, collection: str, dataset_id: str,
+    def produce(self, dataset_id: str,
                 format: str = "",
                 inputs: List[dict] = None,
                 display_name: str = None,
@@ -306,14 +256,13 @@ class CatalogClient:
         """
         Reserve a new local version and return a context manager.
 
-            with catalog.produce("finance/erp", "fatture_clean",
-                                 format="parquet",
-                                 inputs=[catalog.ref("finance/erp", "fatture")]) as ctx:
-                df.to_parquet(ctx.path)
-                ctx.rows = len(df)
+            with catalog.produce("sales/raw/sales_raw", format="csv") as ctx:
+                writer.writerows(rows)
+                ctx.rows = len(rows)
+                ctx.meta["source"] = "SAP_EXTRACT"
         """
         r = self._post(
-            f"/datasets/{_path(collection)}/{_seg(dataset_id)}/reserve",
+            f"/datasets/{dataset_id}/reserve",
             json={
                 "format":       format,
                 "task_id":      self._task_id,
@@ -324,34 +273,24 @@ class CatalogClient:
                 "tags":         tags,
             },
         )
-        return DatasetWriter(self, collection, dataset_id,
+        return DatasetWriter(self, dataset_id,
                              r["version"], r["path"],
                              inputs=inputs or [])
 
     # ------------------------------------------------------------------
-    # Write — virtual (external source, no local copy)
+    # Write — virtual
     # ------------------------------------------------------------------
 
-    def register_virtual(self, collection: str, dataset_id: str,
+    def register_virtual(self, dataset_id: str,
                          source_id: str, location: str,
                          format: str = "",
                          display_name: str = None,
                          description: str = None,
                          owner: str = None,
                          tags: List[str] = None) -> dict:
-        """
-        Register a version that lives in an external source (SQL, S3, SFTP…).
-        The source must exist — create it first with register_source().
-
-            catalog.register_virtual(
-                "finance/erp", "fatture_pg",
-                source_id="pg-dwh",
-                location="SELECT * FROM finance.fatture",
-                format="sql",
-            )
-        """
+        """Register a version that lives in an external source."""
         return self._post(
-            f"/datasets/{_path(collection)}/{_seg(dataset_id)}/register-virtual",
+            f"/datasets/{dataset_id}/register-virtual",
             json={
                 "source_id":    source_id,
                 "location":     location,
@@ -369,25 +308,14 @@ class CatalogClient:
     # Write — materialize REST API → local CSV
     # ------------------------------------------------------------------
 
-    def materialize(self, collection: str, dataset_id: str,
+    def materialize(self, dataset_id: str,
                     base_url: str, endpoint: str,
                     params: Dict[str, Any] = None,
                     display_name: str = None,
                     description: str = None) -> dict:
-        """
-        Fetch a REST API endpoint and store the result as a local CSV version.
-
-            result = catalog.materialize(
-                "crm/raw", "orders",
-                base_url="https://api.crm.com",
-                endpoint="/v1/orders",
-                params={"status": "closed"},
-            )
-            # result["path"] → local CSV path
-            # result["rows"] → row count
-        """
+        """Fetch a REST API endpoint and store result as a local CSV version."""
         return self._post(
-            f"/datasets/{_path(collection)}/{_seg(dataset_id)}/materialize",
+            f"/datasets/{dataset_id}/materialize",
             json={
                 "base_url":     base_url,
                 "endpoint":     endpoint,
@@ -406,13 +334,7 @@ class CatalogClient:
     def register_source(self, id: str, type: str,
                         config: Dict[str, Any],
                         description: str = None) -> dict:
-        """
-        Register a physical connector.
-
-            catalog.register_source("pg-dwh", "sql",
-                config={"dsn": "postgresql://user:pass@host/db"},
-                description="Main data warehouse")
-        """
+        """Register a physical connector (local | sql | s3 | sftp | api)."""
         return self._post("/sources", json={
             "id":          id,
             "type":        type,
@@ -421,161 +343,104 @@ class CatalogClient:
         })
 
     def get_source(self, id: str) -> dict:
-        return self._get(f"/sources/{_seg(id)}")
+        return self._get(f"/sources/{id}")
 
     def list_sources(self) -> List[dict]:
         return self._get("/sources")
 
     # ------------------------------------------------------------------
-    # Collections
+    # Schema (data steward operations)
     # ------------------------------------------------------------------
 
-    def list_collections(self, parent: str = None) -> List[dict]:
-        if parent:
-            data = self._get(f"/collections/{_path(parent)}/children")
-            return data.get("children", [])
-        return self._get("/collections")
-
-    def list_collection_datasets(self, collection: str,
-                                 recursive: bool = False) -> List[dict]:
-        data = self._get(
-            f"/collections/{_path(collection)}/datasets"
-            f"{'?recursive=true' if recursive else ''}"
-        )
-        return data.get("datasets", [])
-
-    # ------------------------------------------------------------------
-    # Schema governance
-    # ------------------------------------------------------------------
-
-    def get_schema(self, collection: str, dataset_id: str) -> List[dict]:
+    def get_schema(self, dataset_id: str) -> List[dict]:
         """Return current schema columns with PII flags and status."""
-        data = self._get(
-            f"/datasets/{_path(collection)}/{_seg(dataset_id)}/schema")
+        data = self._get(f"/datasets/{dataset_id}/schema")
         return data.get("columns", [])
 
-    def patch_column(self, collection: str, dataset_id: str,
-                     column_name: str,
-                     editor: str = "sdk",
-                     **kwargs) -> dict:
+    def patch_column(self, dataset_id: str, column_name: str,
+                     editor: str = "sdk", **kwargs) -> dict:
         """
         Edit semantic metadata for a single column.
-
-        Accepted kwargs: logical_type, nullable, pii, pii_type,
-                         pii_notes, description, tags
-
-            catalog.patch_column("finance/erp", "fatture", "email",
-                                 pii=True, pii_type="direct",
-                                 description="Customer email")
+        kwargs: logical_type, nullable, pii, pii_type,
+                pii_notes, description, tags
         """
         return self._patch(
-            f"/datasets/{_path(collection)}/{_seg(dataset_id)}"
-            f"/schema/{_seg(column_name)}?editor={editor}",
+            f"/datasets/{dataset_id}/schema/{column_name}?editor={editor}",
             json=kwargs,
         )
 
-    def publish_schema(self, collection: str, dataset_id: str,
+    def publish_schema(self, dataset_id: str,
                        published_by: str = "sdk") -> dict:
-        """
-        Promote all columns to 'published' status.
-        Returns breaking_changes and warnings from diff vs previous publish.
-        """
+        """Promote all columns to published. Returns diff vs previous snapshot."""
         return self._post(
-            f"/datasets/{_path(collection)}/{_seg(dataset_id)}/schema/publish",
+            f"/datasets/{dataset_id}/schema/publish",
             json={"published_by": published_by},
         )
 
-    def set_schema_contract(self, collection: str, dataset_id: str,
-                            columns: List[dict],
-                            auto_publish: bool = True) -> dict:
+    def approve(self, dataset_id: str,
+                approved_by: str, notes: str = "") -> dict:
         """
-        Declare a schema contract for a dataset.
-        Applied automatically at every commit — the task writer does not need
-        to call patch_column or publish_schema manually.
+        Approve a dataset — marks it as reviewed and publishes its schema.
+        Should be called by a data steward after reviewing schema and PII flags.
 
-        columns: list of dicts with keys:
-            name (required), logical_type, nullable, pii, pii_type,
-            pii_notes, description, tags
-
-            catalog.set_schema_contract("sales/raw", "sales_raw", [
-                {"name": "date",     "logical_type": "date",    "pii": False},
-                {"name": "product",  "logical_type": "string",  "pii": False},
-                {"name": "quantity", "logical_type": "integer", "pii": False},
-                {"name": "revenue",  "logical_type": "decimal", "pii": False,
-                 "description": "Gross revenue in EUR"},
-            ])
+            catalog.approve("sales/raw/sales_raw",
+                            approved_by="mario.rossi",
+                            notes="PII verified, schema confirmed")
         """
-        return self._put(
-            f"/datasets/{_path(collection)}/{_seg(dataset_id)}/schema/contract",
-            json={"columns": columns, "auto_publish": auto_publish},
+        return self._post(
+            f"/datasets/{dataset_id}/approve",
+            json={"approved_by": approved_by, "notes": notes},
         )
 
-    def get_schema_contract(self, collection: str, dataset_id: str) -> dict:
-        """Return the declared schema contract for a dataset."""
-        return self._get(
-            f"/datasets/{_path(collection)}/{_seg(dataset_id)}/schema/contract")
-
-    def delete_schema_contract(self, collection: str, dataset_id: str):
-        """Remove the schema contract for a dataset."""
-        return self._delete(
-            f"/datasets/{_path(collection)}/{_seg(dataset_id)}/schema/contract")
+    def list_by_status(self, status: str = "in_review") -> list:
+        """
+        List datasets by approval status.
+        status: draft | in_review | approved | deprecated
+        """
+        data = self._get(f"/datasets?status={status}")
+        return data.get("datasets", [])
 
     # ------------------------------------------------------------------
-    # Metadata (free key-value on a version)
+    # Version metadata
     # ------------------------------------------------------------------
 
-    def set_metadata(self, collection: str, dataset_id: str,
-                     version: str, key: str, value: str):
+    def set_metadata(self, dataset_id: str, version: str,
+                     key: str, value: str):
+        """Set a business metadata key on a specific version."""
         self._post(
-            f"/datasets/{_path(collection)}/{_seg(dataset_id)}"
-            f"/{_seg(version)}/metadata",
+            f"/datasets/{dataset_id}/metadata/{version}",
             json={"key": key, "value": value},
         )
 
-    def get_metadata(self, collection: str, dataset_id: str,
-                     version: str) -> dict:
-        return self._get(
-            f"/datasets/{_path(collection)}/{_seg(dataset_id)}"
-            f"/{_seg(version)}/metadata"
-        )
+    def get_metadata(self, dataset_id: str, version: str) -> dict:
+        """Return all metadata (sys.* and business) for a version."""
+        return self._get(f"/datasets/{dataset_id}/metadata/{version}")
 
-    def delete_metadata(self, collection: str, dataset_id: str,
-                        version: str, key: str):
-        self._delete(
-            f"/datasets/{_path(collection)}/{_seg(dataset_id)}"
-            f"/{_seg(version)}/metadata/{_seg(key)}"
-        )
+    def delete_metadata(self, dataset_id: str, version: str, key: str):
+        """Delete a business metadata key (sys.* keys are protected)."""
+        self._delete(f"/datasets/{dataset_id}/metadata/{version}/{key}")
 
     # ------------------------------------------------------------------
     # Internal HTTP + contract unwrapping
     # ------------------------------------------------------------------
 
-    def _unwrap(self, response: requests.Response, unwrap: bool = True) -> Any:
-        """
-        Unwrap the {data, diagnostic} contract.
-        - OK   → return data
-        - WARN → emit CatalogWarning, return data
-        - KO   → raise CatalogError
-        """
+    def _unwrap(self, response: requests.Response,
+                unwrap: bool = True) -> Any:
         response.raise_for_status()
         body = response.json()
-
         if not unwrap:
             return body
-
         diagnostic = body.get("diagnostic", {})
         result     = diagnostic.get("result", "OK")
         messages   = diagnostic.get("messages", [])
         data       = body.get("data")
-
         if result == "KO":
-            raise CatalogError("; ".join(messages) if messages else "Unknown error")
+            raise CatalogError(
+                "; ".join(messages) if messages else "Unknown error")
         if result == "WARN" and messages:
             warnings.warn(
                 f"[Catalog WARN] {'; '.join(messages)}",
-                CatalogWarning,
-                stacklevel=3,
-            )
+                CatalogWarning, stacklevel=3)
         return data
 
     def _get(self, path: str) -> Any:
@@ -584,32 +449,13 @@ class CatalogClient:
     def _post(self, path: str, json: dict = None,
               unwrap: bool = True) -> Any:
         return self._unwrap(
-            requests.post(f"{self.url}{path}", json=json),
-            unwrap=unwrap,
-        )
+            requests.post(f"{self.url}{path}", json=json), unwrap=unwrap)
 
     def _patch(self, path: str, json: dict = None) -> Any:
         return self._unwrap(requests.patch(f"{self.url}{path}", json=json))
 
-    def _put(self, path: str, json: dict = None) -> Any:
-        return self._unwrap(requests.put(f"{self.url}{path}", json=json))
-
     def _delete(self, path: str) -> Any:
         return self._unwrap(requests.delete(f"{self.url}{path}"))
-
-
-# ---------------------------------------------------------------------------
-# URL helpers
-# ---------------------------------------------------------------------------
-
-def _path(collection: str) -> str:
-    """Collection path — slashes stay as path separators, colons encoded."""
-    return collection.strip("/").replace(":", "%3A")
-
-
-def _seg(s: str) -> str:
-    """Single path segment — encode slashes and colons."""
-    return str(s).replace("/", "%2F").replace(":", "%3A").replace("+", "%2B")
 
 
 # ---------------------------------------------------------------------------

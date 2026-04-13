@@ -120,6 +120,10 @@ async def api_delete_namespace(namespace: str):
 # Catalog proxy — /catalog/*
 # ---------------------------------------------------------------------------
 
+@app.get('/catalog/folders/{prefix:path}')
+async def catalog_folders(prefix: str):
+    return JSONResponse(await _catalog_get(f'/folders/{prefix}'))
+
 @app.get('/catalog/namespaces')
 async def catalog_namespaces():
     return JSONResponse(await _catalog_get('/namespaces'))

@@ -43,7 +43,9 @@ const App = {
         label: 'Data Management', icon: 'fa-database', 
         children: [
           { path: '/catalog', label: 'Catalog', icon: 'fa-table',           key: null },
-          { path: '/lineage', label: 'Lineage', icon: 'fa-project-diagram', key: null }
+          { path: '/lineage', label: 'Lineage', icon: 'fa-project-diagram', key: null },
+          { path: '/catalog2', label: 'Catalog2', icon: 'fa-table',           key: null }
+          
         ]
       }
     ];

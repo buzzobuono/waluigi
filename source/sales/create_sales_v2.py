@@ -2,8 +2,7 @@ import csv
 from waluigi.sdk.task import Task
 from waluigi.sdk.catalog_v2 import catalog
 
-COLLECTION = "sales/raw"
-DATASET_ID = "sales_raw"
+DATASET_ID = "sales/raw/sales_raw"
 
 
 class CreateSalesDataset(Task):
@@ -20,7 +19,7 @@ class CreateSalesDataset(Task):
             {"date": self.params.date, "product": "F", "quantity":  9, "revenue": 350.0},
         ]
 
-        with catalog.produce(COLLECTION, DATASET_ID, format="csv") as ctx:
+        with catalog.produce(DATASET_ID, format="csv") as ctx:
             with open(ctx.path, "w", newline="") as f:
                 writer = csv.DictWriter(f, fieldnames=rows[0].keys())
                 writer.writeheader()
@@ -30,10 +29,10 @@ class CreateSalesDataset(Task):
             ctx.meta["date_ref"] = self.params.date
 
         if ctx.skipped:
-            print(f"⏭️  Contenuto invariato — versione esistente: {ctx.committed_version}")
+            print(f"⏭️  Contenuto invariato — versione: {ctx.committed_version}")
             return
 
-        print(f"✅ {COLLECTION}/{DATASET_ID}@{ctx.committed_version} scritto.")
+        print(f"✅ {DATASET_ID}@{ctx.committed_version} scritto.")
 
 
 if __name__ == "__main__":

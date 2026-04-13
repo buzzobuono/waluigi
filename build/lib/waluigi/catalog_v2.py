@@ -1,7 +1,13 @@
 """
 Waluigi Catalog v2
 ==================
-Data catalog service — collections, virtual sources, schema governance, lineage.
+Data catalog service — datasets, virtual sources, schema governance, lineage.
+
+Dataset identity
+----------------
+Every dataset has a single slash-separated id, e.g. "sales/raw/sales_raw".
+There are no separate collection entities. Navigation is virtual — listing
+by prefix, exactly like S3 object storage.
 
 Response contract (always):
     {
@@ -13,11 +19,11 @@ Response contract (always):
     }
 
 HTTP status codes:
-    200 / 201  →  result OK or WARN  (operation succeeded)
-    404        →  result KO          (resource not found)
-    409        →  result KO          (state conflict)
-    422        →  result KO          (unprocessable, e.g. file missing)
-    500        →  result KO          (unexpected server error)
+    200 / 201  →  OK or WARN  (operation succeeded, possibly with warnings)
+    404        →  KO          (resource not found)
+    409        →  KO          (state conflict)
+    422        →  KO          (unprocessable)
+    500        →  KO          (unexpected server error)
 """
 
 import os
@@ -26,7 +32,6 @@ import csv
 import json
 import socket
 import hashlib
-import threading
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -42,7 +47,7 @@ from waluigi.core.catalog_db_v2 import CatalogDB
 
 
 # ---------------------------------------------------------------------------
-# App & Config
+# App & config
 # ---------------------------------------------------------------------------
 
 app = FastAPI(
@@ -52,14 +57,15 @@ app = FastAPI(
 )
 
 p = configargparse.ArgParser(auto_env_var_prefix="WALUIGI_CATALOG_")
-p.add("--port",            type=int, default=9000)
-p.add("--host",            default=socket.gethostname())
-p.add("--bind-address",    default="0.0.0.0")
-p.add("--db-path",         default=os.path.join(os.getcwd(), "db/catalog.db"))
-p.add("--data-path",       default=os.path.join(os.getcwd(), "data"))
-p.add("--scan",            action="store_true", default=False)
-p.add("--scan-path",       default=None)
-p.add("--scan-collection", default=None)
+p.add("--port",         type=int, default=9000)
+p.add("--host",         default=socket.gethostname())
+p.add("--bind-address", default="0.0.0.0")
+p.add("--db-path",      default=os.path.join(os.getcwd(), "db/catalog.db"))
+p.add("--data-path",    default=os.path.join(os.getcwd(), "data"))
+p.add("--scan",         action="store_true", default=False)
+p.add("--scan-path",    default=None)
+p.add("--scan-prefix",  default=None,
+      help="Dataset id prefix to assign scanned files")
 args = p.parse_args()
 
 DATA_PATH = args.data_path
@@ -106,10 +112,8 @@ def ko(messages: list[str] | str, status: int = 400) -> JSONResponse:
     if isinstance(messages, str):
         messages = [messages]
     return JSONResponse(
-        {
-            "data": None,
-            "diagnostic": {"result": "KO", "messages": messages},
-        },
+        {"data": None,
+         "diagnostic": {"result": "KO", "messages": messages}},
         status_code=status,
     )
 
@@ -126,10 +130,10 @@ def _version_id() -> str:
     return _now()
 
 
-def _local_path(collection: str, dataset_id: str, version: str, fmt: str) -> str:
+def _local_path(dataset_id: str, version: str, fmt: str) -> str:
     safe_ver = version.replace(":", "-")
     ext = f".{fmt}" if fmt else ""
-    d = os.path.join(DATA_PATH, collection, dataset_id)
+    d = os.path.join(DATA_PATH, dataset_id)
     os.makedirs(d, exist_ok=True)
     return os.path.join(d, f"{safe_ver}{ext}")
 
@@ -143,11 +147,9 @@ def _compute_hash(path: str) -> str:
 
 
 def _infer_schema(path: str, fmt: str) -> list[dict]:
-    """Return list of {name, physical_type, logical_type} dicts."""
     try:
         if fmt in ("csv", "tsv"):
-            sep = "\t" if fmt == "tsv" else ","
-            df = pd.read_csv(path, sep=sep, nrows=1000)
+            df = pd.read_csv(path, sep="\t" if fmt == "tsv" else ",", nrows=1000)
         elif fmt == "parquet":
             df = pd.read_parquet(path)
         elif fmt in ("xls", "xlsx"):
@@ -158,16 +160,13 @@ def _infer_schema(path: str, fmt: str) -> list[dict]:
         type_map = {
             "int64": "integer", "int32": "integer",
             "float64": "decimal", "float32": "decimal",
-            "bool": "boolean",
-            "datetime64[ns]": "datetime",
+            "bool": "boolean", "datetime64[ns]": "datetime",
             "object": "string",
         }
         return [
-            {
-                "name": col,
-                "physical_type": str(df[col].dtype),
-                "logical_type": type_map.get(str(df[col].dtype), "string"),
-            }
+            {"name": col,
+             "physical_type": str(df[col].dtype),
+             "logical_type":  type_map.get(str(df[col].dtype), "string")}
             for col in df.columns
         ]
     except Exception:
@@ -175,7 +174,6 @@ def _infer_schema(path: str, fmt: str) -> list[dict]:
 
 
 def _safe_json_value(v):
-    """Sanitize a single cell for JSON serialization."""
     import numpy as np
     if v is None:
         return None
@@ -195,18 +193,18 @@ def _safe_json_value(v):
 # Pydantic models
 # ---------------------------------------------------------------------------
 
-class CollectionUpdateRequest(BaseModel):
-    description: Optional[str] = None
-    owner:       Optional[str] = None
-    tags:        Optional[List[str]] = None
+class DatasetUpdateRequest(BaseModel):
+    display_name: Optional[str]       = None
+    description:  Optional[str]       = None
+    owner:        Optional[str]       = None
+    tags:         Optional[List[str]] = None
 
 
 class SourceCreateRequest(BaseModel):
     id:          str            = Field(...,  example="pg-dwh")
     type:        str            = Field(...,  example="sql")
-    config:      Dict[str, Any] = Field(default_factory=dict,
-                                        example={"dsn": "postgresql://user:pass@host/db"})
-    description: Optional[str] = Field(None, example="Main data warehouse")
+    config:      Dict[str, Any] = Field(default_factory=dict)
+    description: Optional[str] = None
 
 
 class SourceUpdateRequest(BaseModel):
@@ -215,29 +213,19 @@ class SourceUpdateRequest(BaseModel):
     description: Optional[str]            = None
 
 
-class DatasetUpdateRequest(BaseModel):
-    display_name: Optional[str]       = None
-    description:  Optional[str]       = None
-    owner:        Optional[str]       = None
-    tags:         Optional[List[str]] = None
-
-
 class ReserveRequest(BaseModel):
-    format:   str = Field("",        example="csv")
-    task_id:  str = Field("unknown", example="ingest_fatture")
-    job_id:   str = Field("unknown", example="job/daily")
-    source_id: Optional[str] = Field(None, example="local")
-
-    # optional dataset-level info (used to upsert the entity on first reserve)
-    display_name: Optional[str]       = None
-    description:  Optional[str]       = None
-    owner:        Optional[str]       = None
+    format:       str            = Field("",        example="csv")
+    task_id:      str            = Field("unknown", example="ingest_sales")
+    job_id:       str            = Field("unknown", example="job/daily")
+    source_id:    Optional[str] = None
+    display_name: Optional[str] = None
+    description:  Optional[str] = None
+    owner:        Optional[str] = None
     tags:         Optional[List[str]] = None
 
 
 class LineageRef(BaseModel):
-    collection: str = Field(..., example="finance/erp")
-    dataset_id: str = Field(..., example="raw_fatture")
+    dataset_id: str = Field(..., example="finance/erp/fatture")
     version:    str = Field(..., example="2026-04-11T10:00:00+00:00")
 
 
@@ -245,18 +233,17 @@ class CommitRequest(BaseModel):
     rows:          Optional[int]            = None
     columns:       Optional[Dict[str, Any]] = Field(None, alias="schema")
     inputs:        List[LineageRef]         = Field(default_factory=list)
-    business_meta: Dict[str, str]           = Field(default_factory=dict,
-        description="Free key-value metadata from the task (stored without prefix).")
+    business_meta: Dict[str, str]           = Field(default_factory=dict)
 
     model_config = {"populate_by_name": True}
 
 
 class VirtualRegisterRequest(BaseModel):
-    source_id:   str            = Field(...,  example="pg-dwh")
-    location:    str            = Field(...,  example="SELECT * FROM finance.fatture")
-    format:      str            = Field("sql", example="sql")
-    task_id:     str            = Field("unknown")
-    job_id:      str            = Field("unknown")
+    source_id:    str            = Field(...,   example="pg-dwh")
+    location:     str            = Field(...,   example="SELECT * FROM finance.fatture")
+    format:       str            = Field("sql", example="sql")
+    task_id:      str            = Field("unknown")
+    job_id:       str            = Field("unknown")
     display_name: Optional[str] = None
     description:  Optional[str] = None
     owner:        Optional[str] = None
@@ -267,7 +254,7 @@ class SchemaColumnPatch(BaseModel):
     logical_type: Optional[str]       = None
     nullable:     Optional[bool]      = None
     pii:          Optional[bool]      = None
-    pii_type:     Optional[str]       = None   # none|direct|indirect|sensitive
+    pii_type:     Optional[str]       = None
     pii_notes:    Optional[str]       = None
     description:  Optional[str]       = None
     tags:         Optional[List[str]] = None
@@ -277,54 +264,41 @@ class SchemaPublishRequest(BaseModel):
     published_by: str = Field("anonymous", example="mario.rossi")
 
 
-class SchemaContractColumn(BaseModel):
-    name:         str             = Field(...,  example="email")
-    logical_type: Optional[str]  = Field(None, example="string")
-    nullable:     Optional[bool]  = None
-    pii:          Optional[bool]  = None
-    pii_type:     Optional[str]  = Field(None, example="direct")
-    pii_notes:    Optional[str]  = None
-    description:  Optional[str]  = None
-    tags:         Optional[List[str]] = None
-
-
-class SchemaContractRequest(BaseModel):
-    columns:      List[SchemaContractColumn] = Field(
-        ..., description="Column definitions applied automatically at every commit.")
-    auto_publish: bool = Field(
-        True, description="Publish schema automatically when all columns are covered.")
+class ApproveRequest(BaseModel):
+    approved_by: str  = Field(...,  example="mario.rossi")
+    notes:       str  = Field("",   example="PII verified, schema confirmed")
 
 
 class MetadataSetRequest(BaseModel):
-    key:   str = Field(..., example="owner")
-    value: str = Field(..., example="data-engineering")
+    key:   str = Field(..., example="source")
+    value: str = Field(..., example="SAP_EXTRACT")
 
 
 class MaterializeRequest(BaseModel):
-    base_url:  str            = Field(...,   example="https://api.example.com")
-    endpoint:  str            = Field(...,   example="/v1/orders")
-    params:    Dict[str, Any] = Field(default_factory=dict)
-    task_id:   str            = Field("unknown")
-    job_id:    str            = Field("unknown")
+    base_url:     str            = Field(..., example="https://api.example.com")
+    endpoint:     str            = Field(..., example="/v1/orders")
+    params:       Dict[str, Any] = Field(default_factory=dict)
+    task_id:      str            = Field("unknown")
+    job_id:       str            = Field("unknown")
     display_name: Optional[str] = None
     description:  Optional[str] = None
 
 
 class ScanRequest(BaseModel):
-    data_path:  Optional[str] = None
-    collection: Optional[str] = None
+    data_path: Optional[str] = None
+    prefix:    Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
-# Materialization helpers (REST API → CSV)
+# Materialization helpers
 # ---------------------------------------------------------------------------
 
 def _extract_items(body) -> list:
     if isinstance(body, list):
         return body
     if isinstance(body, dict):
-        for key in ("data", "results", "items", "records", "content",
-                    "entries", "rows"):
+        for key in ("data", "results", "items", "records",
+                    "content", "entries", "rows"):
             if key in body and isinstance(body[key], list):
                 return body[key]
         values = [v for v in body.values() if isinstance(v, list)]
@@ -353,14 +327,16 @@ def _flatten(obj, prefix="", sep="_") -> dict:
         if isinstance(v, dict):
             out.update(_flatten(v, key, sep))
         elif isinstance(v, list):
-            out[key] = str(v) if (v and isinstance(v[0], dict)) else ",".join(str(i) for i in v)
+            out[key] = (str(v) if (v and isinstance(v[0], dict))
+                        else ",".join(str(i) for i in v))
         else:
             out[key] = v
     return out
 
 
 async def _fetch_and_write(base_url: str, endpoint: str,
-                           params: dict, output_path: str) -> tuple[int, list[dict]]:
+                           params: dict,
+                           output_path: str) -> tuple[int, list[dict]]:
     records, page = [], 1
     next_url = f"{base_url}{endpoint}"
 
@@ -389,8 +365,8 @@ async def _fetch_and_write(base_url: str, endpoint: str,
         writer.writeheader()
         writer.writerows(records)
 
-    schema_cols = [{"name": k, "physical_type": "string", "logical_type": "string"}
-                   for k in fieldnames]
+    schema_cols = [{"name": k, "physical_type": "string",
+                    "logical_type": "string"} for k in fieldnames]
     return len(records), schema_cols
 
 
@@ -398,7 +374,7 @@ async def _fetch_and_write(base_url: str, endpoint: str,
 # Scanner
 # ---------------------------------------------------------------------------
 
-def _scan(data_path: str, collection: str | None = None) -> int:
+def _scan(data_path: str, prefix: str = None) -> int:
     log(f"🔍 Scanning {data_path} ...")
     count = 0
     for root, dirs, files in os.walk(data_path):
@@ -408,29 +384,29 @@ def _scan(data_path: str, collection: str | None = None) -> int:
             if ext not in SCANNABLE_EXTENSIONS:
                 continue
 
-            filepath   = os.path.join(root, filename)
-            fmt        = ext.lstrip(".")
-            dataset_id = os.path.basename(root)
-            rel        = os.path.relpath(os.path.dirname(root), data_path)
-            coll       = collection or (
-                rel.replace(os.sep, "/") if rel != "." else "root"
-            )
-            version    = os.path.splitext(filename)[0].replace("-", ":", 2)
+            filepath = os.path.join(root, filename)
+            fmt      = ext.lstrip(".")
+            rel_dir  = os.path.relpath(root, data_path).replace(os.sep, "/")
+            name     = os.path.splitext(filename)[0]
+            version  = name.replace("-", ":", 2)
+
+            if prefix:
+                dataset_id = f"{prefix.strip('/')}/{rel_dir}/{name}".replace("//", "/")
+            else:
+                dataset_id = f"{rel_dir}/{name}".replace("//", "/")
 
             try:
                 file_hash = _compute_hash(filepath)
                 schema    = _infer_schema(filepath, fmt)
-                db.ensure_collection(coll)
-                db.ensure_dataset(coll, dataset_id)
-                # Reserve + immediate commit (scanned files are already written)
-                db.reserve(coll, dataset_id, version, filepath, fmt,
-                           "scanner", "scan", source_id=None)
-                result = db.commit(coll, dataset_id, version,
-                                   file_hash, None, {c["name"]: c["physical_type"] for c in schema})
+                db.ensure_dataset(dataset_id)
+                db.reserve(dataset_id, version, filepath, fmt,
+                           "scanner", "scan")
+                result = db.commit(dataset_id, version, file_hash, None,
+                                   {c["name"]: c["physical_type"] for c in schema})
                 if result and not result["skipped"]:
-                    db.upsert_schema_columns(coll, dataset_id, schema)
+                    db.upsert_schema_columns(dataset_id, schema)
                 count += 1
-                log(f"  ✅ {coll}/{dataset_id}@{version[:19]} [{fmt}]")
+                log(f"  ✅ {dataset_id}@{version[:19]} [{fmt}]")
             except Exception as e:
                 log(f"  ⚠️  Skipped {filepath}: {e}")
 
@@ -439,41 +415,24 @@ def _scan(data_path: str, collection: str | None = None) -> int:
 
 
 # ===========================================================================
-# Routes — Collections
+# Routes — Browse (S3-style prefix listing)
 # ===========================================================================
 
-@app.get("/collections", tags=["Collections"],
-         summary="List root collections")
-async def list_root_collections():
-    return ok(db.list_collection_children(parent=None))
+@app.get("/datasets/", tags=["Browse"],
+         summary="List root-level datasets and virtual prefixes")
+async def list_root():
+    return ok(db.list_prefix(""))
 
 
-@app.get("/collections/{path:path}/children", tags=["Collections"],
-         summary="List direct children of a collection")
-async def list_collection_children(path: str):
-    node = db.get_collection(path)
-    if not node:
-        return ko("Collection not found", 404)
-    return ok({"collection": node, "children": db.list_collection_children(path)})
-
-
-@app.get("/collections/{path:path}/datasets", tags=["Collections"],
-         summary="List datasets in a collection")
-async def list_collection_datasets(path: str, recursive: bool = False):
-    node = db.get_collection(path)
-    if not node:
-        return ko("Collection not found", 404)
-    datasets = db.list_datasets_in_collection(path, recursive)
-    return ok({"collection": path, "datasets": datasets})
-
-
-@app.patch("/collections/{path:path}", tags=["Collections"],
-           summary="Update collection description, owner or tags")
-async def update_collection(path: str, body: CollectionUpdateRequest):
-    updated = db.update_collection(path, **body.model_dump(exclude_none=True))
-    if not updated:
-        return ko("Collection not found", 404)
-    return ok(db.get_collection(path))
+@app.get("/datasets/{prefix:path}/", tags=["Browse"],
+         summary="List datasets and virtual sub-prefixes under a prefix",
+         description=(
+             "Trailing slash distinguishes browse from dataset access. "
+             "Returns direct child datasets and deeper virtual prefixes, "
+             "exactly like S3 ListObjects with a delimiter."
+         ))
+async def list_prefix(prefix: str):
+    return ok(db.list_prefix(prefix))
 
 
 # ===========================================================================
@@ -490,8 +449,7 @@ async def list_sources():
           summary="Register a new physical source / connector",
           status_code=201)
 async def create_source(body: SourceCreateRequest):
-    created = db.create_source(body.id, body.type,
-                               body.config, body.description)
+    created = db.create_source(body.id, body.type, body.config, body.description)
     if not created:
         return ko(f"Source '{body.id}' already exists", 409)
     return ok(db.get_source(body.id))
@@ -525,57 +483,27 @@ async def delete_source(id: str):
 
 
 # ===========================================================================
-# Routes — Datasets (logical entity)
+# Routes — Dataset (logical entity)
 # ===========================================================================
 
-@app.get("/datasets/{collection:path}/{id}", tags=["Datasets"],
-         summary="Get dataset entity + latest version")
-async def get_dataset(collection: str, id: str):
-    dataset = db.get_dataset(collection, id)
-    if not dataset:
-        return ko("Dataset not found", 404)
-    latest = db.get_latest(collection, id)
-    return ok({"dataset": dataset, "latest": latest})
-
-
-@app.patch("/datasets/{collection:path}/{id}", tags=["Datasets"],
-           summary="Update dataset display name, description, owner or tags")
-async def update_dataset(collection: str, id: str, body: DatasetUpdateRequest):
-    updated = db.update_dataset(collection, id,
-                                **body.model_dump(exclude_none=True))
-    if not updated:
-        return ko("Dataset not found", 404)
-    return ok(db.get_dataset(collection, id))
-
-
-@app.get("/datasets/{collection:path}/{id}/versions", tags=["Datasets"],
+@app.get("/datasets/{dataset_id:path}/versions", tags=["Datasets"],
          summary="List all committed versions (newest first)")
-async def list_versions(collection: str, id: str):
-    history = db.get_history(collection, id)
-    if history is None:
+async def list_versions(dataset_id: str):
+    if not db.get_dataset(dataset_id):
         return ko("Dataset not found", 404)
-    return ok({"collection": collection, "dataset_id": id, "versions": history})
+    return ok({"dataset_id": dataset_id,
+               "versions":   db.get_history(dataset_id)})
 
 
-@app.get("/datasets/{collection:path}/{id}/resolve", tags=["Datasets"],
-         summary="Resolve connection info for the latest committed version",
-         description=(
-             "Returns all the information a client needs to read the dataset "
-             "using native libraries. For local/s3/sftp sources this is a "
-             "location path. For sql sources this includes the dsn and query. "
-             "Credentials are NEVER returned — the client is expected to use "
-             "its own environment / IAM roles."
-         ))
-async def resolve(collection: str, id: str,
-                  prefer: Optional[str] = Query(None, example="sql")):
-    latest = db.get_latest(collection, id)
+@app.get("/datasets/{dataset_id:path}/resolve", tags=["Datasets"],
+         summary="Resolve connection info for the latest committed version")
+async def resolve(dataset_id: str):
+    latest = db.get_latest(dataset_id)
     if not latest:
         return ko("Dataset not found or no committed version", 404)
 
     source_type = latest.get("source_type") or "local"
     source_cfg  = latest.get("source_config") or {}
-
-    connection_info: dict = {}
 
     if source_type == "local":
         connection_info = {"path": latest["location"]}
@@ -584,7 +512,6 @@ async def resolve(collection: str, id: str,
             "uri":          latest["location"],
             "endpoint_url": source_cfg.get("endpoint_url"),
             "region":       source_cfg.get("region"),
-            # credentials: use env AWS_ACCESS_KEY_ID / IAM
         }
     elif source_type == "sql":
         connection_info = {
@@ -596,21 +523,15 @@ async def resolve(collection: str, id: str,
             "host":        source_cfg.get("host"),
             "port":        source_cfg.get("port", 22),
             "remote_path": latest["location"],
-            # credentials: use env / ssh-agent
         }
-    elif source_type == "api":
+    else:
         connection_info = {"url": latest["location"]}
 
-    schema  = db.get_schema(collection, id)
-    pii_cols = [c["column_name"] for c in schema if c.get("pii")]
-
-    msgs = []
-    if pii_cols:
-        msgs.append(f"Dataset contains PII columns: {', '.join(pii_cols)}")
+    schema    = db.get_schema(dataset_id)
+    pii_cols  = [c["column_name"] for c in schema if c.get("pii")]
 
     data = {
-        "collection":      collection,
-        "dataset_id":      id,
+        "dataset_id":      dataset_id,
         "version":         latest["version"],
         "source_type":     source_type,
         "format":          latest.get("format"),
@@ -621,77 +542,225 @@ async def resolve(collection: str, id: str,
         "pii_columns":     pii_cols,
     }
 
-    return warn(data, msgs) if pii_cols else ok(data)
+    msgs = []
+    if latest_dataset := db.get_dataset(dataset_id):
+        ds_status = latest_dataset.get("status", "draft")
+        data["dataset_status"]  = ds_status
+        data["approved_by"]     = latest_dataset.get("approved_by")
+        data["approved_at"]     = latest_dataset.get("approved_at")
+        if ds_status != "approved":
+            msgs.append(
+                f"Dataset status is '{ds_status}' — "
+                "schema has not been approved by a data steward")
+    if pii_cols:
+        msgs.append(f"Dataset contains PII columns: {', '.join(pii_cols)}")
+    return warn(data, msgs) if msgs else ok(data)
 
 
-@app.get("/datasets/{collection:path}/{id}/lineage", tags=["Datasets"],
-         summary="Get upstream and downstream lineage for the latest version")
-async def get_lineage(collection: str, id: str,
+@app.get("/datasets/{dataset_id:path}/lineage", tags=["Datasets"],
+         summary="Get upstream and downstream lineage")
+async def get_lineage(dataset_id: str,
                       version: Optional[str] = Query(None)):
-    if version:
-        record = db.get_version(collection, id, version)
-    else:
-        record = db.get_latest(collection, id)
-
+    record = (db.get_version(dataset_id, version) if version
+              else db.get_latest(dataset_id))
     if not record:
         return ko("Dataset version not found", 404)
 
     ver = record["version"]
     return ok({
-        "collection": collection,
-        "dataset_id": id,
+        "dataset_id": dataset_id,
         "version":    ver,
-        "upstream":   db.get_upstream(collection, id, ver),
-        "downstream": db.get_downstream(collection, id, ver),
+        "upstream":   db.get_upstream(dataset_id, ver),
+        "downstream": db.get_downstream(dataset_id, ver),
     })
+
+
+@app.get("/datasets/{dataset_id:path}/schema", tags=["Schema"],
+         summary="Get current schema with PII flags and status per column")
+async def get_schema(dataset_id: str):
+    if not db.get_dataset(dataset_id):
+        return ko("Dataset not found", 404)
+    columns   = db.get_schema(dataset_id)
+    pii_count = sum(1 for c in columns if c.get("pii"))
+    inferred  = [c["column_name"] for c in columns
+                 if c.get("status") == "inferred"]
+    msgs = []
+    if pii_count:
+        msgs.append(f"{pii_count} column(s) flagged as PII")
+    if inferred:
+        msgs.append(
+            f"{len(inferred)} column(s) still 'inferred' — "
+            "review before publishing")
+    data = {
+        "dataset_id": dataset_id,
+        "columns":    columns,
+        "summary": {
+            "total":     len(columns),
+            "pii":       pii_count,
+            "inferred":  len(inferred),
+            "draft":     sum(1 for c in columns if c.get("status") == "draft"),
+            "published": sum(1 for c in columns if c.get("status") == "published"),
+        },
+    }
+    return warn(data, msgs) if msgs else ok(data)
+
+
+@app.patch("/datasets/{dataset_id:path}/schema/{column_name}",
+           tags=["Schema"],
+           summary="Edit a column's semantic metadata and PII flags")
+async def patch_schema_column(dataset_id: str, column_name: str,
+                               body: SchemaColumnPatch,
+                               editor: str = Query("anonymous")):
+    if not db.get_dataset(dataset_id):
+        return ko("Dataset not found", 404)
+    if hasattr(body, "model_dump"):
+        updates = body.model_dump(exclude_none=True)
+    else:
+        updates = body.dict(exclude_none=True)
+    updated = db.update_schema_column(dataset_id, column_name,
+                                      editor, **updates)
+    if not updated:
+        return ko("Column not found in schema", 404)
+    # Any schema edit promotes dataset to in_review
+    db.set_in_review(dataset_id)
+    col  = next((c for c in db.get_schema(dataset_id)
+                 if c["column_name"] == column_name), None)
+    msgs = []
+    if col and col.get("pii") and col.get("pii_type") == "none":
+        msgs.append("PII flag set but pii_type is 'none' — "
+                    "set it to: direct | indirect | sensitive")
+    return warn(col, msgs) if msgs else ok(col)
+
+
+@app.post("/datasets/{dataset_id:path}/schema/publish",
+          tags=["Schema"],
+          summary="Publish schema — promotes all columns to 'published'")
+async def publish_schema(dataset_id: str, body: SchemaPublishRequest):
+    if not db.get_dataset(dataset_id):
+        return ko("Dataset not found", 404)
+    result = db.publish_schema(dataset_id, body.published_by)
+    msgs   = result["breaking_changes"] + result["warnings"]
+    data   = {
+        "dataset_id":      dataset_id,
+        "published_at":    result["published_at"],
+        "published_by":    body.published_by,
+        "breaking_changes": result["breaking_changes"],
+        "warnings":        result["warnings"],
+    }
+    if result["breaking_changes"]:
+        return warn(data, ["⚠️ Breaking changes vs previous schema"] + msgs)
+    return warn(data, msgs) if msgs else ok(data)
+
+
+@app.post("/datasets/{dataset_id:path}/approve",
+          tags=["Datasets"],
+          summary="Approve a dataset — marks it as reviewed and publishes its schema")
+async def approve_dataset(dataset_id: str, body: ApproveRequest):
+    dataset = db.get_dataset(dataset_id)
+    if not dataset:
+        return ko("Dataset not found", 404)
+    if dataset.get("status") == "deprecated":
+        return ko("Cannot approve a deprecated dataset", 409)
+
+    # Publish schema atomically with approval
+    schema_result = db.publish_schema(dataset_id, publisher=body.approved_by)
+    approved      = db.approve_dataset(dataset_id, body.approved_by)
+    if not approved:
+        return ko("Approval failed", 500)
+
+    msgs = schema_result["breaking_changes"] + schema_result["warnings"]
+    data = {
+        "dataset_id":      dataset_id,
+        "status":          "approved",
+        "approved_by":     body.approved_by,
+        "notes":           body.notes,
+        "schema_published_at":  schema_result["published_at"],
+        "breaking_changes":     schema_result["breaking_changes"],
+        "warnings":             schema_result["warnings"],
+    }
+    log(f"Approved {dataset_id} by {body.approved_by}")
+    if schema_result["breaking_changes"]:
+        return warn(data, ["⚠️ Breaking schema changes on approval"] + msgs)
+    return warn(data, msgs) if msgs else ok(data)
+
+
+@app.get("/datasets", tags=["Datasets"],
+         summary="List datasets filtered by status",
+         description="status: draft | in_review | approved | deprecated")
+async def list_datasets_by_status(
+        status: str = Query("in_review",
+                            example="in_review")):
+    valid = {"draft", "in_review", "approved", "deprecated"}
+    if status not in valid:
+        return ko(f"Invalid status. Must be one of: {', '.join(sorted(valid))}", 422)
+    return ok({"status": status, "datasets": db.list_by_status(status)})
+
+
+@app.patch("/datasets/{dataset_id:path}", tags=["Datasets"],
+           summary="Update dataset display name, description, owner or tags")
+async def update_dataset(dataset_id: str, body: DatasetUpdateRequest):
+    updated = db.update_dataset(dataset_id,
+                                **body.model_dump(exclude_none=True))
+    if not updated:
+        return ko("Dataset not found", 404)
+    return ok(db.get_dataset(dataset_id))
+
+
+@app.get("/datasets/{dataset_id:path}", tags=["Datasets"],
+         summary="Get dataset entity + latest version")
+async def get_dataset(dataset_id: str):
+    dataset = db.get_dataset(dataset_id)
+    if not dataset:
+        return ko("Dataset not found", 404)
+    schema  = db.get_schema(dataset_id)
+    summary = {
+        "total":     len(schema),
+        "inferred":  sum(1 for c in schema if c.get("status") == "inferred"),
+        "draft":     sum(1 for c in schema if c.get("status") == "draft"),
+        "published": sum(1 for c in schema if c.get("status") == "published"),
+        "pii":       sum(1 for c in schema if c.get("pii")),
+    }
+    msgs = []
+    if dataset.get("status") != "approved":
+        msgs.append(f"Dataset status is '{dataset.get('status')}' — not yet approved")
+    data = {"dataset": dataset, "latest": db.get_latest(dataset_id),
+            "schema_summary": summary}
+    return warn(data, msgs) if msgs else ok(data)
 
 
 # ===========================================================================
 # Routes — Version lifecycle
 # ===========================================================================
 
-@app.post("/datasets/{collection:path}/{id}/reserve", tags=["Versions"],
-          summary="Reserve a new local dataset version (phase 1 of 2-phase write)",
+@app.post("/datasets/{dataset_id:path}/reserve", tags=["Versions"],
+          summary="Reserve a new local version (phase 1 of 2-phase write)",
           status_code=201)
-async def reserve(collection: str, id: str, body: ReserveRequest):
+async def reserve(dataset_id: str, body: ReserveRequest):
     version = _version_id()
-    path    = _local_path(collection, id, version, body.format)
-
+    path    = _local_path(dataset_id, version, body.format)
     try:
-        db.ensure_collection(collection)
-        db.ensure_dataset(collection, id,
+        db.ensure_dataset(dataset_id,
                           display_name=body.display_name,
                           description=body.description,
                           owner=body.owner,
                           tags=body.tags)
-        ok_reserve = db.reserve(collection, id, version, path,
-                                body.format, body.task_id, body.job_id,
-                                source_id=body.source_id)
-        if not ok_reserve:
+        if not db.reserve(dataset_id, version, path, body.format,
+                          body.task_id, body.job_id,
+                          source_id=body.source_id):
             return ko("Version already exists", 409)
-
-        log(f"Reserved {collection}/{id}@{version}")
-        return ok({
-            "collection": collection,
-            "dataset_id": id,
-            "version":    version,
-            "path":       path,
-        })
+        log(f"Reserved {dataset_id}@{version}")
+        return ok({"dataset_id": dataset_id,
+                   "version":    version,
+                   "path":       path})
     except Exception as e:
         return ko(str(e), 500)
 
 
-@app.post("/datasets/{collection:path}/{id}/{version}/commit", tags=["Versions"],
-          summary="Commit a reserved version (phase 2 of 2-phase write)",
-          description=(
-              "Computes SHA-256 of the written file, finalizes the version. "
-              "If content is identical to the latest committed version the slot "
-              "is dropped and skipped=true is returned. "
-              "If the published schema has breaking changes a WARN is raised."
-          ))
-async def commit(collection: str, id: str, version: str,
-                 body: CommitRequest):
-    record = db.get_version(collection, id, version)
+@app.post("/datasets/{dataset_id:path}/commit/{version:path}",
+          tags=["Versions"],
+          summary="Commit a reserved version (phase 2 of 2-phase write)")
+async def commit(dataset_id: str, version: str, body: CommitRequest):
+    record = db.get_version(dataset_id, version)
     if not record:
         return ko("Version not found", 404)
     if record["status"] != "reserved":
@@ -699,84 +768,63 @@ async def commit(collection: str, id: str, version: str,
 
     path = record["location"]
     if not os.path.exists(path):
-        return ko(f"File not found at expected path: {path}", 422)
+        return ko(f"File not found at: {path}", 422)
 
     try:
         file_hash = _compute_hash(path)
         inferred  = _infer_schema(path, record.get("format", ""))
         schema_kv = (body.columns
                      or {c["name"]: c["physical_type"] for c in inferred})
-        result    = db.commit(collection, id, version,
-                              file_hash, body.rows, schema_kv)
+        result    = db.commit(dataset_id, version, file_hash,
+                              body.rows, schema_kv)
 
         if result is None:
             return ko("Commit failed — version may already be committed", 409)
 
         if result["skipped"]:
-            log(f"Skipped {collection}/{id} — identical to latest")
-            return ok({
-                "collection": collection,
-                "dataset_id": id,
-                "version":    result["version"],
-                "skipped":    True,
-                "reason":     "Identical to latest committed version",
-            })
+            log(f"Skipped {dataset_id} — identical to latest")
+            return ok({"dataset_id": dataset_id,
+                       "version":    result["version"],
+                       "skipped":    True,
+                       "reason":     "Identical to latest committed version"})
 
-        # ── sys.* metadata — written by the server, never by the task ──────
-        db.set_system_metadata(collection, id, version, {
-            "format":      record.get("format"),
-            "rows":        body.rows,
-            "hash":        file_hash,
-            "task_id":     record.get("produced_by_task"),
-            "job_id":      record.get("produced_by_job"),
+        # sys.* metadata — written by server
+        db.set_system_metadata(dataset_id, version, {
+            "format":       record.get("format"),
+            "rows":         body.rows,
+            "hash":         file_hash,
+            "task_id":      record.get("produced_by_task"),
+            "job_id":       record.get("produced_by_job"),
             "committed_at": _now(),
         })
 
-        # ── business metadata — passed by the task via ctx.meta ─────────────
+        # Business metadata from task
         for k, v in (body.business_meta or {}).items():
-            if not k.startswith("sys."):        # guard: task cannot write sys.*
-                db.set_metadata(collection, id, version, k, v)
+            if not k.startswith("sys."):
+                db.set_metadata(dataset_id, version, k, v)
 
-        # ── schema: upsert inferred, apply contract, detect drift ───────────
-        db.upsert_schema_columns(collection, id, inferred)
+        # Schema
+        db.upsert_schema_columns(dataset_id, inferred)
+        diff = db.diff_schema_against_inferred(dataset_id, inferred)
 
-        contract_result = db.apply_schema_contract(collection, id)
-
-        diff = db.diff_schema_against_inferred(collection, id, inferred)
-
-        # ── lineage ──────────────────────────────────────────────────────────
+        # Lineage
         if body.inputs:
-            db.insert_lineage(collection, id, version,
+            db.insert_lineage(dataset_id, version,
                               [i.model_dump() for i in body.inputs])
 
-        log(f"Committed {collection}/{id}@{version} hash={file_hash[:8]}…")
+        log(f"Committed {dataset_id}@{version} hash={file_hash[:8]}…")
 
         all_warnings = diff["breaking"] + diff["warnings"]
-        if contract_result["published"]:
-            pub = contract_result["publish_result"] or {}
-            all_warnings += pub.get("breaking_changes", []) + pub.get("warnings", [])
-        if contract_result["unknown"]:
-            all_warnings.append(
-                f"Contract columns not yet in schema "
-                f"(will apply on next commit): "
-                f"{', '.join(contract_result['unknown'])}")
-
         data = {
-            "collection":      collection,
-            "dataset_id":      id,
-            "version":         version,
-            "path":            path,
-            "hash":            file_hash,
-            "rows":            body.rows,
-            "skipped":         False,
-            "schema_contract": {
-                "applied":   contract_result["applied"],
-                "published": contract_result["published"],
-            },
+            "dataset_id": dataset_id,
+            "version":    version,
+            "path":       path,
+            "hash":       file_hash,
+            "rows":       body.rows,
+            "skipped":    False,
         }
-
         if diff["breaking"]:
-            return warn(data, ["⚠️ Schema breaking changes detected"] + all_warnings)
+            return warn(data, ["⚠️ Schema breaking changes"] + all_warnings)
         if all_warnings:
             return warn(data, all_warnings)
         return ok(data)
@@ -786,77 +834,70 @@ async def commit(collection: str, id: str, version: str,
         return ko(str(e), 500)
 
 
-@app.post("/datasets/{collection:path}/{id}/{version}/fail", tags=["Versions"],
+@app.post("/datasets/{dataset_id:path}/fail/{version:path}",
+          tags=["Versions"],
           summary="Mark a reserved version as failed")
-async def fail_version(collection: str, id: str, version: str):
-    record = db.get_version(collection, id, version)
+async def fail_version(dataset_id: str, version: str):
+    record = db.get_version(dataset_id, version)
     if not record:
         return ko("Version not found", 404)
-    db.fail(collection, id, version)
-    return ok({"collection": collection, "dataset_id": id,
-               "version": version, "status": "failed"})
+    db.fail(dataset_id, version)
+    return ok({"dataset_id": dataset_id,
+               "version":    version,
+               "status":     "failed"})
 
 
-@app.delete("/datasets/{collection:path}/{id}/{version}", tags=["Versions"],
+@app.delete("/datasets/{dataset_id:path}/deprecate/{version:path}",
+            tags=["Versions"],
             summary="Deprecate a dataset version")
-async def deprecate(collection: str, id: str, version: str):
-    deprecated = db.deprecate(collection, id, version)
-    if not deprecated:
+async def deprecate(dataset_id: str, version: str):
+    if not db.deprecate(dataset_id, version):
         return ko("Version not found", 404)
-    log(f"Deprecated {collection}/{id}@{version}")
-    return ok({"collection": collection, "dataset_id": id,
-               "version": version, "status": "deprecated"})
+    log(f"Deprecated {dataset_id}@{version}")
+    return ok({"dataset_id": dataset_id,
+               "version":    version,
+               "status":     "deprecated"})
 
 
-@app.get("/datasets/{collection:path}/{id}/{version}/preview", tags=["Versions"],
-         summary="Preview rows of a local dataset version")
-async def preview(collection: str, id: str, version: str,
+@app.get("/datasets/{dataset_id:path}/preview/{version:path}",
+         tags=["Versions"],
+         summary="Preview rows of a local version")
+async def preview(dataset_id: str, version: str,
                   limit: int = 10, offset: int = 0):
     import numpy as np
-
-    record = db.get_version(collection, id, version)
+    record = db.get_version(dataset_id, version)
     if not record:
         return ko("Version not found", 404)
+    if record.get("source_type") and record["source_type"] != "local":
+        return ko("Preview only available for local versions", 422)
 
     path = record["location"]
     fmt  = (record.get("format") or "").lower()
-
-    if record.get("source_type") and record["source_type"] != "local":
-        return ko("Preview is only available for local versions. "
-                  "Use resolve to get connection info for virtual sources.", 422)
-
     if not os.path.exists(path):
         return ko(f"File not found: {path}", 404)
 
     try:
         if fmt == "csv":
-            df = pd.read_csv(path, skiprows=range(1, offset + 1),
+            df = pd.read_csv(path,
+                             skiprows=range(1, offset + 1),
                              nrows=limit, dtype=str)
         elif fmt == "parquet":
             df = pd.read_parquet(path).iloc[offset: offset + limit]
         else:
             return ko(f"Preview not supported for format '{fmt}'", 422)
 
-        clean_data = [
-            {k: _safe_json_value(v) for k, v in row.items()}
-            for row in df.to_dict(orient="records")
-        ]
+        clean = [{k: _safe_json_value(v) for k, v in row.items()}
+                 for row in df.to_dict(orient="records")]
 
         return ok({
-            "collection": collection,
-            "dataset_id": id,
+            "dataset_id": dataset_id,
             "version":    version,
             "columns":    df.columns.tolist(),
-            "data":       clean_data,
-            "pagination": {
-                "limit":  limit,
-                "offset": offset,
-                "count":  len(clean_data),
-            },
+            "data":       clean,
+            "pagination": {"limit": limit, "offset": offset,
+                           "count": len(clean)},
         })
-
     except Exception as e:
-        log(f"❌ Preview error: {e}")
         return ko(str(e), 500)
 
 
@@ -864,265 +905,105 @@ async def preview(collection: str, id: str, version: str,
 # Routes — Virtual datasets
 # ===========================================================================
 
-@app.post("/datasets/{collection:path}/{id}/register-virtual",
+@app.post("/datasets/{dataset_id:path}/register-virtual",
           tags=["Virtual"],
           summary="Register a virtual dataset version (no local file)",
-          description=(
-              "For SQL tables, S3 objects, SFTP files, or any source where "
-              "the data lives externally and should NOT be copied locally. "
-              "The source must be registered first via POST /sources."
-          ),
           status_code=201)
-async def register_virtual(collection: str, id: str,
-                            body: VirtualRegisterRequest):
+async def register_virtual(dataset_id: str, body: VirtualRegisterRequest):
     src = db.get_source(body.source_id)
     if not src:
-        return ko(f"Source '{body.source_id}' not found. Register it first "
-                  f"via POST /sources.", 422)
-
+        return ko(f"Source '{body.source_id}' not found. "
+                  f"Register it first via POST /sources.", 422)
     version = _version_id()
-
     try:
-        db.ensure_collection(collection)
-        db.ensure_dataset(collection, id,
+        db.ensure_dataset(dataset_id,
                           display_name=body.display_name,
                           description=body.description,
                           owner=body.owner,
                           tags=body.tags)
-        result = db.commit_virtual(collection, id, version,
-                                   body.source_id, body.location,
-                                   body.format, body.task_id, body.job_id)
-        log(f"Virtual registered {collection}/{id}@{version} "
-            f"[{src['type']}] {body.location}")
-        return ok({
-            "collection": collection,
-            "dataset_id": id,
-            "version":    version,
-            "source_id":  body.source_id,
-            "source_type":src["type"],
-            "location":   body.location,
-            "format":     body.format,
-        })
+        db.commit_virtual(dataset_id, version, body.source_id,
+                          body.location, body.format,
+                          body.task_id, body.job_id)
+        log(f"Virtual {dataset_id}@{version} [{src['type']}]")
+        return ok({"dataset_id":  dataset_id,
+                   "version":     version,
+                   "source_id":   body.source_id,
+                   "source_type": src["type"],
+                   "location":    body.location,
+                   "format":      body.format})
     except Exception as e:
         return ko(str(e), 500)
-
-
-# ===========================================================================
-# Routes — Schema governance
-# ===========================================================================
-
-@app.get("/datasets/{collection:path}/{id}/schema", tags=["Schema"],
-         summary="Get current schema with PII flags and status per column")
-async def get_schema(collection: str, id: str):
-    if not db.get_dataset(collection, id):
-        return ko("Dataset not found", 404)
-    columns = db.get_schema(collection, id)
-    pii_count  = sum(1 for c in columns if c.get("pii"))
-    msgs = []
-    if pii_count:
-        msgs.append(f"{pii_count} column(s) flagged as PII")
-    unreviewed = [c["column_name"] for c in columns
-                  if c.get("status") == "inferred"]
-    if unreviewed:
-        msgs.append(
-            f"{len(unreviewed)} column(s) still 'inferred' — "
-            "consider reviewing before publishing"
-        )
-    data = {
-        "collection": collection,
-        "dataset_id": id,
-        "columns":    columns,
-        "summary": {
-            "total":      len(columns),
-            "pii":        pii_count,
-            "inferred":   len(unreviewed),
-            "draft":      sum(1 for c in columns if c.get("status") == "draft"),
-            "published":  sum(1 for c in columns if c.get("status") == "published"),
-        }
-    }
-    return warn(data, msgs) if msgs else ok(data)
-
-
-@app.patch("/datasets/{collection:path}/{id}/schema/{column_name}",
-           tags=["Schema"],
-           summary="Edit a single column's semantic metadata and PII flags")
-async def patch_schema_column(collection: str, id: str, column_name: str,
-                               body: SchemaColumnPatch,
-                               editor: str = Query("anonymous")):
-    if not db.get_dataset(collection, id):
-        return ko("Dataset not found", 404)
-
-    updates = body.model_dump(exclude_none=True)
-    if "nullable" in updates:
-        updates["nullable"] = int(updates["nullable"])
-    if "pii" in updates:
-        updates["pii"] = int(updates["pii"])
-
-    updated = db.update_schema_column(collection, id, column_name,
-                                      editor, **updates)
-    if not updated:
-        return ko("Column not found in schema", 404)
-
-    col = next((c for c in db.get_schema(collection, id)
-                if c["column_name"] == column_name), None)
-    msgs = []
-    if col and col.get("pii") and not col.get("pii_type"):
-        msgs.append("PII flag set but pii_type is not specified — "
-                    "consider setting it to: direct | indirect | sensitive")
-    return warn(col, msgs) if msgs else ok(col)
-
-
-@app.post("/datasets/{collection:path}/{id}/schema/publish",
-          tags=["Schema"],
-          summary="Publish the schema — promotes all columns to 'published' status",
-          description=(
-              "After publishing, the schema becomes a contract. "
-              "Future commits will produce WARN if breaking changes are detected. "
-              "A full snapshot is stored in schema_history for auditing."
-          ))
-async def publish_schema(collection: str, id: str,
-                          body: SchemaPublishRequest):
-    if not db.get_dataset(collection, id):
-        return ko("Dataset not found", 404)
-
-    result = db.publish_schema(collection, id, body.published_by)
-    msgs   = result["breaking_changes"] + result["warnings"]
-
-    data = {
-        "collection":     collection,
-        "dataset_id":     id,
-        "published_at":   result["published_at"],
-        "published_by":   body.published_by,
-        "breaking_changes": result["breaking_changes"],
-        "warnings":       result["warnings"],
-    }
-
-    if result["breaking_changes"]:
-        return warn(data, ["⚠️ Breaking changes vs previous published schema"] + msgs)
-    return warn(data, msgs) if msgs else ok(data)
-
-
-# ===========================================================================
-# Routes — Schema contract
-# ===========================================================================
-
-@app.put("/datasets/{collection:path}/{id}/schema/contract",
-         tags=["Schema"],
-         summary="Declare a schema contract — applied automatically at every commit",
-         description=(
-             "Define the expected columns with their semantic types and PII flags. "
-             "The contract is stored as a dataset resource and applied transparently "
-             "at commit time — the task writer does not need to call patch_column "
-             "or publish_schema manually. "
-             "Columns already in draft/published status are NOT overwritten."
-         ))
-async def set_schema_contract(collection: str, id: str,
-                               body: SchemaContractRequest):
-    if not db.get_dataset(collection, id):
-        return ko("Dataset not found", 404)
-
-    cols = [c.model_dump(exclude_none=True) for c in body.columns]
-    result = db.set_schema_contract(collection, id, cols, body.auto_publish)
-    return ok(result)
-
-
-@app.get("/datasets/{collection:path}/{id}/schema/contract",
-         tags=["Schema"],
-         summary="Get the declared schema contract for a dataset")
-async def get_schema_contract(collection: str, id: str):
-    if not db.get_dataset(collection, id):
-        return ko("Dataset not found", 404)
-    contract = db.get_schema_contract(collection, id)
-    if not contract:
-        return ko("No contract defined for this dataset", 404)
-    return ok(contract)
-
-
-@app.delete("/datasets/{collection:path}/{id}/schema/contract",
-            tags=["Schema"],
-            summary="Remove the schema contract for a dataset")
-async def delete_schema_contract(collection: str, id: str):
-    if not db.get_dataset(collection, id):
-        return ko("Dataset not found", 404)
-    deleted = db.delete_schema_contract(collection, id)
-    if not deleted:
-        return ko("No contract found", 404)
-    return ok({"deleted": True})
 
 
 # ===========================================================================
 # Routes — Version metadata
 # ===========================================================================
 
-@app.get("/datasets/{collection:path}/{id}/{version}/metadata",
+@app.get("/datasets/{dataset_id:path}/metadata/{version:path}",
          tags=["Metadata"],
-         summary="Get all key-value metadata for a version")
-async def get_metadata(collection: str, id: str, version: str):
-    record = db.get_version(collection, id, version)
-    if not record:
+         summary="Get all metadata for a version")
+async def get_metadata(dataset_id: str, version: str):
+    if not db.get_version(dataset_id, version):
         return ko("Version not found", 404)
-    return ok(db.get_metadata(collection, id, version))
+    return ok(db.get_metadata(dataset_id, version))
 
 
-@app.post("/datasets/{collection:path}/{id}/{version}/metadata",
+@app.post("/datasets/{dataset_id:path}/metadata/{version:path}",
           tags=["Metadata"],
           summary="Set a metadata key on a version")
-async def set_metadata(collection: str, id: str, version: str,
-                        body: MetadataSetRequest):
-    record = db.get_version(collection, id, version)
-    if not record:
+async def set_metadata(dataset_id: str, version: str,
+                       body: MetadataSetRequest):
+    if not db.get_version(dataset_id, version):
         return ko("Version not found", 404)
-    db.set_metadata(collection, id, version, body.key, body.value)
+    if body.key.startswith("sys."):
+        return ko("sys.* keys are reserved for the server", 422)
+    db.set_metadata(dataset_id, version, body.key, body.value)
     return ok({"key": body.key, "value": body.value})
 
 
-@app.delete("/datasets/{collection:path}/{id}/{version}/metadata/{key}",
+@app.delete("/datasets/{dataset_id:path}/metadata/{version:path}/{key}",
             tags=["Metadata"],
             summary="Delete a metadata key from a version")
-async def delete_metadata(collection: str, id: str, version: str, key: str):
-    record = db.get_version(collection, id, version)
-    if not record:
+async def delete_metadata(dataset_id: str, version: str, key: str):
+    if not db.get_version(dataset_id, version):
         return ko("Version not found", 404)
-    deleted = db.delete_metadata(collection, id, version, key)
-    if not deleted:
-        return ko("Metadata key not found", 404)
+    if not db.delete_metadata(dataset_id, version, key):
+        return ko("Key not found or protected (sys.*)", 404)
     return ok({"key": key, "deleted": True})
 
 
 # ===========================================================================
-# Routes — Materialize (REST API → local CSV)
+# Routes — Materialize
 # ===========================================================================
 
-@app.post("/datasets/{collection:path}/{id}/materialize",
+@app.post("/datasets/{dataset_id:path}/materialize",
           tags=["Materialize"],
-          summary="Fetch a REST API endpoint and store result as a local CSV version",
+          summary="Fetch a REST API and store result as a local CSV version",
           status_code=201)
-async def materialize(collection: str, id: str, body: MaterializeRequest):
+async def materialize(dataset_id: str, body: MaterializeRequest):
     version = _version_id()
-    path    = _local_path(collection, id, version, "csv")
-
+    path    = _local_path(dataset_id, version, "csv")
     try:
-        db.ensure_collection(collection)
-        db.ensure_dataset(collection, id,
+        db.ensure_dataset(dataset_id,
                           display_name=body.display_name,
                           description=body.description)
-        db.reserve(collection, id, version, path,
+        db.reserve(dataset_id, version, path,
                    "csv", body.task_id, body.job_id)
 
         rows, schema_cols = await _fetch_and_write(
             body.base_url, body.endpoint, body.params, path)
 
         if rows == 0:
-            db.fail(collection, id, version)
+            db.fail(dataset_id, version)
             return ko("No records returned from endpoint", 422)
 
         file_hash = _compute_hash(path)
         schema_kv = {c["name"]: c["physical_type"] for c in schema_cols}
-        result    = db.commit(collection, id, version,
+        result    = db.commit(dataset_id, version,
                               file_hash, rows, schema_kv)
 
         if result is None:
-            db.fail(collection, id, version)
+            db.fail(dataset_id, version)
             return ko("Commit failed", 409)
 
         if result["skipped"]:
@@ -1130,42 +1011,33 @@ async def materialize(collection: str, id: str, body: MaterializeRequest):
                 os.remove(path)
             except Exception:
                 pass
-            return ok({
-                "collection": collection,
-                "dataset_id": id,
-                "version":    result["version"],
-                "rows":       rows,
-                "skipped":    True,
-                "reason":     "Identical to latest committed version",
-                "source_url": f"{body.base_url}{body.endpoint}",
-            })
+            return ok({"dataset_id": dataset_id,
+                       "version":    result["version"],
+                       "rows":       rows,
+                       "skipped":    True,
+                       "reason":     "Identical to latest committed version",
+                       "source_url": f"{body.base_url}{body.endpoint}"})
 
-        db.upsert_schema_columns(collection, id, schema_cols)
-        db.insert_lineage(collection, id, version, [{
-            "collection": "__external__",
-            "dataset_id": f"{body.base_url}{body.endpoint}",
+        db.upsert_schema_columns(dataset_id, schema_cols)
+        db.insert_lineage(dataset_id, version, [{
+            "dataset_id": f"__external__/{body.base_url}{body.endpoint}",
             "version":    "live",
         }])
-
-        log(f"Materialized {collection}/{id}@{version} rows={rows}")
-        return ok({
-            "collection": collection,
-            "dataset_id": id,
-            "version":    version,
-            "path":       path,
-            "rows":       rows,
-            "hash":       file_hash,
-            "skipped":    False,
-            "source_url": f"{body.base_url}{body.endpoint}",
-        })
+        log(f"Materialized {dataset_id}@{version} rows={rows}")
+        return ok({"dataset_id": dataset_id,
+                   "version":    version,
+                   "path":       path,
+                   "rows":       rows,
+                   "hash":       file_hash,
+                   "skipped":    False,
+                   "source_url": f"{body.base_url}{body.endpoint}"})
 
     except httpx.HTTPError as e:
-        db.fail(collection, id, version)
-        return ko(f"HTTP error fetching source: {e}", 502)
+        db.fail(dataset_id, version)
+        return ko(f"HTTP error: {e}", 502)
     except Exception as e:
-        log(f"❌ Materialize error: {e}")
         try:
-            db.fail(collection, id, version)
+            db.fail(dataset_id, version)
         except Exception:
             pass
         return ko(str(e), 500)
@@ -1181,7 +1053,7 @@ async def scan_api(body: ScanRequest):
     data_path = body.data_path or DATA_PATH
     if not os.path.exists(data_path):
         return ko(f"Path not found: {data_path}", 404)
-    count = _scan(data_path, body.collection)
+    count = _scan(data_path, body.prefix)
     return ok({"scanned": count, "data_path": data_path})
 
 
@@ -1191,14 +1063,14 @@ async def scan_api(body: ScanRequest):
 
 def main():
     if args.scan:
-        _scan(args.scan_path or DATA_PATH, args.scan_collection)
+        _scan(args.scan_path or DATA_PATH, args.scan_prefix)
         return
 
     log("Waluigi Catalog v2")
-    log(f"  Binding  : {args.bind_address}:{args.port}")
-    log(f"  URL      : http://{args.host}:{args.port}")
-    log(f"  DB       : {args.db_path}")
-    log(f"  Data     : {args.data_path}")
+    log(f"  Binding : {args.bind_address}:{args.port}")
+    log(f"  URL     : http://{args.host}:{args.port}")
+    log(f"  DB      : {args.db_path}")
+    log(f"  Data    : {args.data_path}")
     uvicorn.run(app, host=args.bind_address, port=args.port)
 
 

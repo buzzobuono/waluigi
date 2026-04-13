@@ -44,6 +44,8 @@ export const api = {
   catalogNsChildren:  (ns) => _get(`/catalog/namespaces/${_encNs(ns)}/children`),
   catalogNsDatasets:  (ns, recursive = false) => _get(`/catalog/namespaces/${_encNs(ns)}/datasets`, { recursive }),
 
+  catalogFolders:  (prefix) => _get(`/catalog/folders/${_encodeURIComponent(prefix)}/`),
+    
   datasetPreview: (ns, id, ver, limit = 10, offset = 0) => _get(`/catalog/datasets/${_encNs(ns)}/${_encId(id)}/${_encVer(ver)}/preview`, { limit, offset }),
 
   catalogDatasetHistory:  (ns, id)        => _get(`/catalog/datasets/${_encNs(ns)}/${_encId(id)}/history`),
