@@ -6,9 +6,9 @@ import BaseButtonGroup from './BaseButtonGroup.js';
 import BaseTable from './BaseTable.js';
 import Materialize from './Materialize.js';
 
-const { defineComponent, ref, computed, watch, onMounted } = Vue;
+const { computed, watch, onMounted } = Vue;
 
-export default defineComponent({
+export default {
   name: 'Catalog2',
 
   components: { BasePage, BasePanel, BaseButton, BaseButtonGroup, BaseTable, Materialize },
@@ -17,8 +17,7 @@ export default defineComponent({
     const columns = [
       { key: 'name', label: 'Name' },
       { key: 'description', label: 'Description' },
-      { key: 'type', label: 'Type' },
-      { key: 'committed_at', label: 'Committed' }
+      { key: 'type', label: 'Type' }
     ];
     
     const columns_history = [
@@ -26,6 +25,7 @@ export default defineComponent({
       { key: 'format', label: 'Format' },
       { key: 'rows', label: 'Rows' },
       { key: 'hash', label: 'Hash' },
+      { key: 'produced_by_job', label: 'Job' },
       { key: 'produced_by_task', label: 'Task' },
       { key: 'status', label: 'Status' },
       { key: 'actions', label: 'Actions' }
@@ -34,39 +34,79 @@ export default defineComponent({
     const route  = VueRouter.useRoute();
     const router = VueRouter.useRouter();
 
-    const nsStack    = ref([]);   // breadcrumb: [{path, name}]
-    const children   = ref([]);   // child namespaces
-    const datasets   = ref([]);   // datasets in current namespace
-    const items   = ref([]);
-    const loading    = ref(false);
-    const materializeRef = ref(null);
+    const folderStack    = Vue.ref([]);   // breadcrumb: [{path, name}]
+    const children   = Vue.ref([]);   
+    const datasets   = Vue.ref([]);  
+    const items   = Vue.ref([]);
+    const loading    = Vue.ref(false);
+    const materializeRef = Vue.ref(null);
 
     // detail panel
-    const selNs      = ref(null); // selected dataset namespace
-    const selId      = ref(null); // selected dataset id
-    const history    = ref([]);
-    const metadata   = ref({});
-    const detailOpen = ref(false);
+    const selFolder      = Vue.ref(null);
+    const selDataset      = Vue.ref(null); // selected dataset id
+    const history    = Vue.ref([]);
+    const metadata   = Vue.ref({});
+    const detailOpen = Vue.ref(false);
 
-    const currentNs = computed(() =>
-      nsStack.value.length ? nsStack.value[nsStack.value.length - 1].path : null
+    const currentFolder = computed(() =>
+      folderStack.value.length ? folderStack.value[folderStack.value.length - 1].path : null
     );
+    
+    function getParent(path) {
+      if (!path || path === "/") return null;
 
-    async function loadNamespace(path) {
+      const clean = path.replace(/\/+$/, '');
+      const parts = clean.split('/');
+
+      parts.pop();
+
+      return parts.length ? parts.join('/') : null;
+    }
+
+    async function loadFolders(path) {
       loading.value = true;
       
       try {
-        var p;
         if (!path) {
-          p = "/";
-        } else {
-          p = path;
+          path = "/";
         }
         
-        const res = await api.catalogFolders(p);
-        alert("tg" + p);
-        const prefixItems = (res.data.prefixes || []).map(n => ({ ...n, type: 'folder' }));
-        const datasetItems = (res.data.datasets || []).map(d => ({ ...d, type: 'dataset', name: d.id }));
+        const res = await api.catalogFolders(path);
+        const prefix = res.data.prefix;
+        //alert(prefix)
+        const prefixItems = [];
+        const cleanPrefix = prefix ? prefix.replace(/\/+$/, '') : null;
+
+        prefixItems.push({ 
+          name: ".", 
+          path: cleanPrefix, 
+          description: "Current folder", 
+          type: 'folder' 
+        });
+
+        prefixItems.push({ 
+          name: "..", 
+          path: getParent(cleanPrefix),
+          description: "Parent folder", 
+          type: 'folder' 
+        });
+        const realPrefixItem = (res.data.prefixes || []).map(folder => {
+          const clean = folder.replace(/\/+$/, '');
+
+          return {
+            name: clean.split('/').pop(),
+            path: clean,
+            description: "",
+            type: 'folder'
+          };
+        });
+        prefixItems.push(...realPrefixItem);
+        const datasetItems = (res.data.datasets || []).map(d => ({
+          ...d,
+          name: d.id.replace(/\/$/, '').split('/').pop(),
+          path: prefix ? prefix.replace(/\/+$/, '') : null,
+          type: 'dataset'
+        }));
         items.value = [...prefixItems, ...datasetItems];
         
       } catch(e) {
@@ -77,45 +117,38 @@ export default defineComponent({
       }
     }
 
-    async function openDataset(ns, id) {
-      router.push({ path: '/catalog', query: { ns, ds: id } });
-      selNs.value      = ns;
-      selId.value      = id;
+    async function loadDataset(folder, dataset) {
+      selFolder.value  = folder;
+      selDataset.value = dataset;
       detailOpen.value = true;
       history.value    = [];
-      metadata.value   = {};
+
       try {
-        const [h, m] = await Promise.all([
-          api.catalogDatasetHistory(ns, id),
-          api.catalogDatasetMetadata(ns, id),
-        ]);
-        history.value  = Array.isArray(h) ? h : [];
-        metadata.value = m || {};
-        if (history.value.length > 0) {
-            selVersion.value = history.value[0].version;
-        }
-        detailOpen.value = true;
+        const h = await api.catalogDatasetVersions(dataset);
+        history.value = Array.isArray(h.data.versions) ? h.data.versions : [];
       } catch(e) {
         console.error('Dataset detail error', e);
       }
     }
 
-    function navigateTo(ns) {
-      nsStack.value.push({ path: ns.path, name: ns.name });
-      router.push({ path: '/catalog', query: { ns: ns.path } });
-      loadNamespace(ns.path);
+    async function openDataset(folder, dataset) {
+      router.push({ path: '/catalog2', query: { folder, dataset } });
+    }
+
+    function navigateTo(path) {
+      router.push({ path: '/catalog2', query: { folder: path || undefined } });
     }
 
     function navigateBreadcrumb(idx) {
       if (idx < 0) {
-        nsStack.value = [];
-        router.push({ path: '/catalog' });
-        loadNamespace(null);
+        folderStack.value = [];
+        router.push({ path: '/catalog2' });
+        loadFolders(null);
       } else {
-        nsStack.value = nsStack.value.slice(0, idx + 1);
-        const path = nsStack.value[idx].path;
-        router.push({ path: '/catalog', query: { ns: path } });
-        loadNamespace(path);
+        folderStack.value = folderStack.value.slice(0, idx + 1);
+        const path = folderStack.value[idx].path;
+        router.push({ path: '/catalog2', query: { folder: path } });
+        loadFolders(path);
       }
     }
 
@@ -125,62 +158,63 @@ export default defineComponent({
 
     function closeDetail() {
       detailOpen.value = false;
-      selNs.value = null;
-      selId.value = null;
-      router.push({ path: '/catalog', query: { ns: currentNs.value || undefined } });
+      selFolder.value = null;
+      selDataset.value = null;
+      router.push({ path: '/catalog', query: { folder: currentFolder.value || undefined } });
     }
 
     onMounted(async () => {
-      const ns = route.query.ns;
-      const ds = route.query.ds;
+      const folder = route.query.folder;
+      const dataset = route.query.dataset;
 
-      if (ns) {
-        // ricostruisci il breadcrumb
-        const parts = ns.split('/');
-        nsStack.value = parts.map((name, i) => ({
+      if (folder) {
+        const parts = folder.split('/');
+        folderStack.value = parts.map((name, i) => ({
           path: parts.slice(0, i + 1).join('/'),
           name
         }));
-        await loadNamespace(ns);
+        await loadFolders(folder);
       } else {
-        await loadNamespace(null);
+        await loadFolders(null);
       }
 
-      if (ds && ns) {
-        await openDataset(ns, ds);
+      if (dataset && folder) {
+        await openDataset(folder, dataset);
       }
     });
 
     watch(() => route.query, async (q) => {
-      const ns = q.ns || null;
-      const ds = q.ds || null;
+      let folder = q.folder || null;
+      const dataset = q.dataset || null;
 
-      // risincronizza breadcrumb
-      if (ns) {
-        const parts = ns.split('/');
-        nsStack.value = parts.map((name, i) => ({
+      // ✅ normalizzazione
+      folder = folder ? folder.replace(/\/+$/, '') : null;
+
+      if (folder) {
+        const parts = folder.split('/');
+        folderStack.value = parts.map((name, i) => ({
           path: parts.slice(0, i + 1).join('/'),
           name
         }));
-        await loadNamespace(ns);
+        await loadFolders(folder);
       } else {
-        nsStack.value = [];
-        await loadNamespace(null);
+        folderStack.value = [];
+        await loadFolders(null);
       }
 
-      if (ds && ns) {
-        await openDataset(ns, ds);
+      if (dataset && folder) {
+        await loadDataset(folder, dataset);
       } else {
         detailOpen.value = false;
       }
     }, { immediate: true });
 
-    loadNamespace(null);
+    loadFolders(null);
 
     return {
-      columns, items, nsStack, children, datasets, loading,
-      selNs, selId, columns_history, history, metadata, detailOpen,
-      currentNs,
+      columns, items, folderStack, children, datasets, loading,
+      selFolder, selDataset, columns_history, history, metadata, detailOpen,
+      currentFolder,
       navigateTo, navigateBreadcrumb, openDataset, closeDetail, goBack, materializeRef,
     };
   },
@@ -203,7 +237,7 @@ export default defineComponent({
             icon="fas fa-cloud-download-alt" 
             color="outline-primary" 
             class="ml-auto"
-            @click="materializeRef && materializeRef.open(currentNs || '')"
+            @click="materializeRef && materializeRef.open(currentFolder || '')"
           />
       </template>
     
@@ -212,14 +246,14 @@ export default defineComponent({
   
         <template #title>
           <ol class="breadcrumb" style="background:transparent; padding:0;">
-          <li class="breadcrumb-item">
-            <a href="#" @click.prevent="navigateBreadcrumb(-1)">🏠</a>
-          </li>
-          <li v-for="(crumb, idx) in nsStack" :key="crumb.path"
-              :class="['breadcrumb-item', idx===nsStack.length-1 ? 'active' : '']">
-            <a v-if="idx < nsStack.length-1" href="#" @click.prevent="navigateBreadcrumb(idx)" >{{ crumb.name }}</a>
-            <span v-else >{{ crumb.name }}</span>
-          </li>
+            <li class="breadcrumb-item">
+              <a href="#" @click.prevent="navigateBreadcrumb(-1)">🏠</a>
+            </li>
+            <li v-for="(crumb, idx) in folderStack" :key="crumb.path"
+                :class="['breadcrumb-item', idx===folderStack.length-1 ? 'active' : '']">
+              <a v-if="idx < folderStack.length-1" href="#" @click.prevent="navigateBreadcrumb(idx)" >{{ crumb.name }}</a>
+              <span v-else >{{ crumb.name }}</span>
+            </li>
           </ol>
         </template>
   
@@ -228,22 +262,29 @@ export default defineComponent({
           :items="items">
   
           <template #cell(name)="{ item }" >
-             <div v-if="item.type === 'ns'" class="text-nowrap">
-              <a href="#" @click.prevent="navigateTo(item)">
+             <div v-if="item.type === 'folder'" class="text-nowrap">
+              <a href="#" @click.prevent="navigateTo(item.path)">
                <i class="fas fa-folder mr-2 text-warning opacity-75"></i>{{ item.name }}
               </a>
              </div>
-             <div v-if="item.type === 'ds'" class="text-nowrap">
-              <a href="#" @click.prevent="openDataset(item.namespace, item.id)">
-               <i class="fas fa-table mr-2 opacity-75"></i>{{ item.id }}
+             <div v-if="item.type === 'dataset'" class="text-nowrap">
+              <a href="#" @click.prevent="openDataset(item.path, item.id)">
+               <i class="fas fa-table mr-2 opacity-75"></i>{{ item.name }}
               </a>
              </div>
           </template>
   
           <template #cell(type)="{ item }" >
-             <span class="badge badge-info">
+            <div v-if="item.type === 'folder'">
+              <span class="badge badge-warning">
                {{ item.type }}
              </span>
+            </div>
+            <div v-if="item.type === 'dataset'">
+              <span class="badge badge-primary">
+               {{ item.type }}
+             </span>
+            </div>
           </template>
   
         </base-table>
@@ -257,7 +298,7 @@ export default defineComponent({
           <div class="d-flex align-items-center">
             <i class="fas fa-table mr-2"></i>
             <span style="color:#aaa; font-size:0.85em;">{{ selNs }}/</span>
-            <code style="color:#00d4ff;">{{ selId }}</code>
+            <code style="color:#00d4ff;">{{ selDataset }}</code>
           </div>
         </template>
   
@@ -284,7 +325,7 @@ export default defineComponent({
            </template>
         
            <template #cell(status)="{ item }" >
-             <span :class="['badge', item.status==='committed' ? 'badge-SUCCESS' : 'badge-PENDING']">
+             <span class="badge badge-success">
                {{ item.status }}
              </span>
            </template>
@@ -295,13 +336,13 @@ export default defineComponent({
                 icon="fas fa-sitemap" 
                 color="outline-primary" 
                 title="Lineage"
-                @click="$router.push({ path: '/lineage', query: { ns: selNs, id: selId, ver: item.version } })"
+                @click="$router.push({ path: '/lineage', query: { folder: selFolder, id: selDataset, ver: item.version } })"
               />
               <base-button 
                 icon="fas fa-eye" 
                 color="outline-info" 
                 title="Preview"
-                @click="$router.push({ path: '/datasets/' + selNs + '/' + selId + '/' + item.version })"
+                @click="$router.push({ path: '/datasets/' + selDataset + '/' + item.version })"
               />
              </base-button-group>
            </template>
@@ -327,8 +368,8 @@ export default defineComponent({
   
      </base-panel>
      
-     <materialize ref="materializeRef" @done="loadNamespace(currentNs)"></materialize>
+     <materialize ref="materializeRef" @done="loadFolders(currentFolder)"></materialize>
     
     </base-page>
   `
-});
+};

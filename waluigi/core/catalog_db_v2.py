@@ -668,6 +668,8 @@ class CatalogDB:
             WHERE l.input_dataset = ? AND l.input_version = ?
         """, (dataset_id, version))
         return self._rows(cur)
+    
+    
 
     # ------------------------------------------------------------------
     # Version metadata

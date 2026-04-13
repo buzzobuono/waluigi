@@ -19,7 +19,7 @@ const routes = [
   { path: '/resources', component: Resources, meta: { title: 'Resources' } },
   { path: '/catalog',   component: Catalog,   meta: { title: 'Catalog' } },
   { path: '/catalog2',   component: Catalog2,   meta: { title: 'Catalog2' } },
-  { path: '/datasets/:namespace+/:id/:version', component: DatasetPreview, meta: { title: 'Dataset Preview'} },
+  { path: '/datasets/:id+/:version', component: DatasetPreview, meta: { title: 'Dataset Preview'} },
   { path: '/lineage',   component: Lineage,   meta: { title: 'Lineage' } },
   { path: '/jobs/:jobId', component: JobDag,  meta: { title: 'Job DAG' } }
 ];

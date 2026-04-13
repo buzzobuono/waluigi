@@ -1,4 +1,3 @@
-// components/DatasetPreview.js
 import { api } from '../api.js';
 import BasePage from './BasePage.js';
 import BasePanel from './BasePanel.js';
@@ -29,28 +28,27 @@ export default {
       };
 
       return {
-        namespace: formatParam(route.params.namespace),
-        id:        route.params.id,
-        version:   formatParam(route.params.version)
+        id:        formatParam(route.params.id),
+        version:   route.params.version
       };
     });
 
     async function loadPreview() {
-      const { namespace, id, version } = params.value;
-      if (!namespace || !id || !version) return;
+      const { id, version } = params.value;
+      if (!id || !version) return;
 
       loading.value = true;
       error.value = null;
       try {
         const limit = pageSize.value;
         const offset = (currentPage.value - 1) * limit;
-        const response = await api.datasetPreview(namespace, id, version, limit, offset);
+        const response = await api.catalogDatasetPreview(id, version, limit, offset);
         
-        columns.value = (response.columns || []).map(col => ({
+        columns.value = (response.data.columns || []).map(col => ({
           key: col,
           label: col
         }));
-        rows.value    = response.data || [];
+        rows.value    = response.data.rows || [];
       } catch (e) {
         console.error("Preview load error:", e);
         error.value = "Loading error: " + e.message;
@@ -156,7 +154,7 @@ export default {
             Rows {{ (currentPage-1)*10 + 1 }} - {{ (currentPage-1)*10 + rows.length }}
           </div>
           <div class="text-muted">
-            <span>Path: {{ params.namespace }}/{{ params.id }}</span>
+            <span>Path: {{ params.id }}</span>
             <span>
                 v.{{ params.version }}
             </span>

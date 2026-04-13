@@ -8,9 +8,8 @@ export default {
   name: 'Lineage',
   components: { BasePage, BasePanel, BaseButton, BaseInput },
   setup() {
-    const nsInput    = Vue.ref('');   // e.g. "sales/raw"
-    const idInput    = Vue.ref('');   // e.g. "sales_raw"
-    const verInput   = Vue.ref('');   // optional
+    const idInput    = Vue.ref('');
+    const verInput   = Vue.ref('');
     const upstream   = Vue.ref([]);
     const downstream = Vue.ref([]);
     const current    = Vue.ref(null);
@@ -19,17 +18,15 @@ export default {
     
     const route = VueRouter.useRoute();
     Vue.onMounted(() => {
-      if (route.query.ns)  nsInput.value  = route.query.ns;
       if (route.query.id)  idInput.value  = route.query.id;
       if (route.query.ver) verInput.value = route.query.ver;
       if (route.query.ns && route.query.id) search();
     });
     
     async function search() {
-      const ns = nsInput.value.trim();
       const id = idInput.value.trim();
-      if (!ns || !id) {
-        error.value = 'Namespace and Dataset ID are required.';
+      if (!id) {
+        error.value = 'Dataset ID are required.';
         return;
       }
       loading.value    = true;
@@ -41,24 +38,23 @@ export default {
       try {
         let ver = verInput.value.trim();
         if (!ver) {
-          const hist = await api.catalogDatasetHistory(ns, id);
-          if (!hist || !hist.length) {
+          const res = await api.catalogDatasetVersions(id);
+          if (!res || !res.data || !res.data.versions || !res.data.versions.length) {
             error.value = 'Dataset not found or no committed versions.';
             return;
           }
-          ver = hist[0].version;
-          current.value = hist[0];
+          ver = res.data.versions[0].version;
+          current.value = res.data.versions[0];
           verInput.value = ver;
         } else {
-          current.value = { namespace: ns, id, version: ver };
+          current.value = { id: id, version: ver };
         }
 
-        const [up, down] = await Promise.all([
-          api.catalogLineageUpstream(ns, id, ver),
-          api.catalogLineageDownstream(ns, id, ver),
-        ]);
-        upstream.value   = up.upstream    || [];
-        downstream.value = down.downstream || [];
+        
+        const lineage = await api.catalogDatasetLineage(id, ver);
+        
+        upstream.value   = lineage.data.upstream || [];
+        downstream.value = lineage.data.downstream || [];
 
       } catch(e) {
         error.value = `Error: ${e.message}`;
@@ -67,15 +63,14 @@ export default {
       }
     }
 
-    function navigateTo(ns, id) {
-      nsInput.value  = ns;
+    function navigateTo(id) {
       idInput.value  = id;
       verInput.value = '';
       search();
     }
 
     return {
-      nsInput, idInput, verInput,
+      idInput, verInput,
       upstream, downstream, current,
       loading, error,
       search, navigateTo,
@@ -91,15 +86,6 @@ export default {
 
       <template #actions>
         <div class="row w-100">
-
-          <div class="col-12 col-sm-4 mb-2">
-            <label class="text-muted small">Namespace</label>
-            <BaseInput
-              v-model="nsInput"
-              placeholder="e.g. sales/raw"
-              @keyup.enter="search"
-            />
-          </div>
 
           <div class="col-12 col-sm-4 mb-2">
             <label class="text-muted small">Dataset ID</label>

@@ -418,13 +418,7 @@ def _scan(data_path: str, prefix: str = None) -> int:
 # Routes — Browse (S3-style prefix listing)
 # ===========================================================================
 
-@app.get("/datasets/", tags=["Browse"],
-         summary="List root-level datasets and virtual prefixes")
-async def list_root():
-    return ok(db.list_prefix(""))
-
-
-@app.get("/datasets/{prefix:path}/", tags=["Browse"],
+@app.get("/folders/{prefix:path}/", tags=["Browse"],
          summary="List datasets and virtual sub-prefixes under a prefix",
          description=(
              "Trailing slash distinguishes browse from dataset access. "
@@ -482,9 +476,49 @@ async def delete_source(id: str):
     return ok({"id": id, "deleted": True})
 
 
-# ===========================================================================
-# Routes — Dataset (logical entity)
-# ===========================================================================
+
+@app.get("/datasets/{dataset_id:path}/preview/{version}",
+         tags=["Versions"],
+         summary="Preview rows of a local version")
+async def preview(dataset_id: str, version: str,
+                  limit: int = 10, offset: int = 0):
+    import numpy as np
+    print(version)
+    record = db.get_version(dataset_id, version)
+    if not record:
+        return ko("Version not found", 404)
+    if record.get("source_type") and record["source_type"] != "local":
+        return ko("Preview only available for local versions", 422)
+
+    path = record["location"]
+    fmt  = (record.get("format") or "").lower()
+    if not os.path.exists(path):
+        return ko(f"File not found: {path}", 404)
+
+    try:
+        if fmt == "csv":
+            df = pd.read_csv(path,
+                             skiprows=range(1, offset + 1),
+                             nrows=limit, dtype=str)
+        elif fmt == "parquet":
+            df = pd.read_parquet(path).iloc[offset: offset + limit]
+        else:
+            return ko(f"Preview not supported for format '{fmt}'", 422)
+
+        clean = [{k: _safe_json_value(v) for k, v in row.items()}
+                 for row in df.to_dict(orient="records")]
+
+        return ok({
+            "dataset_id": dataset_id,
+            "version":    version,
+            "columns":    df.columns.tolist(),
+            "rows":       clean,
+            "pagination": {"limit": limit, "offset": offset,
+                           "count": len(clean)},
+        })
+    except Exception as e:
+        return ko(str(e), 500)
+
 
 @app.get("/datasets/{dataset_id:path}/versions", tags=["Datasets"],
          summary="List all committed versions (newest first)")
@@ -557,10 +591,10 @@ async def resolve(dataset_id: str):
     return warn(data, msgs) if msgs else ok(data)
 
 
-@app.get("/datasets/{dataset_id:path}/lineage", tags=["Datasets"],
+@app.get("/datasets/{dataset_id:path}/lineage/{version}", tags=["Datasets"],
          summary="Get upstream and downstream lineage")
 async def get_lineage(dataset_id: str,
-                      version: Optional[str] = Query(None)):
+                      version: str):
     record = (db.get_version(dataset_id, version) if version
               else db.get_latest(dataset_id))
     if not record:
@@ -756,7 +790,7 @@ async def reserve(dataset_id: str, body: ReserveRequest):
         return ko(str(e), 500)
 
 
-@app.post("/datasets/{dataset_id:path}/commit/{version:path}",
+@app.post("/datasets/{dataset_id:path}/commit/{version}",
           tags=["Versions"],
           summary="Commit a reserved version (phase 2 of 2-phase write)")
 async def commit(dataset_id: str, version: str, body: CommitRequest):
@@ -834,7 +868,7 @@ async def commit(dataset_id: str, version: str, body: CommitRequest):
         return ko(str(e), 500)
 
 
-@app.post("/datasets/{dataset_id:path}/fail/{version:path}",
+@app.post("/datasets/{dataset_id:path}/fail/{version}",
           tags=["Versions"],
           summary="Mark a reserved version as failed")
 async def fail_version(dataset_id: str, version: str):
@@ -847,7 +881,7 @@ async def fail_version(dataset_id: str, version: str):
                "status":     "failed"})
 
 
-@app.delete("/datasets/{dataset_id:path}/deprecate/{version:path}",
+@app.delete("/datasets/{dataset_id:path}/deprecate/{version}",
             tags=["Versions"],
             summary="Deprecate a dataset version")
 async def deprecate(dataset_id: str, version: str):
@@ -857,48 +891,6 @@ async def deprecate(dataset_id: str, version: str):
     return ok({"dataset_id": dataset_id,
                "version":    version,
                "status":     "deprecated"})
-
-
-@app.get("/datasets/{dataset_id:path}/preview/{version:path}",
-         tags=["Versions"],
-         summary="Preview rows of a local version")
-async def preview(dataset_id: str, version: str,
-                  limit: int = 10, offset: int = 0):
-    import numpy as np
-    record = db.get_version(dataset_id, version)
-    if not record:
-        return ko("Version not found", 404)
-    if record.get("source_type") and record["source_type"] != "local":
-        return ko("Preview only available for local versions", 422)
-
-    path = record["location"]
-    fmt  = (record.get("format") or "").lower()
-    if not os.path.exists(path):
-        return ko(f"File not found: {path}", 404)
-
-    try:
-        if fmt == "csv":
-            df = pd.read_csv(path,
-                             skiprows=range(1, offset + 1),
-                             nrows=limit, dtype=str)
-        elif fmt == "parquet":
-            df = pd.read_parquet(path).iloc[offset: offset + limit]
-        else:
-            return ko(f"Preview not supported for format '{fmt}'", 422)
-
-        clean = [{k: _safe_json_value(v) for k, v in row.items()}
-                 for row in df.to_dict(orient="records")]
-
-        return ok({
-            "dataset_id": dataset_id,
-            "version":    version,
-            "columns":    df.columns.tolist(),
-            "data":       clean,
-            "pagination": {"limit": limit, "offset": offset,
-                           "count": len(clean)},
-        })
-    except Exception as e:
-        return ko(str(e), 500)
 
 
 # ===========================================================================

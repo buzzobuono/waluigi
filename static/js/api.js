@@ -18,41 +18,30 @@ async function _delete(url) {
   return r.json();
 }
 
-function _encNs(s)  { return String(s); }
-function _encId(s)  { return encodeURIComponent(s); }
-function _encVer(s) { return String(s).replace(/:/g, '%3A'); }
+function _enc(s)  { return encodeURIComponent(s); }
 
 export const api = {
   jobs:      () => _get('/api/jobs'),
-  deleteJob: (jobId) => _delete(`/api/jobs/${encodeURIComponent(jobId)}`),
-  jobTasks: (jobId) => _get(`/api/jobs/${encodeURIComponent(jobId)}/tasks`),
+  deleteJob: (jobId) => _delete(`/api/jobs/${_enc(jobId)}`),
+  jobTasks: (jobId) => _get(`/api/jobs/${_enc(jobId)}/tasks`),
 
   namespaces: () => _get('/api/namespaces'),
-  resetNamespace:  (ns) => _post(`/api/reset/namespace/${encodeURIComponent(ns)}`),
-  deleteNamespace: (ns) => _post(`/api/delete/namespace/${encodeURIComponent(ns)}`),
+  resetNamespace:  (ns) => _post(`/api/reset/namespace/${_enc(ns)}`),
+  deleteNamespace: (ns) => _post(`/api/delete/namespace/${_enc(ns)}`),
 
   tasks:     () => _get('/api/tasks'),
-  resetTask:       (id) => _post(`/api/reset/task/${encodeURIComponent(id)}`),
-  deleteTask:      (id) => _post(`/api/delete/task/${encodeURIComponent(id)}`),
-  logs:      (taskId, limit = 100) => _get(`/api/logs/${encodeURIComponent(taskId)}`, { limit }),
+  resetTask:       (id) => _post(`/api/reset/task/${_enc(id)}`),
+  deleteTask:      (id) => _post(`/api/delete/task/${_enc(id)}`),
+  logs:      (taskId, limit = 100) => _get(`/api/logs/${_enc(taskId)}`, { limit }),
 
   workers:   () => _get('/api/workers'),
 
   resources: () => _get('/api/resources'),
   
-  catalogNamespaces:  () => _get('/catalog/namespaces'),
-  catalogNsChildren:  (ns) => _get(`/catalog/namespaces/${_encNs(ns)}/children`),
-  catalogNsDatasets:  (ns, recursive = false) => _get(`/catalog/namespaces/${_encNs(ns)}/datasets`, { recursive }),
-
-  catalogFolders:  (prefix) => _get(`/catalog/folders/${_encodeURIComponent(prefix)}/`),
-    
-  datasetPreview: (ns, id, ver, limit = 10, offset = 0) => _get(`/catalog/datasets/${_encNs(ns)}/${_encId(id)}/${_encVer(ver)}/preview`, { limit, offset }),
-
-  catalogDatasetHistory:  (ns, id)        => _get(`/catalog/datasets/${_encNs(ns)}/${_encId(id)}/history`),
-  catalogDatasetMetadata: (ns, id)        => _get(`/catalog/datasets/${_encNs(ns)}/${_encId(id)}/metadata`),
-  catalogDataset:         (ns, id)        => _get(`/catalog/datasets/${_encNs(ns)}/${_encId(id)}/latest`),
-
-  catalogLineageUpstream:   (ns, id, ver) => _get(`/catalog/lineage/${_encNs(ns)}/${_encId(id)}/${_encVer(ver)}`),
-  catalogLineageDownstream: (ns, id, ver) => _get(`/catalog/lineage/${_encNs(ns)}/${_encId(id)}/${_encVer(ver)}/downstream`),
+  catalogFolders:  (prefix) => _get(`/catalog/folders/${_enc(prefix)}/`),
+  catalogDatasetVersions:  (id) => _get(`/catalog/datasets/${_enc(id)}/versions`),
+  catalogDatasetMetadata: (id, ver) => _get(`/catalog/datasets/${_enc(id)}/metadata/${_enc(ver)}`),
+  catalogDatasetPreview: (id, ver, limit = 10, offset = 0) => _get(`/catalog/datasets/${_enc(id)}/preview/${_enc(ver)}`, { limit, offset }),
+  catalogDatasetLineage:   (id, ver) => _get(`/catalog/datasets/${_enc(id)}/lineage/${_enc(ver)}`),
   
 };

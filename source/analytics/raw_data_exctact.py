@@ -1,6 +1,6 @@
 import time
 from waluigi.sdk.task import Task
-from waluigi.sdk.catalog import catalog
+from waluigi.sdk.catalog_v2 import catalog
 
 class RawDataExtract(Task):
     def run(self):
@@ -9,7 +9,7 @@ class RawDataExtract(Task):
         
         print(f"📥 Estrazione dati da sorgente: {self.params.source}...")
         
-        with catalog.produce(f"analytics/{source}/raw", dataset_id, format="out") as ctx:
+        with catalog.produce(f"analytics/{source}/raw/{dataset_id}", format="out") as ctx:
             steps = 5 # Ridotto per brevità
             for step in range(steps):
                 print(f"Estrazione Step {step+1}/{steps}")

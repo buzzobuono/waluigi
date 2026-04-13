@@ -124,43 +124,46 @@ async def api_delete_namespace(namespace: str):
 async def catalog_folders(prefix: str):
     return JSONResponse(await _catalog_get(f'/folders/{prefix}'))
 
-@app.get('/catalog/namespaces')
-async def catalog_namespaces():
-    return JSONResponse(await _catalog_get('/namespaces'))
+@app.get('/catalog/datasets/{id:path}/history')
+async def catalog_dataset_history(id: str):
+    return JSONResponse(await _catalog_get(f'/datasets/{id}/history'))
 
-@app.get('/catalog/namespaces/{ns:path}/children')
-async def catalog_ns_children(ns: str):
-    return JSONResponse(await _catalog_get(f'/namespaces/{ns}/children'))
+@app.get('/catalog/datasets/{id:path}/preview/{version}')
+async def catalog_dataset_preview(id: str, version: str, limit: int = 10, offset: int = 0):
+    return JSONResponse(await _catalog_get(f'/datasets/{id}/preview/{version}', {'limit': limit, 'offset': offset}))
 
-@app.get('/catalog/namespaces/{ns:path}/datasets')
-async def catalog_ns_datasets(ns: str, recursive: bool = False):
-    return JSONResponse(await _catalog_get(f'/namespaces/{ns}/datasets', {'recursive': str(recursive).lower()}))
+@app.get('/catalog/datasets/{id:path}/lineage/{version}')
+async def catalog_dataset_lineage(id: str, version: str):
+    return JSONResponse(await _catalog_get(f'/datasets/{id}/lineage/{version}'))
 
-@app.get('/catalog/datasets/{ns:path}/{id}/{version}/preview')
-async def catalog_dataset_preview(ns: str, id: str, version: str, limit: int = 10, offset: int = 0):
-    print(offset)
-    return JSONResponse(await _catalog_get(f'/datasets/{ns}/{id}/{version}/preview', {'limit': limit, 'offset': offset}))
+@app.get('/catalog/datasets/{id:path}/metadata/{version}')
+async def catalog_dataset_metadata(id: str, version: str):
+    return JSONResponse(await _catalog_get(f'/datasets/{id}/metadata/{version}'))
 
-@app.get('/catalog/datasets/{ns:path}/{id}/history')
-async def catalog_dataset_history(ns: str, id: str):
-    return JSONResponse(await _catalog_get(f'/datasets/{ns}/{id}/history'))
 
-@app.get('/catalog/datasets/{ns:path}/{id}/{version}/metadata')
-async def catalog_dataset_metadata(ns: str, id: str, version: str):
-    return JSONResponse(await _catalog_get(f'/datasets/{ns}/{id}/{version}/metadata'))
+#@app.get('/catalog/namespaces')
+#async def catalog_namespaces():
+#    return JSONResponse(await _catalog_get('/namespaces'))
+
+#@app.get('/catalog/namespaces/{ns:path}/children')
+#async def catalog_ns_children(ns: str):
+#    return JSONResponse(await _catalog_get(f'/namespaces/{ns}/children'))
+
+#@app.get('/catalog/namespaces/{ns:path}/datasets')
+#async def catalog_ns_datasets(ns: str, recursive: bool = False):
+#    return JSONResponse(await _catalog_get(f'/namespaces/{ns}/datasets', {'recursive': str(recursive).lower()}))
+
+#@app.get('/catalog/datasets/{ns:path}/{id}/history')
+#async def catalog_dataset_history(ns: str, id: str):
+#    return JSONResponse(await _catalog_get(f'/datasets/{ns}/{id}/history'))
+
+#@app.get('/catalog/datasets/{ns:path}/{id}/{version}/metadata')
+#async def catalog_dataset_metadata(ns: str, id: str, version: str):
+#    return JSONResponse(await _catalog_get(f'/datasets/{ns}/{id}/{version}/metadata'))
 
 @app.get('/catalog/datasets/{ns:path}/{id}')
 async def catalog_dataset_latest(ns: str, id: str):
     return JSONResponse(await _catalog_get(f'/datasets/{ns}/{id}'))
-
-@app.get('/catalog/lineage/{ns:path}/{id}/{version}/downstream')
-async def catalog_lineage_downstream(ns: str, id: str, version: str):
-    return JSONResponse(await _catalog_get(f'/lineage/{ns}/{id}/{version}/downstream'))
-
-@app.get('/catalog/lineage/{ns:path}/{id}/{version}')
-async def catalog_lineage_upstream(ns: str, id: str, version: str):
-    return JSONResponse(await _catalog_get(f'/lineage/{ns}/{id}/{version}'))
-
 
 @app.post('/catalog/datasets/{ns:path}/{id}/materialize')
 async def catalog_materialize(ns: str, id: str, request: Request):

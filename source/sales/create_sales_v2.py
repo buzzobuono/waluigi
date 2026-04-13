@@ -2,7 +2,7 @@ import csv
 from waluigi.sdk.task import Task
 from waluigi.sdk.catalog_v2 import catalog
 
-DATASET_ID = "sales/raw/sales_raw"
+DATASET_ID = "sales/raw/sales_raw2"
 
 
 class CreateSalesDataset(Task):
