@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from waluigi.core.catalog_db import CatalogDB
+from waluigi.core.catalog_db_old import CatalogDB
 from waluigi.core.catalog_helper import CatalogHelper
 import pandas as pd
 

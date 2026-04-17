@@ -29,7 +29,6 @@ HTTP status codes:
 import os
 import sys
 import csv
-import json
 import socket
 import hashlib
 from datetime import datetime, timezone
@@ -43,7 +42,7 @@ from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from waluigi.core.catalog_db_v2 import CatalogDB
+from waluigi.core.catalog_db import CatalogDB
 from waluigi.responses import ok, warn, ko
 
 # ---------------------------------------------------------------------------
@@ -165,6 +164,11 @@ def _safe_json_value(v):
 # Pydantic models
 # ---------------------------------------------------------------------------
 
+class SourceUpdateRequest(BaseModel):
+    type:        Optional[str]            = None
+    config:      Optional[Dict[str, Any]] = None
+    description: Optional[str]            = None
+
 class DatasetUpdateRequest(BaseModel):
     description:  Optional[str]       = None
     tags:         Optional[List[str]] = None
@@ -176,11 +180,6 @@ class SourceCreateRequest(BaseModel):
     type:        str            = Field(...,  example="sql")
     config:      Dict[str, Any] = Field(default_factory=dict)
     description: Optional[str] = None
-
-class SourceUpdateRequest(BaseModel):
-    type:        Optional[str]            = None
-    config:      Optional[Dict[str, Any]] = None
-    description: Optional[str]            = None
 
 class ReserveRequest(BaseModel):
     format:       str            = Field("",        example="csv")
@@ -407,13 +406,13 @@ async def list_prefix(prefix: str):
 # ===========================================================================
 
 @app.get("/sources", tags=["Sources"],
-         summary="List all registered sources")
+         summary="List sources")
 async def list_sources():
     return ok(db.list_sources())
 
 
 @app.post("/sources", tags=["Sources"],
-          summary="Register a new physical source / connector",
+          summary="Register a new source",
           status_code=201)
 async def create_source(body: SourceCreateRequest):
     created = db.create_source(body.id, body.type, body.config, body.description)
@@ -423,7 +422,7 @@ async def create_source(body: SourceCreateRequest):
 
 
 @app.get("/sources/{id}", tags=["Sources"],
-         summary="Get source details")
+         summary="Get a source details")
 async def get_source(id: str):
     src = db.get_source(id)
     if not src:
@@ -432,7 +431,7 @@ async def get_source(id: str):
 
 
 @app.patch("/sources/{id}", tags=["Sources"],
-           summary="Update source config or description")
+           summary="Update a source")
 async def update_source(id: str, body: SourceUpdateRequest):
     updated = db.update_source(id, **_model_dump(body))
     if not updated:
@@ -446,26 +445,29 @@ async def delete_source(id: str):
     deleted = db.delete_source(id)
     if not deleted:
         return ko("Source not found", 404)
-    return ok({"id": id, "deleted": True})
+    return ok({"id": id})
 
 # ===========================================================================
 # Routes — Datasets
 # ===========================================================================
 
+
 @app.get("/datasets", tags=["Datasets"],
-         summary="List datasets filtered by status",
-         description="status: draft | in_review | approved | deprecated")
-async def list_datasets(
-        status: str = Query("draft",
-                            example="in_review")):
+    summary="List datasets",
+    description="status: draft | in_review | approved | deprecated"
+)
+async def find_datasets(status: str | None = Query(default=None, example="draft"), 
+                        description: str | None = Query(default=None, example="sales dataset")):
     valid = {"draft", "in_review", "approved", "deprecated"}
-    if status not in valid:
+    if status and status not in valid:
         return ko(f"Invalid status. Must be one of: {', '.join(sorted(valid))}", 422)
-    return ok(db.list_by_status(status))
+    if not status and not description:
+        return ok(db.list_datasets())
+    return ok(db.find_datasets(status=status, description=description))
 
 
 @app.get("/datasets/{dataset_id:path}", tags=["Datasets"],
-           summary="Retrieve a dataset by id")
+           summary="Get a dataset detail")
 async def get_dataset(dataset_id: str):
     dataset = db.get_dataset(dataset_id)
     if not dataset:
@@ -477,7 +479,7 @@ async def get_dataset(dataset_id: str):
 
 
 @app.patch("/datasets/{dataset_id:path}", tags=["Datasets"],
-           summary="Update dataset display name, description, owner or tags")
+           summary="Update a dataset")
 async def update_dataset(dataset_id: str, body: DatasetUpdateRequest):
     updated = db.update_dataset(dataset_id,
                                 **_model_dump(body))

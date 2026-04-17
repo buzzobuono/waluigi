@@ -1,331 +1,715 @@
 import sqlite3
 import threading
 import json
-from datetime import datetime
-from waluigi.core.catalog_helper import CatalogHelper
+from datetime import datetime, timezone
+from waluigi.core.entities import _dataset, _version, _source
 
 
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+    
+def _user() -> str:
+    return "admin"
+    
 class CatalogDB:
+    """
+    SQLite backend for the Waluigi Catalog v2.
 
-    def __init__(self, db_path):
-        self.helper = CatalogHelper()
+    Dataset identity
+    ----------------
+    Every dataset has a single `id` which is a slash-separated path,
+    e.g. "sales/raw/sales_raw". There are no separate collection entities.
+    Navigation is virtual — listing by prefix, exactly like S3.
+
+    Concepts
+    --------
+    dataset         – logical entity identified by a full path id
+    source          – physical connector (local | s3 | sql | sftp | api)
+    version         – immutable snapshot of a dataset
+    schema_columns  – per-column semantic state (inferred → draft → published)
+    schema_history  – append-only publish snapshots for auditing
+    lineage         – directed graph of dataset dependencies
+    version_metadata – key-value tags; sys.* keys are reserved for the server
+    """
+
+    # ------------------------------------------------------------------
+    # Bootstrap
+    # ------------------------------------------------------------------
+
+    def __init__(self, db_path: str):
         self.db_path = db_path
-        self._local = threading.local()
+        self._local  = threading.local()
         self._init()
 
     @property
-    def conn(self):
+    def conn(self) -> sqlite3.Connection:
         if not hasattr(self._local, "connection"):
-            self._local.connection = sqlite3.connect(self.db_path, check_same_thread=False)
-            self._local.connection.execute("PRAGMA busy_timeout = 30000")
-            self._local.connection.execute("PRAGMA journal_mode=WAL")
-            self._local.connection.row_factory = sqlite3.Row
+            c = sqlite3.connect(self.db_path, check_same_thread=False)
+            c.execute("PRAGMA busy_timeout = 30000")
+            c.execute("PRAGMA journal_mode=WAL")
+            c.execute("PRAGMA foreign_keys = ON")
+            c.row_factory = sqlite3.Row
+            self._local.connection = c
         return self._local.connection
 
     def _init(self):
         with self.conn:
             self.conn.executescript("""
-                CREATE TABLE IF NOT EXISTS namespaces (
-                    path        TEXT PRIMARY KEY,
-                    parent      TEXT,
-                    name        TEXT,
+                -- ── Sources ──────────────────────────────────────────────────
+                -- Describes HOW to reach data physically.
+                -- type: local | s3 | sql | sftp | api
+                CREATE TABLE IF NOT EXISTS sources (
+                    id          TEXT PRIMARY KEY,
                     description TEXT,
-                    created_at  TEXT
+                    type        TEXT NOT NULL,
+                    config      TEXT NOT NULL DEFAULT '{}',  -- JSON
+                    username     TEXT,
+                    createdate   TEXT NOT NULL,
+                    updatedate   TEXT NOT NULL
                 );
 
+                -- ── Datasets ─────────────────────────────────────────────────
+                -- id is the full slash-separated path, e.g. "sales/raw/sales_raw"
                 CREATE TABLE IF NOT EXISTS datasets (
-                    namespace        TEXT NOT NULL,
-                    id               TEXT NOT NULL,
+                    id           TEXT PRIMARY KEY,
+                    description  TEXT,
+                    tags         TEXT NOT NULL DEFAULT '[]',  -- JSON array
+                    status       TEXT NOT NULL DEFAULT 'draft',
+                    username     TEXT,
+                    createdate   TEXT NOT NULL,
+                    updatedate   TEXT NOT NULL
+                );
+
+                -- ── Versions ─────────────────────────────────────────────────
+                -- location semantics depend on source type:
+                --   local → absolute file path
+                --   s3    → s3://bucket/key
+                --   sql   → table or SELECT query
+                --   sftp  → remote absolute path
+                --   api   → base_url#endpoint
+                CREATE TABLE IF NOT EXISTS versions (
+                    dataset_id       TEXT NOT NULL REFERENCES datasets(id),
                     version          TEXT NOT NULL,
-                    path             TEXT NOT NULL,
+                    source_id        TEXT REFERENCES sources(id),
+                    location         TEXT NOT NULL,
                     format           TEXT,
                     hash             TEXT,
-                    produced_by_task TEXT,
-                    produced_by_job  TEXT,
-                    created_at       TEXT,
-                    committed_at     TEXT,
                     rows             INTEGER,
-                    schema           TEXT,
-                    status           TEXT DEFAULT 'reserved',
-                    PRIMARY KEY (namespace, id, version),
-                    FOREIGN KEY (namespace) REFERENCES namespaces(path)
+                    task_id          TEXT,
+                    job_id           TEXT,
+                    status           TEXT NOT NULL DEFAULT 'reserved',
+                    username         TEXT,
+                    createdate       TEXT NOT NULL,
+                    updatedate       TEXT NOT NULL,
+                    PRIMARY KEY (dataset_id, version)
                 );
 
-                CREATE TABLE IF NOT EXISTS dataset_metadata (
-                    namespace  TEXT NOT NULL,
+                -- ── Schema columns ────────────────────────────────────────────
+                -- One row per column per dataset (not per version).
+                -- status lifecycle: inferred → draft → published
+                -- pii_type:        none | direct | indirect | sensitive
+                CREATE TABLE IF NOT EXISTS schema_columns (
+                    dataset_id     TEXT NOT NULL REFERENCES datasets(id),
+                    column_name    TEXT NOT NULL,
+                    physical_type  TEXT,
+                    logical_type   TEXT,
+                    nullable       INTEGER NOT NULL DEFAULT 1,
+                    pii            INTEGER NOT NULL DEFAULT 0,
+                    pii_type       TEXT    NOT NULL DEFAULT 'none',
+                    pii_notes      TEXT,
+                    description    TEXT,
+                    tags           TEXT NOT NULL DEFAULT '[]',
+                    status         TEXT NOT NULL DEFAULT 'inferred',
+                    last_edited_by TEXT,
+                    last_edited_at TEXT,
+                    PRIMARY KEY (dataset_id, column_name)
+                );
+
+                -- ── Schema history ────────────────────────────────────────────
+                -- Append-only log of every publish event.
+                CREATE TABLE IF NOT EXISTS schema_history (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    dataset_id   TEXT NOT NULL,
+                    snapshot     TEXT NOT NULL,     -- JSON of all columns
+                    published_by TEXT,
+                    published_at TEXT NOT NULL
+                );
+
+                -- ── Lineage ───────────────────────────────────────────────────
+                CREATE TABLE IF NOT EXISTS lineage (
+                    output_dataset  TEXT NOT NULL,
+                    output_version  TEXT NOT NULL,
+                    input_dataset   TEXT NOT NULL,
+                    input_version   TEXT NOT NULL,
+                    PRIMARY KEY (output_dataset, output_version,
+                                 input_dataset,  input_version)
+                );
+
+                -- ── Version metadata ──────────────────────────────────────────
+                -- sys.* keys are written by the server only.
+                -- Plain keys are free business metadata from the task.
+                CREATE TABLE IF NOT EXISTS version_metadata (
                     dataset_id TEXT NOT NULL,
                     version    TEXT NOT NULL,
                     key        TEXT NOT NULL,
                     value      TEXT,
-                    PRIMARY KEY (namespace, dataset_id, version, key)
+                    PRIMARY KEY (dataset_id, version, key)
                 );
 
-                CREATE TABLE IF NOT EXISTS lineage (
-                    output_ns      TEXT NOT NULL,
-                    output_id      TEXT NOT NULL,
-                    output_version TEXT NOT NULL,
-                    input_ns       TEXT NOT NULL,
-                    input_id       TEXT NOT NULL,
-                    input_version  TEXT NOT NULL,
-                    PRIMARY KEY (output_ns, output_id, output_version,
-                                 input_ns,  input_id,  input_version)
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_datasets_ns     ON datasets(namespace);
-                CREATE INDEX IF NOT EXISTS idx_datasets_status ON datasets(namespace, id, status);
-                CREATE INDEX IF NOT EXISTS idx_lineage_output  ON lineage(output_ns, output_id, output_version);
-                CREATE INDEX IF NOT EXISTS idx_lineage_input   ON lineage(input_ns,  input_id,  input_version);
-                CREATE INDEX IF NOT EXISTS idx_ns_parent       ON namespaces(parent);
             """)
 
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
     
-    # --- Namespaces ---
+    def _row(self, row) -> dict | None:
+        if row is None:
+            return None
+        d = dict(row)
+        for field in ("tags", "config"):
+            if field in d and d[field]:
+                try:
+                    d[field] = json.loads(d[field])
+                except Exception:
+                    pass
+        return d
 
-    def ensure_namespace(self, path, description=None):
-        parts = path.strip("/").split("/")
-        with self.conn:
-            for i in range(1, len(parts) + 1):
-                current = "/".join(parts[:i])
-                parent  = "/".join(parts[:i - 1]) if i > 1 else None
-                name    = parts[i - 1]
+    def _rows(self, cursor) -> list[dict]:
+        return [self._row(r) for r in cursor.fetchall()]
+
+    # ------------------------------------------------------------------
+    # Sources
+    # ------------------------------------------------------------------
+
+    def create_source(self, id: str, type: str, config: dict,
+                      description: str = None) -> bool:
+        now = _now()
+        try:
+            with self.conn:
                 self.conn.execute("""
-                    INSERT OR IGNORE INTO namespaces (path, parent, name, description, created_at)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (current, parent, name,
-                      description if i == len(parts) else None,
-                      self.helper.now_iso()))
+                    INSERT INTO sources
+                        (id, description, type, config, username, createdate, updatedate)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (id, description, type, json.dumps(config), _user(), now, now))
+            return True
+        except sqlite3.IntegrityError:
+            return False
 
-    def get_namespace(self, path):
-        cursor = self.conn.execute("SELECT * FROM namespaces WHERE path = ?", (path,))
-        row = cursor.fetchone()
-        return dict(row) if row else None
-
-    def list_namespace_children(self, parent=None):
-        if parent is None:
-            cursor = self.conn.execute(
-                "SELECT * FROM namespaces WHERE parent IS NULL ORDER BY name")
-        else:
-            cursor = self.conn.execute(
-                "SELECT * FROM namespaces WHERE parent = ? ORDER BY name", (parent,))
-        return [dict(r) for r in cursor.fetchall()]
-
-    def update_namespace_description(self, path, description):
+    def get_source(self, id: str) -> dict | None:
+        cur = self.conn.execute("SELECT * FROM sources WHERE id = ?", (id,))
+        return _source(cur.fetchone())
+    
+    def list_sources(self) -> list[dict]:
+        cur = self.conn.execute("SELECT * FROM sources ORDER BY id")
+        return [_source(r) for r in cur.fetchall()]
+    
+    def update_source(self, id: str, **kwargs) -> bool:
+        allowed = {"type", "config", "description"}
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return False
+        if "config" in updates:
+            updates["config"] = json.dumps(updates["config"])
+        updates["updatedate"] = _now()
+        updates["username"]= _user()
+        cols = ", ".join(f"{k} = ?" for k in updates)
+        vals = list(updates.values()) + [id]
         with self.conn:
-            cursor = self.conn.execute(
-                "UPDATE namespaces SET description = ? WHERE path = ?", (description, path))
-            return cursor.rowcount > 0
+            cur = self.conn.execute(
+                f"UPDATE sources SET {cols} WHERE id = ?", vals)
+            return cur.rowcount > 0
+    
+    def delete_source(self, id: str) -> bool:
+        with self.conn:
+            cur = self.conn.execute("DELETE FROM sources WHERE id = ?", (id,))
+            return cur.rowcount > 0
+    
+    # ------------------------------------------------------------------
+    # Datasets
+    # ------------------------------------------------------------------
 
-    def list_datasets_in_namespace(self, namespace, recursive=False):
-        if recursive:
-            cursor = self.conn.execute("""
-                WITH latest AS (
-                    SELECT *, ROW_NUMBER() OVER (
-                        PARTITION BY namespace, id ORDER BY committed_at DESC
-                    ) AS rn
-                    FROM datasets
-                    WHERE (namespace = ? OR namespace LIKE ?) AND status = 'committed'
+    def create_dataset(self, id: str, description: str = None,
+                       tags: list = None) -> bool:
+        now = _now()
+        with self.conn:
+            cur = self.conn.execute("INSERT INTO datasets (id, description, tags, status, username, createdate, updatedate) VALUES (?, ?, ?, 'draft', ?, ?, ?) ON CONFLICT(id) DO NOTHING",
+                                     (id, description, json.dumps(tags or []), _user(), now, now))
+            return cur.rowcount > 0
+  
+    def exists_dataset(self, id: str) -> bool:
+        cur = self.conn.execute("SELECT 1 FROM datasets WHERE id = ?", (id,))
+        return cur.fetchone() is not None
+    
+    def get_dataset(self, id: str) -> dict | None:
+        cur = self.conn.execute("SELECT * FROM datasets WHERE d.id = ?", (id,))
+        return _dataset(cur.fetchone())
+    
+    def list_datasets(self) -> list[dict]:
+        cur = self.conn.execute("SELECT * FROM datasets ORDER BY id")
+        return [_dataset(r) for r in cur.fetchall()]
+
+    def find_datasets(self, status: str, description: str) -> list[dict]:
+        cur = self.conn.execute("SELECT * FROM datasets WHERE status = ? and description LIKE ? ORDER BY d.i", (status, description))
+        return _dataset(cur)
+
+    def update_dataset(self, id: str, **kwargs) -> bool:
+        allowed = {"type", "config", "description"}
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return False
+        if "config" in updates:
+            updates["config"] = json.dumps(updates["config"])
+        updates["updatedate"] = _now()
+        cols = ", ".join(f"{k} = ?" for k in updates)
+        vals = list(updates.values()) + [id]
+        with self.conn:
+            cur = self.conn.execute(
+                f"UPDATE sources SET {cols} WHERE id = ?", vals)
+            return cur.rowcount > 0
+   
+    def get_dataset______(self, id: str) -> dict | None:
+        cur = self.conn.execute("""
+            SELECT d.*,
+                   v.version,
+                   v.status         AS version_status,
+                   v.format,
+                   v.rows,
+                   v.committed_at,
+                   v.source_id,
+                   s.type           AS source_type
+            FROM datasets d
+            LEFT JOIN versions v
+                ON v.dataset_id = d.id
+                AND v.version = (
+                    SELECT version FROM versions
+                    WHERE dataset_id = d.id AND status = 'committed'
+                    ORDER BY committed_at DESC LIMIT 1
                 )
-                SELECT namespace, id, version, path, format, hash, rows,
-                       produced_by_task, produced_by_job, committed_at, status
-                FROM latest WHERE rn = 1
-                ORDER BY namespace, id
-            """, (namespace, f"{namespace}/%"))
-        else:
-            cursor = self.conn.execute("""
-                WITH latest AS (
-                    SELECT *, ROW_NUMBER() OVER (
-                        PARTITION BY namespace, id ORDER BY committed_at DESC
-                    ) AS rn
-                    FROM datasets
-                    WHERE namespace = ? AND status = 'committed'
-                )
-                SELECT namespace, id, version, path, format, hash, rows,
-                       produced_by_task, produced_by_job, committed_at, status
-                FROM latest WHERE rn = 1
-                ORDER BY id
-            """, (namespace,))
-        return [dict(r) for r in cursor.fetchall()]
-
-    # --- Datasets ---
-
-    def reserve(self, namespace, id, version, path, fmt, task_id, job_id):
+            LEFT JOIN sources s ON s.id = v.source_id
+            WHERE d.id = ?
+        """, (id,))
+        return _dataset(cur.fetchone())
+    
+    def set_in_review(self, id: str) -> bool:
+        """Promote dataset from draft to in_review. No-op if approved."""
         with self.conn:
-            self.conn.execute("""
-                INSERT INTO datasets
-                    (namespace, id, version, path, format,
-                     produced_by_task, produced_by_job, created_at, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'reserved')
-            """, (namespace, id, version, path, fmt, task_id, job_id, version))
+            cur = self.conn.execute("""
+                UPDATE datasets SET status = 'in_review'
+                WHERE id = ? AND status = 'draft'
+            """, (id,))
+            return cur.rowcount > 0
 
-    def commit_(self, namespace, id, version, file_hash, rows, schema):
+    def approve_dataset(self, id: str, approved_by: str) -> bool:
+        """Approve dataset and publish its schema atomically."""
+        now = _now()
         with self.conn:
-            cursor = self.conn.execute("""
-                UPDATE datasets SET
-                    hash = ?, rows = ?, schema = ?,
-                    committed_at = ?, status = 'committed'
-                WHERE namespace = ? AND id = ? AND version = ? AND status = 'reserved'
-            """, (file_hash, rows, json.dumps(schema) if schema else None,
-                  self.helper.now_iso(), namespace, id, version))
-            return cursor.rowcount > 0
+            cur = self.conn.execute("""
+                UPDATE datasets
+                SET status = 'approved', approved_by = ?, approved_at = ?
+                WHERE id = ? AND status != 'deprecated'
+            """, (approved_by, now, id))
+            return cur.rowcount > 0
 
-    def commit(self, namespace, id, version, file_hash, rows, schema):
+    def update_dataset(self, id: str, **kwargs) -> bool:
+        allowed = {"display_name", "description", "owner", "tags"}
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return False
+        if "tags" in updates:
+            updates["tags"] = json.dumps(updates["tags"])
+        # Any manual edit promotes status to in_review
+        # (unless already approved — approved datasets stay approved
+        #  until explicitly re-approved after schema changes)
+        updates["status"] = (
+            "CASE WHEN status = 'approved' THEN 'in_review' ELSE "
+            "CASE WHEN status = 'draft' THEN 'in_review' ELSE status END END"
+        )
+        set_parts = []
+        vals = []
+        for k, v in updates.items():
+            if k == "status":
+                set_parts.append(f"status = ({v})")
+            else:
+                set_parts.append(f"{k} = ?")
+                vals.append(v)
+        vals.append(id)
         with self.conn:
-            # get latest committed version only
+            cur = self.conn.execute(
+                f"UPDATE datasets SET {', '.join(set_parts)} WHERE id = ?",
+                vals)
+            return cur.rowcount > 0
+
+    def list_prefix(self, prefix: str) -> dict:
+        prefix = prefix.rstrip("/") + "/"
+        prefix = prefix.lstrip("/")
+        cur = self.conn.execute("""
+            SELECT d.*
+            FROM datasets d
+            WHERE d.id LIKE ?
+            ORDER BY d.id
+        """, (f"{prefix}%",))
+    
+        all_rows = cur.fetchall()
+        datasets, sub_prefixes = [], set()
+    
+        for row in all_rows:
+            d = _dataset(row)
+            rest = d["id"][len(prefix):]
+            if "/" not in rest:
+                datasets.append(d)
+            else:
+                sub = prefix + rest.split("/")[0] + "/"
+                sub_prefixes.add(sub)
+    
+        return {
+            "prefix":   prefix,
+            "datasets": datasets,
+            "prefixes": sorted(sub_prefixes),
+        }
+    
+    # ------------------------------------------------------------------
+    # Versions
+    # ------------------------------------------------------------------
+
+    def reserve(self, dataset_id: str, version: str, location: str,
+                fmt: str, task_id: str, job_id: str,
+                source_id: str = None) -> bool:
+        try:
+            with self.conn:
+                self.conn.execute("""
+                    INSERT INTO versions
+                        (dataset_id, version, source_id, location, format,
+                         produced_by_task, produced_by_job, status, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'reserved', ?)
+                """, (dataset_id, version, source_id, location, fmt,
+                      task_id, job_id, _now()))
+            return True
+        except sqlite3.IntegrityError as e:
+            print(e)
+            return False
+
+    def commit(self, dataset_id: str, version: str, file_hash: str,
+               rows: int | None, schema: dict | None) -> dict | None:
+        """
+        Returns:
+            {"skipped": True,  "version": existing_version}  identical to latest
+            {"skipped": False, "version": version}            committed
+            None                                              wrong status
+        """
+        with self.conn:
             latest = self.conn.execute("""
-            SELECT version, hash FROM datasets
-            WHERE namespace = ? AND id = ? AND status = 'committed'
-            ORDER BY version DESC LIMIT 1
-            """, (namespace, id)).fetchone()
+                SELECT version, hash FROM versions
+                WHERE dataset_id = ? AND status = 'committed'
+                ORDER BY committed_at DESC LIMIT 1
+            """, (dataset_id,)).fetchone()
 
             if latest and dict(latest)["hash"] == file_hash:
-                # identical to latest — drop reserved slot and return existing
                 self.conn.execute("""
-                DELETE FROM datasets
-                WHERE namespace = ? AND id = ? AND version = ? AND status = 'reserved'
-                """, (namespace, id, version))
+                    DELETE FROM versions
+                    WHERE dataset_id = ? AND version = ? AND status = 'reserved'
+                """, (dataset_id, version))
                 return {"skipped": True, "version": dict(latest)["version"]}
 
-            # different from latest (or no latest exists) — commit normally
-            cursor = self.conn.execute("""
-            UPDATE datasets SET
-                hash = ?, rows = ?, schema = ?,
-                committed_at = ?, status = 'committed'
-            WHERE namespace = ? AND id = ? AND version = ? AND status = 'reserved'
+            cur = self.conn.execute("""
+                UPDATE versions SET
+                    hash = ?, rows = ?, 
+                    committed_at = ?, status = 'committed'
+                WHERE dataset_id = ? AND version = ? AND status = 'reserved'
             """, (file_hash, rows,
-              json.dumps(schema) if schema else None,
-              self.helper.now_iso(), namespace, id, version))
+                  _now(), dataset_id, version))
 
-            if cursor.rowcount == 0:
+            if cur.rowcount == 0:
                 return None
-
             return {"skipped": False, "version": version}
 
-
-    def commit_scanned(self, namespace, id, version, path, fmt, file_hash, rows, schema):
+    def commit_virtual(self, dataset_id: str, version: str, source_id: str,
+                       location: str, fmt: str,
+                       task_id: str, job_id: str) -> dict:
+        """Register a virtual version (no local file, no hash)."""
+        now = _now()
         with self.conn:
             self.conn.execute("""
-                INSERT OR IGNORE INTO datasets
-                    (namespace, id, version, path, format, hash, rows, schema,
-                     created_at, committed_at, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'committed')
-            """, (namespace, id, version, path, fmt, file_hash, rows,
-                  json.dumps(schema) if schema else None, version, version))
+                INSERT OR REPLACE INTO versions
+                    (dataset_id, version, source_id, location, format,
+                     produced_by_task, produced_by_job,
+                     status, created_at, committed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'committed', ?, ?)
+            """, (dataset_id, version, source_id, location, fmt,
+                  task_id, job_id, now, now))
+        return {"skipped": False, "version": version}
 
-    def fail(self, namespace, id, version):
+    def fail(self, dataset_id: str, version: str):
         with self.conn:
             self.conn.execute("""
-                UPDATE datasets SET status = 'failed'
-                WHERE namespace = ? AND id = ? AND version = ? AND status = 'reserved'
-            """, (namespace, id, version))
+                UPDATE versions SET status = 'failed'
+                WHERE dataset_id = ? AND version = ? AND status = 'reserved'
+            """, (dataset_id, version))
 
-    def get_latest(self, namespace, id):
-        cursor = self.conn.execute("""
-            SELECT * FROM datasets
-            WHERE namespace = ? AND id = ? AND status = 'committed'
-            ORDER BY version DESC LIMIT 1
-        """, (namespace, id))
-        return self._parse(cursor.fetchone())
-
-    def get_version(self, namespace, id, version):
-        cursor = self.conn.execute("""
-            SELECT * FROM datasets WHERE namespace = ? AND id = ? AND version = ?
-        """, (namespace, id, version))
-        return self._parse(cursor.fetchone())
-
-    def get_history(self, namespace, id):
-        cursor = self.conn.execute("""
-            SELECT * FROM datasets
-            WHERE namespace = ? AND id = ? AND status = 'committed'
-            ORDER BY version DESC
-        """, (namespace, id))
-        return [self._parse(r) for r in cursor.fetchall()]
-
-    def deprecate(self, namespace, id, version):
+    def deprecate(self, dataset_id: str, version: str) -> bool:
         with self.conn:
-            cursor = self.conn.execute("""
-                UPDATE datasets SET status = 'deprecated'
-                WHERE namespace = ? AND id = ? AND version = ?
-            """, (namespace, id, version))
-            return cursor.rowcount > 0
+            cur = self.conn.execute("""
+                UPDATE versions SET status = 'deprecated'
+                WHERE dataset_id = ? AND version = ?
+            """, (dataset_id, version))
+            return cur.rowcount > 0
 
-    def insert_lineage(self, out_ns, out_id, out_ver, inputs):
-        """inputs: list of {"namespace": ..., "id": ..., "version": ...}"""
+    def get_version(self, dataset_id: str, version: str) -> dict | None:
+        cur = self.conn.execute("""
+            SELECT v.*, s.type AS source_type, s.config AS source_config
+            FROM versions v
+            LEFT JOIN sources s ON s.id = v.source_id
+            WHERE v.dataset_id = ? AND v.version = ?
+        """, (dataset_id, version))
+        return _version(cur.fetchone())
+
+    def get_latest(self, dataset_id: str) -> dict | None:
+        cur = self.conn.execute("""
+            SELECT v.*, s.type AS source_type, s.config AS source_config
+            FROM versions v
+            LEFT JOIN sources s ON s.id = v.source_id
+            WHERE v.dataset_id = ? AND v.status = 'committed'
+            ORDER BY v.committed_at DESC LIMIT 1
+        """, (dataset_id,))
+        return self._row(cur.fetchone())
+        
+    def get_history(self, dataset_id: str) -> list[dict]:
+        cur = self.conn.execute("""
+            SELECT v.*,
+                   s.type           AS source_type
+            FROM versions v
+            LEFT JOIN sources s ON s.id = v.source_id
+            WHERE v.dataset_id = ? AND v.status = 'committed'
+            ORDER BY v.committed_at DESC
+        """, (dataset_id,))
+        rows = cur.fetchall()
+        return [_version({**dict(r), "id": dataset_id}) for r in rows]
+            
+    # ------------------------------------------------------------------
+    # Schema columns
+    # ------------------------------------------------------------------
+
+    def upsert_schema_columns(self, dataset_id: str, columns: list[dict]):
+        """
+        Insert inferred columns. Columns already in draft/published
+        have their physical_type refreshed but status is preserved.
+        """
+        now = _now()
+        with self.conn:
+            for col in columns:
+                self.conn.execute("""
+                    INSERT INTO schema_columns
+                        (dataset_id, column_name, physical_type, logical_type,
+                         nullable, pii, pii_type, status, last_edited_at)
+                    VALUES (?, ?, ?, ?, 1, 0, 'none', 'inferred', ?)
+                    ON CONFLICT(dataset_id, column_name) DO UPDATE SET
+                        physical_type  = excluded.physical_type,
+                        last_edited_at = excluded.last_edited_at
+                    WHERE schema_columns.status = 'inferred'
+                """, (dataset_id, col["name"],
+                      col.get("physical_type"), col.get("logical_type"), now))
+
+    def get_schema(self, dataset_id: str) -> list[dict]:
+        cur = self.conn.execute("""
+            SELECT * FROM schema_columns
+            WHERE dataset_id = ?
+            ORDER BY column_name
+        """, (dataset_id,))
+        return self._rows(cur)
+
+    def update_schema_column(self, dataset_id: str, column_name: str,
+                              editor: str, **kwargs) -> bool:
+        allowed = {
+            "logical_type", "nullable", "pii", "pii_type",
+            "pii_notes", "description", "tags"
+        }
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return False
+
+        if "tags" in updates and isinstance(updates["tags"], list):
+            updates["tags"] = json.dumps(updates["tags"])
+        if "nullable" in updates:
+            updates["nullable"] = int(updates["nullable"])
+        if "pii" in updates:
+            updates["pii"] = int(updates["pii"])
+
+        updates["last_edited_by"] = editor
+        updates["last_edited_at"] = _now()
+
+        set_parts = [f"{k} = ?" for k in updates]
+        set_parts.append(
+            "status = CASE WHEN status = 'published' THEN 'published' ELSE 'draft' END"
+        )
+        vals = list(updates.values()) + [dataset_id, column_name]
+
+        with self.conn:
+            cur = self.conn.execute(
+                f"UPDATE schema_columns SET {', '.join(set_parts)} "
+                f"WHERE dataset_id = ? AND column_name = ?", vals)
+            return cur.rowcount > 0
+
+    def publish_schema(self, dataset_id: str, publisher: str) -> dict:
+        """
+        Promote all columns to published and snapshot into schema_history.
+        Returns diff vs previous published snapshot.
+        """
+        now = _now()
+        with self.conn:
+            self.conn.execute("""
+                UPDATE schema_columns
+                SET status = 'published', last_edited_at = ?
+                WHERE dataset_id = ? AND status IN ('inferred', 'draft')
+            """, (now, dataset_id))
+
+            current = self.get_schema(dataset_id)
+
+            prev_row = self.conn.execute("""
+                SELECT snapshot FROM schema_history
+                WHERE dataset_id = ?
+                ORDER BY published_at DESC LIMIT 1
+            """, (dataset_id,)).fetchone()
+
+            self.conn.execute("""
+                INSERT INTO schema_history
+                    (dataset_id, snapshot, published_by, published_at)
+                VALUES (?, ?, ?, ?)
+            """, (dataset_id, json.dumps(current), publisher, now))
+
+        breaking, warnings = [], []
+        if prev_row:
+            prev = {c["column_name"]: c
+                    for c in json.loads(dict(prev_row)["snapshot"])}
+            curr = {c["column_name"]: c for c in current}
+
+            for col, meta in prev.items():
+                if col not in curr:
+                    breaking.append(f"Column removed: '{col}'")
+                elif curr[col]["logical_type"] != meta["logical_type"]:
+                    breaking.append(
+                        f"Type changed on '{col}': "
+                        f"{meta['logical_type']} → {curr[col]['logical_type']}")
+                elif not meta["nullable"] and curr[col]["nullable"]:
+                    warnings.append(f"'{col}' changed from NOT NULL to nullable")
+                elif meta["pii"] and not curr[col]["pii"]:
+                    warnings.append(
+                        f"PII flag removed from '{col}' — verify intentional")
+            for col in curr:
+                if col not in prev:
+                    warnings.append(f"New column added: '{col}'")
+
+        return {"published_at":    now,
+                "breaking_changes": breaking,
+                "warnings":         warnings}
+
+    def diff_schema_against_inferred(self, dataset_id: str,
+                                      inferred: list[dict]) -> dict:
+        """Compare freshly inferred columns against published schema."""
+        published = self.conn.execute("""
+            SELECT * FROM schema_columns
+            WHERE dataset_id = ? AND status = 'published'
+        """, (dataset_id,)).fetchall()
+
+        if not published:
+            return {"breaking": [], "warnings": []}
+
+        pub = {dict(r)["column_name"]: dict(r) for r in published}
+        inf = {c["name"]: c for c in inferred}
+
+        breaking, warnings = [], []
+        for col, meta in pub.items():
+            if col not in inf:
+                breaking.append(f"Published column '{col}' missing in new data")
+            elif inf[col].get("physical_type") != meta["physical_type"]:
+                warnings.append(
+                    f"Physical type drift on '{col}': "
+                    f"{meta['physical_type']} → {inf[col].get('physical_type')}")
+        return {"breaking": breaking, "warnings": warnings}
+
+    # ------------------------------------------------------------------
+    # Lineage
+    # ------------------------------------------------------------------
+
+    def insert_lineage(self, out_id: str, out_ver: str,
+                       inputs: list[dict]):
+        """inputs: [{"dataset_id": ..., "version": ...}]"""
         with self.conn:
             self.conn.executemany("""
                 INSERT OR IGNORE INTO lineage
-                    (output_ns, output_id, output_version, input_ns, input_id, input_version)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, [(out_ns, out_id, out_ver, i["namespace"], i["id"], i["version"])
+                    (output_dataset, output_version, input_dataset, input_version)
+                VALUES (?, ?, ?, ?)
+            """, [(out_id, out_ver, i["dataset_id"], i["version"])
                   for i in inputs])
 
-    def get_upstream(self, namespace, id, version):
-        cursor = self.conn.execute("""
-            SELECT l.input_ns AS namespace, l.input_id AS id, l.input_version AS version,
-                   d.path, d.format, d.hash, d.rows,
-                   d.produced_by_task, d.produced_by_job
+    def get_upstream(self, dataset_id: str, version: str) -> list[dict]:
+        cur = self.conn.execute("""
+            SELECT l.input_dataset  AS dataset_id,
+                   l.input_version  AS version,
+                   v.location, v.format, v.source_id, v.rows, v.hash,
+                   v.produced_by_task, v.produced_by_job
             FROM lineage l
-            LEFT JOIN datasets d
-                ON  d.namespace = l.input_ns
-                AND d.id        = l.input_id
-                AND d.version   = l.input_version
-            WHERE l.output_ns = ? AND l.output_id = ? AND l.output_version = ?
-        """, (namespace, id, version))
-        return [dict(r) for r in cursor.fetchall()]
+            LEFT JOIN versions v
+                ON v.dataset_id = l.input_dataset
+                AND v.version   = l.input_version
+            WHERE l.output_dataset = ? AND l.output_version = ?
+        """, (dataset_id, version))
+        return self._rows(cur)
 
-    def get_downstream(self, namespace, id, version):
-        cursor = self.conn.execute("""
-            SELECT l.output_ns AS namespace, l.output_id AS id, l.output_version AS version,
-                   d.path, d.format, d.hash, d.rows,
-                   d.produced_by_task, d.produced_by_job
+    def get_downstream(self, dataset_id: str, version: str) -> list[dict]:
+        cur = self.conn.execute("""
+            SELECT l.output_dataset AS dataset_id,
+                   l.output_version AS version,
+                   v.location, v.format, v.source_id, v.rows, v.hash,
+                   v.produced_by_task, v.produced_by_job
             FROM lineage l
-            LEFT JOIN datasets d
-                ON  d.namespace = l.output_ns
-                AND d.id        = l.output_id
-                AND d.version   = l.output_version
-            WHERE l.input_ns = ? AND l.input_id = ? AND l.input_version = ?
-        """, (namespace, id, version))
-        return [dict(r) for r in cursor.fetchall()]
+            LEFT JOIN versions v
+                ON v.dataset_id = l.output_dataset
+                AND v.version   = l.output_version
+            WHERE l.input_dataset = ? AND l.input_version = ?
+        """, (dataset_id, version))
+        return self._rows(cur)
+    
+    
 
-    # --- Metadata ---
+    # ------------------------------------------------------------------
+    # Version metadata
+    # ------------------------------------------------------------------
 
-    def set_metadata(self, namespace, dataset_id, version, key, value):
+    def set_metadata(self, dataset_id: str, version: str,
+                     key: str, value: str):
         with self.conn:
             self.conn.execute("""
-                INSERT INTO dataset_metadata (namespace, dataset_id, version, key, value)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(namespace, dataset_id, version, key)
+                INSERT INTO version_metadata (dataset_id, version, key, value)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(dataset_id, version, key)
                 DO UPDATE SET value = excluded.value
-                """, (namespace, dataset_id, version, key, str(value)))
+            """, (dataset_id, version, key, str(value)))
 
-    def delete_metadata(self, namespace, dataset_id, version, key):
+    def set_system_metadata(self, dataset_id: str, version: str,
+                            fields: dict):
+        """Write sys.* metadata — keys are prefixed with 'sys.' automatically."""
         with self.conn:
-            cursor = self.conn.execute("""
-                DELETE FROM dataset_metadata
-                WHERE namespace = ? AND dataset_id = ? AND version = ? AND key = ?
-            """, (namespace, dataset_id, version, key))
-            return cursor.rowcount > 0
+            self.conn.executemany("""
+                INSERT INTO version_metadata (dataset_id, version, key, value)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(dataset_id, version, key)
+                DO UPDATE SET value = excluded.value
+            """, [(dataset_id, version, f"sys.{k}", str(v))
+                  for k, v in fields.items() if v is not None])
 
-    def get_metadata(self, namespace, dataset_id, version):
-        cursor = self.conn.execute("""
-            SELECT key, value FROM dataset_metadata
-            WHERE namespace = ? AND dataset_id = ? AND version = ?
-        """, (namespace, dataset_id, version))
-        return {r["key"]: r["value"] for r in cursor.fetchall()}
-            
-    def list_all_datasets(self):
-        cursor = self.conn.execute("""
-            SELECT namespace, id, version, format, rows, status, committed_at
-            FROM datasets ORDER BY committed_at DESC
-        """)
-        return [dict(r) for r in cursor.fetchall()]
+    def delete_metadata(self, dataset_id: str, version: str, key: str) -> bool:
+        if key.startswith("sys."):
+            return False   # sys.* keys are immutable
+        with self.conn:
+            cur = self.conn.execute("""
+                DELETE FROM version_metadata
+                WHERE dataset_id = ? AND version = ? AND key = ?
+            """, (dataset_id, version, key))
+            return cur.rowcount > 0
 
-    def _parse(self, row):
-        if not row:
-            return None
-        d = dict(row)
-        if d.get("schema"):
-            try:
-                d["schema"] = json.loads(d["schema"])
-            except Exception:
-                pass
-        return d
+    def get_metadata(self, dataset_id: str, version: str) -> dict:
+        cur = self.conn.execute("""
+            SELECT key, value FROM version_metadata
+            WHERE dataset_id = ? AND version = ?
+            ORDER BY key
+        """, (dataset_id, version))
+        return {r["key"]: r["value"] for r in cur.fetchall()}
