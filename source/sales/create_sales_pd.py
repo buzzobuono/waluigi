@@ -2,7 +2,6 @@ import pandas as pd
 from waluigi.sdk.task import Task
 from waluigi.sdk.catalog import catalog
 
-
 class CreateSalesDataset(Task):
 
     def run(self):
@@ -19,8 +18,7 @@ class CreateSalesDataset(Task):
         df = pd.DataFrame(rows)
 
         with catalog.produce(
-            "sales_raw",
-            namespace="sales/raw",
+            "sales/raw/sales_raw_pd",
             format="parquet"
         ) as ctx:
 
@@ -28,7 +26,7 @@ class CreateSalesDataset(Task):
 
             ctx.rows = len(df)
 
-        print(f"✅ Dataset sales_raw scritto in Parquet, righe: {ctx.rows}")
+        print(f"✅ Dataset sales_raw_pd scritto in Parquet, righe: {ctx.rows}")
 
 
 if __name__ == "__main__":

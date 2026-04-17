@@ -446,11 +446,17 @@ class CatalogClient:
     def _get(self, path: str) -> Any:
         return self._unwrap(requests.get(f"{self.url}{path}"))
 
-    def _post(self, path: str, json: dict = None,
-              unwrap: bool = True) -> Any:
-        return self._unwrap(
-            requests.post(f"{self.url}{path}", json=json), unwrap=unwrap)
-
+    #def _post(self, path: str, json: dict = None,
+    #          unwrap: bool = True) -> Any:
+    #    return self._unwrap(
+    #        requests.post(f"{self.url}{path}", json=json), unwrap=unwrap)
+    
+    def _post(self, path: str, json: dict = None, unwrap: bool = True) -> Any:
+        resp = requests.post(f"{self.url}{path}", json=json)
+        print("STATUS:", resp.status_code)
+        print("BODY:", resp.text)
+        return self._unwrap(resp, unwrap=unwrap)
+    
     def _patch(self, path: str, json: dict = None) -> Any:
         return self._unwrap(requests.patch(f"{self.url}{path}", json=json))
 

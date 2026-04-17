@@ -137,7 +137,7 @@ export default {
 
             <div
               v-for="u in upstream"
-              :key="u.namespace + '/' + u.id + '/' + u.version"
+              :key="u.id + '/' + u.version"
               class="p-3 border-bottom cursor-pointer"
               @click="navigateTo(u.namespace, u.id)"
             >
@@ -225,7 +225,7 @@ export default {
 
             <div
               v-for="d in downstream"
-              :key="d.namespace + '/' + d.id + '/' + d.version"
+              :key="d.id + '/' + d.version"
               class="p-3 border-bottom cursor-pointer"
               @click="navigateTo(d.namespace, d.id)"
             >

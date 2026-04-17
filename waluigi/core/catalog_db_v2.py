@@ -2,12 +2,15 @@ import sqlite3
 import threading
 import json
 from datetime import datetime, timezone
+from waluigi.core.entities import _dataset, _version, _source
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
+    
+def _user() -> str:
+    return "admin"
+    
 class CatalogDB:
     """
     SQLite backend for the Waluigi Catalog v2.
@@ -57,25 +60,24 @@ class CatalogDB:
                 -- type: local | s3 | sql | sftp | api
                 CREATE TABLE IF NOT EXISTS sources (
                     id          TEXT PRIMARY KEY,
+                    description TEXT,
                     type        TEXT NOT NULL,
                     config      TEXT NOT NULL DEFAULT '{}',  -- JSON
-                    description TEXT,
-                    created_at  TEXT NOT NULL,
-                    updated_at  TEXT NOT NULL
+                    username     TEXT,
+                    createdate   TEXT NOT NULL,
+                    updatedate   TEXT NOT NULL
                 );
 
                 -- ── Datasets ─────────────────────────────────────────────────
                 -- id is the full slash-separated path, e.g. "sales/raw/sales_raw"
                 CREATE TABLE IF NOT EXISTS datasets (
                     id           TEXT PRIMARY KEY,
-                    display_name TEXT,
                     description  TEXT,
                     tags         TEXT NOT NULL DEFAULT '[]',  -- JSON array
-                    owner        TEXT,
                     status       TEXT NOT NULL DEFAULT 'draft',
-                    approved_by  TEXT,
-                    approved_at  TEXT,
-                    created_at   TEXT NOT NULL
+                    username     TEXT,
+                    createdate   TEXT NOT NULL,
+                    updatedate   TEXT NOT NULL
                 );
 
                 -- ── Versions ─────────────────────────────────────────────────
@@ -93,12 +95,12 @@ class CatalogDB:
                     format           TEXT,
                     hash             TEXT,
                     rows             INTEGER,
-                    schema_snapshot  TEXT,          -- JSON snapshot at commit time
-                    produced_by_task TEXT,
-                    produced_by_job  TEXT,
+                    task_id          TEXT,
+                    job_id           TEXT,
                     status           TEXT NOT NULL DEFAULT 'reserved',
-                    created_at       TEXT NOT NULL,
-                    committed_at     TEXT,
+                    username         TEXT,
+                    createdate       TEXT NOT NULL,
+                    updatedate       TEXT NOT NULL
                     PRIMARY KEY (dataset_id, version)
                 );
 
@@ -170,12 +172,12 @@ class CatalogDB:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-
+    
     def _row(self, row) -> dict | None:
         if row is None:
             return None
         d = dict(row)
-        for field in ("tags", "config", "schema_snapshot"):
+        for field in ("tags", "config"):
             if field in d and d[field]:
                 try:
                     d[field] = json.loads(d[field])
@@ -197,21 +199,21 @@ class CatalogDB:
             with self.conn:
                 self.conn.execute("""
                     INSERT INTO sources
-                        (id, type, config, description, created_at, updated_at)
+                        (id, description, type, config, username, createdate, updatedate)
                     VALUES (?, ?, ?, ?, ?, ?)
-                """, (id, type, json.dumps(config), description, now, now))
+                """, (id, description, type, json.dumps(config), _user(), now, now))
             return True
         except sqlite3.IntegrityError:
             return False
 
     def get_source(self, id: str) -> dict | None:
         cur = self.conn.execute("SELECT * FROM sources WHERE id = ?", (id,))
-        return self._row(cur.fetchone())
-
+        return _source(cur.fetchone())
+    
     def list_sources(self) -> list[dict]:
         cur = self.conn.execute("SELECT * FROM sources ORDER BY id")
-        return self._rows(cur)
-
+        return [_source(r) for r in cur.fetchall()]
+    
     def update_source(self, id: str, **kwargs) -> bool:
         allowed = {"type", "config", "description"}
         updates = {k: v for k, v in kwargs.items() if k in allowed}
@@ -219,42 +221,92 @@ class CatalogDB:
             return False
         if "config" in updates:
             updates["config"] = json.dumps(updates["config"])
-        updates["updated_at"] = _now()
+        updates["updatedate"] = _now()
+        updates["username"]= _user()
         cols = ", ".join(f"{k} = ?" for k in updates)
         vals = list(updates.values()) + [id]
         with self.conn:
             cur = self.conn.execute(
                 f"UPDATE sources SET {cols} WHERE id = ?", vals)
             return cur.rowcount > 0
-
+    
     def delete_source(self, id: str) -> bool:
         with self.conn:
             cur = self.conn.execute("DELETE FROM sources WHERE id = ?", (id,))
             return cur.rowcount > 0
-
+    
     # ------------------------------------------------------------------
     # Datasets
     # ------------------------------------------------------------------
 
-    def ensure_dataset(self, id: str, display_name: str = None,
-                       description: str = None, owner: str = None,
+    def create_dataset(self, id: str, description: str = None,
                        tags: list = None) -> bool:
-        """Upsert dataset. Returns True if created, False if already existed."""
+        now = _now()
         with self.conn:
             cur = self.conn.execute("""
                 INSERT INTO datasets
-                    (id, display_name, description, tags, owner,
-                     status, created_at)
-                VALUES (?, ?, ?, ?, ?, 'draft', ?)
+                    (id, description, tags,
+                     status, username, createdate, updatedate)
+                VALUES (?, ?, ?, 'draft', ?, ?, ?)
                 ON CONFLICT(id) DO NOTHING
-            """, (id, display_name, description,
-                  json.dumps(tags or []), owner, _now()))
+            """, (id, description,
+                  json.dumps(tags or []), _user(), now, now)
             return cur.rowcount > 0
-
+  
+    def exists_dataset(self, id: str) -> bool:
+        cur = self.conn.execute("SELECT 1 FROM datasets WHERE id = ?", (id,))
+        return cur.fetchone() is not None
+    
     def get_dataset(self, id: str) -> dict | None:
-        cur = self.conn.execute("SELECT * FROM datasets WHERE id = ?", (id,))
-        return self._row(cur.fetchone())
+        cur = self.conn.execute("SELECT * FROM datasets WHERE d.id = ?", (id,))
+        return _dataset(cur.fetchone())
+    
+    def list_datasets(self) -> list[dict]:
+        cur = self.conn.execute("SELECT * FROM datasets ORDER BY id")
+        return [_dataset(r) for r in cur.fetchall()]
+    
+    def find_datasets_by_status(self, status: str) -> list[dict]:
+        cur = self.conn.execute("SELECT * FROM datasets WHERE status = ? ORDER BY d.i", (status,))
+        return _dataset(cur)
 
+    def update_dataset(self, id: str, **kwargs) -> bool:
+        allowed = {"type", "config", "description"}
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return False
+        if "config" in updates:
+            updates["config"] = json.dumps(updates["config"])
+        updates["updatedate"] = _now()
+        cols = ", ".join(f"{k} = ?" for k in updates)
+        vals = list(updates.values()) + [id]
+        with self.conn:
+            cur = self.conn.execute(
+                f"UPDATE sources SET {cols} WHERE id = ?", vals)
+            return cur.rowcount > 0
+   
+    def get_dataset______(self, id: str) -> dict | None:
+        cur = self.conn.execute("""
+            SELECT d.*,
+                   v.version,
+                   v.status         AS version_status,
+                   v.format,
+                   v.rows,
+                   v.committed_at,
+                   v.source_id,
+                   s.type           AS source_type
+            FROM datasets d
+            LEFT JOIN versions v
+                ON v.dataset_id = d.id
+                AND v.version = (
+                    SELECT version FROM versions
+                    WHERE dataset_id = d.id AND status = 'committed'
+                    ORDER BY committed_at DESC LIMIT 1
+                )
+            LEFT JOIN sources s ON s.id = v.source_id
+            WHERE d.id = ?
+        """, (id,))
+        return _dataset(cur.fetchone())
+    
     def set_in_review(self, id: str) -> bool:
         """Promote dataset from draft to in_review. No-op if approved."""
         with self.conn:
@@ -324,52 +376,33 @@ class CatalogDB:
             return cur.rowcount > 0
 
     def list_prefix(self, prefix: str) -> dict:
-        """
-        S3-style prefix listing.
-        Returns direct children datasets and virtual sub-prefixes.
-
-        Example: prefix="sales/raw/"
-          datasets:  ["sales/raw/sales_raw", "sales/raw/returns"]
-          prefixes:  ["sales/raw/europe/"]   (virtual sub-folders)
-        """
         prefix = prefix.rstrip("/") + "/"
         prefix = prefix.lstrip("/")
         cur = self.conn.execute("""
-            SELECT d.id,
-                   v.version AS latest_version,
-                   v.format, v.rows, v.committed_at, v.status AS version_status
+            SELECT d.*
             FROM datasets d
-            LEFT JOIN versions v
-                ON v.dataset_id = d.id
-                AND v.version = (
-                    SELECT version FROM versions
-                    WHERE dataset_id = d.id AND status = 'committed'
-                    ORDER BY committed_at DESC LIMIT 1
-                )
             WHERE d.id LIKE ?
             ORDER BY d.id
         """, (f"{prefix}%",))
-
-        all_rows = self._rows(cur)
-
-        # Split into direct children and deeper paths
-        datasets  = []
-        sub_prefixes = set()
-
+    
+        all_rows = cur.fetchall()
+        datasets, sub_prefixes = [], set()
+    
         for row in all_rows:
-            rest = row["id"][len(prefix):]          # strip the prefix
+            d = _dataset(row)
+            rest = d["id"][len(prefix):]
             if "/" not in rest:
-                datasets.append(row)                # direct child dataset
+                datasets.append(d)
             else:
                 sub = prefix + rest.split("/")[0] + "/"
-                sub_prefixes.add(sub)               # virtual sub-prefix
-
+                sub_prefixes.add(sub)
+    
         return {
-            "prefix":      prefix,
-            "datasets":    datasets,
-            "prefixes":    sorted(sub_prefixes),
+            "prefix":   prefix,
+            "datasets": datasets,
+            "prefixes": sorted(sub_prefixes),
         }
-
+    
     # ------------------------------------------------------------------
     # Versions
     # ------------------------------------------------------------------
@@ -387,7 +420,8 @@ class CatalogDB:
                 """, (dataset_id, version, source_id, location, fmt,
                       task_id, job_id, _now()))
             return True
-        except sqlite3.IntegrityError:
+        except sqlite3.IntegrityError as e:
+            print(e)
             return False
 
     def commit(self, dataset_id: str, version: str, file_hash: str,
@@ -414,11 +448,10 @@ class CatalogDB:
 
             cur = self.conn.execute("""
                 UPDATE versions SET
-                    hash = ?, rows = ?, schema_snapshot = ?,
+                    hash = ?, rows = ?, 
                     committed_at = ?, status = 'committed'
                 WHERE dataset_id = ? AND version = ? AND status = 'reserved'
             """, (file_hash, rows,
-                  json.dumps(schema) if schema else None,
                   _now(), dataset_id, version))
 
             if cur.rowcount == 0:
@@ -463,7 +496,7 @@ class CatalogDB:
             LEFT JOIN sources s ON s.id = v.source_id
             WHERE v.dataset_id = ? AND v.version = ?
         """, (dataset_id, version))
-        return self._row(cur.fetchone())
+        return _version(cur.fetchone())
 
     def get_latest(self, dataset_id: str) -> dict | None:
         cur = self.conn.execute("""
@@ -474,17 +507,19 @@ class CatalogDB:
             ORDER BY v.committed_at DESC LIMIT 1
         """, (dataset_id,))
         return self._row(cur.fetchone())
-
+        
     def get_history(self, dataset_id: str) -> list[dict]:
         cur = self.conn.execute("""
-            SELECT v.*, s.type AS source_type
+            SELECT v.*,
+                   s.type           AS source_type
             FROM versions v
             LEFT JOIN sources s ON s.id = v.source_id
             WHERE v.dataset_id = ? AND v.status = 'committed'
             ORDER BY v.committed_at DESC
         """, (dataset_id,))
-        return self._rows(cur)
-
+        rows = cur.fetchall()
+        return [_version({**dict(r), "id": dataset_id}) for r in rows]
+            
     # ------------------------------------------------------------------
     # Schema columns
     # ------------------------------------------------------------------

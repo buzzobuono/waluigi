@@ -5,7 +5,7 @@ spec:
   name: "CreateSalesDataset"
   id: "create_sales_dataset_pd"
   namespace: "sales_pd"
-  command: "pip install pandas pyarrow ; python ../source/sales/create_sales_pd.py"
+  command: "python ../source/sales/create_sales_pd.py"
   params:
     date: "2026-03-26"
   resources:

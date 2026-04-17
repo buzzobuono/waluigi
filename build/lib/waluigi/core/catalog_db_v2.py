@@ -333,6 +333,7 @@ class CatalogDB:
           prefixes:  ["sales/raw/europe/"]   (virtual sub-folders)
         """
         prefix = prefix.rstrip("/") + "/"
+        prefix = prefix.lstrip("/")
         cur = self.conn.execute("""
             SELECT d.id,
                    v.version AS latest_version,
@@ -667,6 +668,8 @@ class CatalogDB:
             WHERE l.input_dataset = ? AND l.input_version = ?
         """, (dataset_id, version))
         return self._rows(cur)
+    
+    
 
     # ------------------------------------------------------------------
     # Version metadata

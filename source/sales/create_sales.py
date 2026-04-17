@@ -1,8 +1,9 @@
 import csv
 from waluigi.sdk.task import Task
-from waluigi.sdk.catalog import catalog
+from waluigi.sdk.catalog_v2 import catalog
 
-NAMESPACE = "sales/raw"
+DATASET_ID = "sales/raw/sales_raw2"
+
 
 class CreateSalesDataset(Task):
 
@@ -15,28 +16,24 @@ class CreateSalesDataset(Task):
             {"date": self.params.date, "product": "C", "quantity":  7, "revenue":  70.0},
             {"date": self.params.date, "product": "D", "quantity": 42, "revenue": 420.0},
             {"date": self.params.date, "product": "E", "quantity":  3, "revenue":  30.0},
-            {"date": self.params.date, "product": "F", "quantity":  9, "revenue":  350.0}
+            {"date": self.params.date, "product": "F", "quantity":  9, "revenue": 350.0},
         ]
 
-        # 1. Produzione del dataset
-        with catalog.produce(NAMESPACE, "sales_raw", format="csv") as ctx:
+        with catalog.produce(DATASET_ID, format="csv") as ctx:
             with open(ctx.path, "w", newline="") as f:
                 writer = csv.DictWriter(f, fieldnames=rows[0].keys())
                 writer.writeheader()
                 writer.writerows(rows)
             ctx.rows = len(rows)
-        
-        # Una volta usciti dal blocco 'with', la versione è committata.
-        # Ora ctx.committed_version contiene la versione definitiva (o quella nuova o quella recuperata)
+            ctx.meta["source"]   = "SAP_EXTRACT"
+            ctx.meta["date_ref"] = self.params.date
 
-        # 2. Aggiunta dei CUSTOM METADATA associati alla versione specifica
-        ver = ctx.committed_version
-        
-        catalog.set_metadata(NAMESPACE, "sales_raw", "source", ver, "SAP_EXTRACT")
-        catalog.set_metadata(NAMESPACE, "sales_raw", "owner", ver, "sales_team")
-        catalog.set_metadata(NAMESPACE, "sales_raw", "date_ref", ver, self.params.date)
+        if ctx.skipped:
+            print(f"⏭️  Contenuto invariato — versione: {ctx.committed_version}")
+            return
 
-        print(f"✅ Dataset {NAMESPACE}/sales_raw@{ver} scritto con metadati storicizzati.")
+        print(f"✅ {DATASET_ID}@{ctx.committed_version} scritto.")
+
 
 if __name__ == "__main__":
     CreateSalesDataset().start()

@@ -1,7 +1,7 @@
 import time
 import random
 from waluigi.sdk.task import Task
-from waluigi.sdk.catalog_v2 import catalog
+from waluigi.sdk.catalog import catalog
 
 class CleanDataTask(Task):
     def run(self):
