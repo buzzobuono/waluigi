@@ -15,18 +15,15 @@ class CatalogWarning(UserWarning):
 class DatasetWriter:
 
     def __init__(self, client: "CatalogClient",
-                 dataset_id: str, version: str, path: str,
+                 dataset_id: str, version: str, location: str,
                  inputs: List[dict] = None):
-        self._client     = client
-        self._dataset_id = dataset_id
-        self._version    = version
-        self._inputs     = inputs or []
-        self.path               = path
-        self.rows: Optional[int]     = None
-        self.columns: Optional[dict] = None
-        self.meta: Dict[str, str]    = {}
-        self.skipped                 = False
-        self.committed_version       = version
+        self._client                    = client
+        self.dataset_id                = dataset_id
+        self.version                   = version
+        self.inputs                    = inputs or []
+        self.location                  = location
+        self.metadata: Dict[str, str]  = {}
+        self.skipped                   = False
 
     def __enter__(self) -> "DatasetWriter":
         return self
@@ -45,7 +42,7 @@ class DatasetWriter:
             f"/datasets/{self._dataset_id}/_commit/{self._version}",
             json={
                 "inputs": self._inputs,
-                "metadata": self.meta,
+                "metadata": self.metadata,
             },
         )
         self.skipped           = result.get("skipped", False)
