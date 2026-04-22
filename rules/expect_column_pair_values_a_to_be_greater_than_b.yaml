@@ -1,0 +1,5 @@
+description: "Verifica che i valori della colonna A siano maggiori della colonna B"
+formula: "a > b"
+inputs_schema:
+  a: "Colonna primaria"
+  b: "Colonna di confronto"

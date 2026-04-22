@@ -2,7 +2,7 @@ import sqlite3
 import threading
 import json
 from datetime import datetime, timezone
-from waluigi.core.entities import _dataset, _version, _source
+from waluigi.catalog.entities import _dataset, _version, _source
 
 
 def _now() -> str:
@@ -27,7 +27,6 @@ class CatalogDB:
     source          – physical connector (local | s3 | sql | sftp | api)
     version         – immutable snapshot of a dataset
     schema_columns  – per-column semantic state (inferred → draft → published)
-    schema_history  – append-only publish snapshots for auditing
     lineage         – directed graph of dataset dependencies
     version_metadata – key-value tags; sys.* keys are reserved for the server
     """
@@ -123,16 +122,6 @@ class CatalogDB:
                     last_edited_by TEXT,
                     last_edited_at TEXT,
                     PRIMARY KEY (dataset_id, column_name)
-                );
-
-                -- ── Schema history ────────────────────────────────────────────
-                -- Append-only log of every publish event.
-                CREATE TABLE IF NOT EXISTS schema_history (
-                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                    dataset_id   TEXT NOT NULL,
-                    snapshot     TEXT NOT NULL,     -- JSON of all columns
-                    published_by TEXT,
-                    published_at TEXT NOT NULL
                 );
 
                 -- ── Lineage ───────────────────────────────────────────────────
@@ -241,7 +230,7 @@ class CatalogDB:
         return cur.fetchone() is not None
     
     def get_dataset(self, id: str) -> dict | None:
-        cur = self.conn.execute("SELECT * FROM datasets WHERE d.id = ?", (id,))
+        cur = self.conn.execute("SELECT * FROM datasets WHERE id = ?", (id,))
         return _dataset(cur.fetchone())
     
     def list_datasets(self) -> list[dict]:
@@ -550,8 +539,7 @@ class CatalogDB:
 
     def publish_schema(self, dataset_id: str, publisher: str) -> dict:
         """
-        Promote all columns to published and snapshot into schema_history.
-        Returns diff vs previous published snapshot.
+        Promote all columns to published
         """
         now = _now()
         with self.conn:
@@ -562,41 +550,7 @@ class CatalogDB:
             """, (now, dataset_id))
 
             current = self.get_schema(dataset_id)
-
-            prev_row = self.conn.execute("""
-                SELECT snapshot FROM schema_history
-                WHERE dataset_id = ?
-                ORDER BY published_at DESC LIMIT 1
-            """, (dataset_id,)).fetchone()
-
-            self.conn.execute("""
-                INSERT INTO schema_history
-                    (dataset_id, snapshot, published_by, published_at)
-                VALUES (?, ?, ?, ?)
-            """, (dataset_id, json.dumps(current), publisher, now))
-
-        breaking, warnings = [], []
-        if prev_row:
-            prev = {c["column_name"]: c
-                    for c in json.loads(dict(prev_row)["snapshot"])}
-            curr = {c["column_name"]: c for c in current}
-
-            for col, meta in prev.items():
-                if col not in curr:
-                    breaking.append(f"Column removed: '{col}'")
-                elif curr[col]["logical_type"] != meta["logical_type"]:
-                    breaking.append(
-                        f"Type changed on '{col}': "
-                        f"{meta['logical_type']} → {curr[col]['logical_type']}")
-                elif not meta["nullable"] and curr[col]["nullable"]:
-                    warnings.append(f"'{col}' changed from NOT NULL to nullable")
-                elif meta["pii"] and not curr[col]["pii"]:
-                    warnings.append(
-                        f"PII flag removed from '{col}' — verify intentional")
-            for col in curr:
-                if col not in prev:
-                    warnings.append(f"New column added: '{col}'")
-
+            
         return {"published_at":    now,
                 "breaking_changes": breaking,
                 "warnings":         warnings}

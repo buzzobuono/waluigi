@@ -20,9 +20,13 @@ where = ["."]
 include = ["waluigi*"]
 namespaces = true
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+
 [project.scripts]
 wlctl = "waluigi.cli:main"
-wlboss = "waluigi.boss:main"
+wlboss = "waluigi.boss.__main__:main"
 wlworker = "waluigi.worker:main"
-wlcatalog = "waluigi.catalog:main"
+wlcatalog = "waluigi.catalog.__main__:main"
 

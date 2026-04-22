@@ -9,9 +9,9 @@ import configargparse
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, HTMLResponse
-from waluigi.core.db import WaluigiDB
-from waluigi.core.scheduler_engine import WaluigiSchedulerEngine
-from waluigi.core.dynamic_task import DynamicTask
+from waluigi.boss.db import WaluigiDB
+from waluigi.core.engine import WaluigiEngine
+from waluigi.core.task import DynamicTask
 
 app = FastAPI()
 
@@ -41,7 +41,7 @@ except Exception as e:
     log(f"❌ Error: {e}")
     sys.exit(1)
 
-engine = WaluigiSchedulerEngine(db=db)
+engine = WaluigiEngine(db=db)
 
 @app.post('/update')
 async def update(request: Request):

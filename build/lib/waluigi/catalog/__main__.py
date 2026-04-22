@@ -1,38 +1,9 @@
-"""
-Waluigi Catalog v2
-==================
-Data catalog service — datasets, virtual sources, schema governance, lineage.
-
-Dataset identity
-----------------
-Every dataset has a single slash-separated id, e.g. "sales/raw/sales_raw".
-There are no separate collection entities. Navigation is virtual — listing
-by prefix, exactly like S3 object storage.
-
-Response contract (always):
-    {
-        "data":       <payload | null>,
-        "diagnostic": {
-            "result":   "OK" | "WARN" | "KO",
-            "messages": ["..."]
-        }
-    }
-
-HTTP status codes:
-    200 / 201  →  OK or WARN  (operation succeeded, possibly with warnings)
-    404        →  KO          (resource not found)
-    409        →  KO          (state conflict)
-    422        →  KO          (unprocessable)
-    500        →  KO          (unexpected server error)
-"""
-
 import os
 import sys
 import csv
 import socket
 import hashlib
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
 
 import configargparse
 import httpx
@@ -42,16 +13,15 @@ from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from waluigi.core.catalog_db import CatalogDB
-from waluigi.responses import ok, warn, ko
-
-# ---------------------------------------------------------------------------
-# App & config
-# ---------------------------------------------------------------------------
+from waluigi.core.responses import ok, warn, ko
+from waluigi.core.utils import _model_dump
+from waluigi.catalog.db import CatalogDB
+from waluigi.catalog.utils import *
+from waluigi.catalog.models import *
 
 app = FastAPI(
-    title="Waluigi Catalog v2",
-    description=__doc__,
+    title="Waluigi Catalog",
+    description="Data Catalog service: manages sourve, datasets, versions, schema, lineage and metadata.",
     version="2.0.0",
 )
 
@@ -76,10 +46,8 @@ SCANNABLE_EXTENSIONS = {
     ".sas7bdat", ".pkl", ".pickle", ".feather", ".orc", ".out",
 }
 
-
 def log(msg: str):
     print(f"[Catalog 📦] {msg}", flush=True)
-
 
 try:
     db = CatalogDB(args.db_path)
@@ -87,183 +55,12 @@ try:
 except Exception as e:
     log(f"❌ Critical DB error: {e}")
     sys.exit(1)
-
-
-# ---------------------------------------------------------------------------
-# Domain helpers
-# ---------------------------------------------------------------------------
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _version_id() -> str:
-    return _now()
-
-
-def _local_path(dataset_id: str, version: str, fmt: str) -> str:
-    safe_ver = version.replace(":", "-")
-    ext = f".{fmt}" if fmt else ""
-    d = os.path.join(DATA_PATH, dataset_id)
-    os.makedirs(d, exist_ok=True)
-    return os.path.join(d, f"{safe_ver}{ext}")
-
-
-def _compute_hash(path: str) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def _infer_schema(path: str, fmt: str) -> list[dict]:
-    try:
-        if fmt in ("csv", "tsv"):
-            df = pd.read_csv(path, sep="\t" if fmt == "tsv" else ",", nrows=1000)
-        elif fmt == "parquet":
-            df = pd.read_parquet(path)
-        elif fmt in ("xls", "xlsx"):
-            df = pd.read_excel(path, nrows=1000)
-        else:
-            return []
-
-        type_map = {
-            "int64": "integer", "int32": "integer",
-            "float64": "decimal", "float32": "decimal",
-            "bool": "boolean", "datetime64[ns]": "datetime",
-            "object": "string",
-        }
-        return [
-            {"name": col,
-             "physical_type": str(df[col].dtype),
-             "logical_type":  type_map.get(str(df[col].dtype), "string")}
-            for col in df.columns
-        ]
-    except Exception:
-        return []
-
-
-def _safe_json_value(v):
-    import numpy as np
-    if v is None:
-        return None
-    try:
-        if pd.isna(v):
-            return None
-    except Exception:
-        pass
-    if isinstance(v, (float, int, np.number)):
-        if not np.isfinite(float(v)):
-            return None
-        return v
-    return v
-
-
-# ---------------------------------------------------------------------------
-# Pydantic models
-# ---------------------------------------------------------------------------
-
-class SourceUpdateRequest(BaseModel):
-    type:        Optional[str]            = None
-    config:      Optional[Dict[str, Any]] = None
-    description: Optional[str]            = None
-
-class DatasetUpdateRequest(BaseModel):
-    description:  Optional[str]       = None
-    tags:         Optional[List[str]] = None
-    owner:        Optional[str]       = None
-    status:       Optional[str]       = None
-
-class SourceCreateRequest(BaseModel):
-    id:          str            = Field(...,  example="pg-dwh")
-    type:        str            = Field(...,  example="sql")
-    config:      Dict[str, Any] = Field(default_factory=dict)
-    description: Optional[str] = None
-
-class ReserveRequest(BaseModel):
-    format:       str            = Field("",        example="csv")
-    task_id:      str            = Field("unknown", example="ingest_sales")
-    job_id:       str            = Field("unknown", example="job/daily")
-    source_id:    Optional[str] = None
-    description:  Optional[str] = None
-    owner:        Optional[str] = None
-    tags:         Optional[List[str]] = None
-        
-class LineageRef(BaseModel):
-    dataset_id: str = Field(..., example="finance/erp/fatture")
-    version:    str = Field(..., example="2026-04-11T10:00:00+00:00")
-
-
-class CommitRequest(BaseModel):
-    rows:          Optional[int]            = None
-    columns:       Optional[Dict[str, Any]] = Field(None, alias="schema")
-    inputs:        List[LineageRef]         = Field(default_factory=list)
-    business_meta: Dict[str, str]           = Field(default_factory=dict)
-
-    model_config = {"populate_by_name": True}
-
-
-class VirtualRegisterRequest(BaseModel):
-    source_id:    str            = Field(...,   example="pg-dwh")
-    location:     str            = Field(...,   example="SELECT * FROM finance.fatture")
-    format:       str            = Field("sql", example="sql")
-    task_id:      str            = Field("unknown")
-    job_id:       str            = Field("unknown")
-    display_name: Optional[str] = None
-    description:  Optional[str] = None
-    owner:        Optional[str] = None
-    tags:         Optional[List[str]] = None
-
-
-class SchemaColumnPatch(BaseModel):
-    logical_type: Optional[str]       = None
-    nullable:     Optional[bool]      = None
-    pii:          Optional[bool]      = None
-    pii_type:     Optional[str]       = None
-    pii_notes:    Optional[str]       = None
-    description:  Optional[str]       = None
-    tags:         Optional[List[str]] = None
-
-
-class SchemaPublishRequest(BaseModel):
-    published_by: str = Field("anonymous", example="mario.rossi")
-
-
-class ApproveRequest(BaseModel):
-    approved_by: str  = Field(...,  example="mario.rossi")
-    notes:       str  = Field("",   example="PII verified, schema confirmed")
-
-
-class MetadataSetRequest(BaseModel):
-    key:   str = Field(..., example="source")
-    value: str = Field(..., example="SAP_EXTRACT")
-
-
-class MaterializeRequest(BaseModel):
-    base_url:     str            = Field(..., example="https://api.example.com")
-    endpoint:     str            = Field(..., example="/v1/orders")
-    params:       Dict[str, Any] = Field(default_factory=dict)
-    task_id:      str            = Field("unknown")
-    job_id:       str            = Field("unknown")
-    display_name: Optional[str] = None
-    description:  Optional[str] = None
-
-
-class ScanRequest(BaseModel):
-    data_path: Optional[str] = None
-    prefix:    Optional[str] = None
-
+    
 
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
 
-def _model_dump(obj):
-    if hasattr(obj, "model_dump"):
-        return obj.model_dump(exclude_none=True)
-    else:
-        return obj.dict(exclude_none=True)
 
 def _extract_items(body) -> list:
     if isinstance(body, list):
@@ -386,10 +183,7 @@ def _scan(data_path: str, prefix: str = None) -> int:
     return count
 
 
-# ===========================================================================
-# Routes — Browse (S3-style prefix listing)
-# ===========================================================================
-
+# Routes — Browse
 @app.get("/folders/{prefix:path}/", tags=["Browse"],
          summary="List datasets and virtual sub-prefixes under a prefix",
          description=(
@@ -401,9 +195,7 @@ async def list_prefix(prefix: str):
     return ok(db.list_prefix(prefix))
 
 
-# ===========================================================================
 # Routes — Sources
-# ===========================================================================
 
 @app.get("/sources", tags=["Sources"],
          summary="List sources")
@@ -447,10 +239,7 @@ async def delete_source(id: str):
         return ko("Source not found", 404)
     return ok({"id": id})
 
-# ===========================================================================
 # Routes — Datasets
-# ===========================================================================
-
 
 @app.get("/datasets", tags=["Datasets"],
     summary="List datasets",

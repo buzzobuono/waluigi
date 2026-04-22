@@ -1,0 +1,7 @@
+description: "Verifica che la media della colonna sia nel range"
+formula: "min_avg <= x.mean() <= max_avg"
+inputs_schema:
+  x: "Colonna numerica"
+params_schema:
+  min_avg: "Media minima accettabile"
+  max_avg: "Media massima accettabile"

@@ -1,0 +1,5 @@
+description: "Verifica che i valori di x esistano nella colonna y di un altro dataset"
+formula: "x.isin(y)"
+inputs_schema:
+  x: "Colonna del dataset sorgente"
+  y: "Colonna del dataset di riferimento (anagrafica)"

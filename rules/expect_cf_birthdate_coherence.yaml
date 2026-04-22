@@ -1,0 +1,9 @@
+description: "Verifica coerenza Anno, Mese, Giorno e Sesso tra CF e Dati Anagrafici"
+formula: >
+  (fiscalcode.str.slice(6, 8) == birthdate.dt.strftime('%y')) & 
+  (fiscalcode.str.slice(8, 9).map({'A':'01','B':'02','C':'03','D':'04','E':'05','H':'06','L':'07','M':'08','P':'09','R':'10','S':'11','T':'12'}) == birthdate.dt.strftime('%m')) &
+  (fiscalcode.str.slice(9, 11).astype(int) == (birthdate.dt.day + gender.map({'M': 0, 'F': 40})))
+inputs_schema:
+  fiscalcode: "Codice Fiscale"
+  birthdate: "Data Nascita (datetime)"
+  gender: "Sesso (M o F)"

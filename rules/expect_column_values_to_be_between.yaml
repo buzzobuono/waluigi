@@ -1,0 +1,7 @@
+description: "Verifica che i valori siano compresi tra un minimo e un massimo"
+formula: "(x >= min_val) & (x <= max_val)"
+inputs_schema:
+  x: "Colonna numerica da validare"
+params_schema:
+  min_val: "Limite inferiore"
+  max_val: "Limite superiore"

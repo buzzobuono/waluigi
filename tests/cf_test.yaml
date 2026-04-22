@@ -1,0 +1,6 @@
+- rule_id: "expect_cf_birthdate_coherence"
+  inputs:
+    fiscalcode: "utenti.cf"
+    birthdate: "utenti.nascita"
+    gender: "utenti.genere"
+  tolerance: 1.0

@@ -1,0 +1,6 @@
+description: "Verifica il tipo di dato della colonna"
+formula: "x.apply(lambda v: type(v).__name__) == target_type"
+inputs_schema:
+  x: "Colonna da testare"
+params_schema:
+  target_type: "Nome del tipo (es: 'int', 'str', 'float')"

@@ -1,0 +1,7 @@
+description: "Verifica che la lunghezza dei testi sia in un range"
+formula: "(x.str.len() >= min_len) & (x.str.len() <= max_len)"
+inputs_schema:
+  x: "Colonna di tipo testo"
+params_schema:
+  min_len: "Lunghezza minima"
+  max_len: "Lunghezza massima"

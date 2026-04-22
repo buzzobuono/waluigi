@@ -1,0 +1,4 @@
+description: "Verifica che non ci siano duplicati nella colonna"
+formula: "~x.duplicated()"
+inputs_schema:
+  x: "Colonna (es: ID o Email)"

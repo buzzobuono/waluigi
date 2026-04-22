@@ -1,0 +1,6 @@
+description: "Verifica che i valori rispettino un'espressione regolare"
+formula: "x.str.contains(pattern, regex=True)"
+inputs_schema:
+  x: "Colonna di tipo testo"
+params_schema:
+  pattern: "Espressione regolare (es: '^[0-9]{5}$')"

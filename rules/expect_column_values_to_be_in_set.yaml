@@ -1,0 +1,6 @@
+description: "Verifica che i valori siano inclusi in una lista definita"
+formula: "x.isin(allowed_values)"
+inputs_schema:
+  x: "Colonna categorica"
+params_schema:
+  allowed_values: "Lista di valori ammessi (es: ['A', 'B', 'C'])"

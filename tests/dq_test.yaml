@@ -1,0 +1,31 @@
+# 1. Range di un campo numerico (Prezzo tra 10 e 1000)
+- rule_id: "expect_column_values_to_be_between"
+  inputs: 
+    x: "ordini.prezzo"
+  params: 
+    min_val: 10
+    max_val: 1000
+  tolerance: 0.90 # Accettiamo un 10% di errori
+
+# 2. Integrità di un ID su un altro dataset (ID Prodotto deve esistere nel Catalogo)
+- rule_id: "expect_column_values_to_be_in_another_dataset"
+  inputs:
+    x: "ordini.id_prodotto"
+    y: "catalogo.id"
+  tolerance: 1.0 # Errore non ammesso (integrità referenziale)
+
+# 3. Media degli importi (Deve essere tra 100 e 500)
+- rule_id: "expect_column_mean_to_be_between"
+  inputs:
+    x: "ordini.prezzo"
+  params:
+    min_avg: 100
+    max_avg: 500
+
+# 4. Campo discreto su valori tipologici (Stato ordine)
+- rule_id: "expect_column_values_to_be_in_set"
+  inputs:
+    x: "ordini.stato"
+  params:
+    allowed_values: ["SPEDITO", "IN_CORSO", "ANNULLATO", "ERRORE"]
+  tolerance: 1.0
