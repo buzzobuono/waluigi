@@ -566,7 +566,7 @@ async def dataset_reserve(dataset_id: str, body: ReserveRequest):
             existing = db.find_version_by_metadata(dataset_id, body.metadata)
             if existing:
                 logger.info(f"Idempotency hit for {dataset_id} (exact metadata match)")
-                msgs = "Skipped - Identical metadata to latest committed version"
+                msg = "Skipped - Identical metadata to latest committed version"
                 return warn({
                     "dataset_id": dataset_id,
                     "version":    existing["version"],
@@ -579,7 +579,6 @@ async def dataset_reserve(dataset_id: str, body: ReserveRequest):
         connector = ConnectorFactory.get(source["type"], source["config"])
     
         version = _version_id()
-        #location = resolve_location(source["type"], dataset_id, version, dataset["format"], DATA_PATH)
         location = connector.resolve_location(dataset_id, version, dataset["format"], DATA_PATH)
         if not db.reserve(dataset_id, version, location):
             return ko("Version already exists", 409)

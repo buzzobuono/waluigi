@@ -26,7 +26,10 @@ dataset = DatasetCreateRequest(
     source_id="local"
 )
 
-with catalog.produce(dataset, { "source": "SAP_EXTRACT", "date_ref": "2026" }) as writer:
+
+metadata = { "source": "SAP_EXTRACT", "date_ref": "2026" }
+
+with catalog.produce(dataset, metadata) as writer:
     writer.write(rows)
 
 if writer.skipped:

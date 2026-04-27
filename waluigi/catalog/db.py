@@ -460,25 +460,19 @@ class CatalogDB:
     # ------------------------------------------------------------------
 
     def upsert_schema_columns(self, dataset_id: str, columns: list[dict]):
-        """
-        Insert inferred columns. Columns already in draft/published
-        have their physical_type refreshed but status is preserved.
-        """
+            
+            
         now = _now()
         with self.conn:
             for col in columns:
                 self.conn.execute("""
-                    INSERT INTO schema_columns
-                        (dataset_id, column_name, physical_type, logical_type,
-                         nullable, pii, pii_type, status, last_edited_at)
-                    VALUES (?, ?, ?, ?, 1, 0, 'none', 'inferred', ?)
+                    INSERT INTO schema_columns (dataset_id , column_name, physical_type, logical_type, nullable, pii, pii_type, pii_notes, description, status, username, createdate, updatedate)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(dataset_id, column_name) DO UPDATE SET
                         physical_type  = excluded.physical_type,
-                        last_edited_at = excluded.last_edited_at
+                        updatedate = excluded.updatedate
                     WHERE schema_columns.status = 'inferred'
-                """, (dataset_id, col["name"],
-                      col.get("physical_type"), col.get("logical_type"), now))
-
+                """, (dataset_id , col["name"], col.get("physical_type"), col.get("logical_type"), 1, 0, 'none', '', '', 'inferred', _user(), now, now) )
     def get_schema(self, dataset_id: str) -> list[dict]:
         cur = self.conn.execute("""
             SELECT * FROM schema_columns

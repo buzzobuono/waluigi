@@ -10,6 +10,7 @@ import pyarrow as pa
 from waluigi.core.utils import _model_dump
 from waluigi.catalog.models import *
 from waluigi.sdk.connectors import ConnectorFactory
+from waluigi.sdk.connectors.base import BaseConnector
 
 logger = logging.getLogger("waluigi")
 
@@ -83,7 +84,7 @@ class CatalogClient:
         
     def produce(self, dataset: DatasetCreateRequest, metadata=None, inputs=None) -> DatasetWriter:
         self.create_dataset(dataset)
-        r = self._post(f"/datasets/{dataset.id}/_reserve", { "metadata:": metadata})
+        r = self._post(f"/datasets/{dataset.id}/_reserve", json = { "metadata:": metadata})
         source = self.get_source(r["source_id"])
         connector = ConnectorFactory.get(source["type"], source["config"])
         return DatasetWriter(
