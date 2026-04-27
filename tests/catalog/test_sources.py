@@ -57,11 +57,42 @@ def test_delete_source(source_id):
     
     with pytest.raises(CatalogError):
         catalog.get_source(source_id)
+        
 
-def test_create_existing_source_fails(source_id):
-    data = SourceCreateRequest(id=source_id, type=SourceType.SQL, description="Test description", config={})
+def test_create_source_is_idempotent(source_id):
+    data = SourceCreateRequest(
+        id=source_id, 
+        type=SourceType.SQL, 
+        description="Test description", 
+        config={}
+    )
+    
     catalog.create_source(data)
     
+    catalog.create_source(data)
+    
+    sources = catalog.list_sources()
+    assert any(s["id"] == source_id for s in sources)
+    assert len([s for s in sources if s["id"] == source_id]) == 1
+
+def test_create_existing_source_type_mismatch_fails(source_id):
+    initial_data = SourceCreateRequest(
+        id=source_id, 
+        type=SourceType.SQL, 
+        description="Initial source", 
+        config={}
+    )
+    catalog.create_source(initial_data)
+    
+    mismatched_data = SourceCreateRequest(
+        id=source_id, 
+        type=SourceType.S3,
+        description="Same ID, different type", 
+        config={}
+    )
+    
     with pytest.raises(CatalogError) as excinfo:
-        catalog.create_source(data)
-    assert "already exists" in str(excinfo.value)
+        catalog.create_source(mismatched_data)
+    
+    expected_msg = "Cannot change source type"
+    assert expected_msg in str(excinfo.value)

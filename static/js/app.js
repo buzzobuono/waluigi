@@ -63,10 +63,10 @@ const App = {
       } finally { loading.value = false; }
     }
     
-    onMounted(() => {
+    /*onMounted(() => {
       refreshAll();
       setInterval(refreshAll, 10000);
-    });
+    });*/
 
     return { 
       loading, counts, navItems, refreshAll, isGroupActive, 

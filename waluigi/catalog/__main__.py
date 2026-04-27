@@ -2,13 +2,13 @@ import os
 import sys
 import csv
 import socket
-import hashlib
+import yaml
 from datetime import datetime, timezone
-
 import configargparse
 import httpx
 import pandas as pd
 import uvicorn
+import logging
 from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -16,8 +16,11 @@ from pydantic import BaseModel, Field
 from waluigi.core.responses import ok, warn, ko
 from waluigi.core.utils import _model_dump
 from waluigi.catalog.db import CatalogDB
-from waluigi.catalog.utils import _version_id, _local_path, _location_exists, _compute_hash
+from waluigi.catalog.utils import _version_id, _infer_schema, _safe_json_value
 from waluigi.catalog.models import *
+from waluigi.sdk.connectors import ConnectorFactory
+    
+logger = logging.getLogger("waluigi")
 
 app = FastAPI(
     title="Waluigi Catalog",
@@ -46,14 +49,11 @@ SCANNABLE_EXTENSIONS = {
     ".sas7bdat", ".pkl", ".pickle", ".feather", ".orc", ".out",
 }
 
-def log(msg: str):
-    print(f"[Catalog 📦] {msg}", flush=True)
-
 try:
     db = CatalogDB(args.db_path)
-    log(f"Database ready: {args.db_path}")
+    logger.info(f"Database ready: {args.db_path}")
 except Exception as e:
-    log(f"❌ Critical DB error: {e}")
+    logger.error(f"❌ Critical DB error: {e}")
     sys.exit(1)
     
 
@@ -144,7 +144,7 @@ async def _fetch_and_write(base_url: str, endpoint: str,
 # ---------------------------------------------------------------------------
 
 def _scan(data_path: str, prefix: str = None) -> int:
-    log(f"🔍 Scanning {data_path} ...")
+    logger.info(f"🔍 Scanning {data_path} ...")
     count = 0
     for root, dirs, files in os.walk(data_path):
         dirs.sort()
@@ -175,11 +175,11 @@ def _scan(data_path: str, prefix: str = None) -> int:
                 if result and not result["skipped"]:
                     db.upsert_schema_columns(dataset_id, schema)
                 count += 1
-                log(f"  ✅ {dataset_id}@{version[:19]} [{fmt}]")
+                logger.info(f"  ✅ {dataset_id}@{version[:19]} [{fmt}]")
             except Exception as e:
-                log(f"  ⚠️  Skipped {filepath}: {e}")
+                logger.error(f"  ⚠️  Skipped {filepath}: {e}")
 
-    log(f"🏁 Scan complete — {count} dataset(s) registered.")
+    logger.info(f"🏁 Scan complete — {count} dataset(s) registered.")
     return count
 
 
@@ -205,12 +205,14 @@ async def list_sources():
 
 
 @app.post("/sources", tags=["Sources"],
-          summary="Register a new source",
-          status_code=201)
+          summary="Register or update a source (upsert)",
+          status_code=200)
 async def create_source(body: SourceCreateRequest):
-    created = db.create_source(body.id, body.type, body.config, body.description)
-    if not created:
-        return ko(f"Source '{body.id}' already exists", 409)
+    existing = db.get_source(body.id)
+    logger.info("ghhuh")
+    if existing and existing["type"] != body.type:
+        return ko(f"Cannot change source type from '{existing['type']}' to '{body.type.value}' — create a new source instead", 409)
+    db.upsert_source(body.id, body.type, body.config, body.description)
     return ok(db.get_source(body.id))
 
 
@@ -243,6 +245,55 @@ async def delete_source(id: str):
 
 # Routes - Versions
 
+@app.get("/datasets/{dataset_id:path}/_preview/{version}",
+         tags=["Versions"],
+         summary="Preview rows of Dataset Version")
+async def preview(dataset_id: str, version: str,
+                  limit: int = 10, offset: int = 0):
+    
+    dataset = db.get_dataset(dataset_id)
+    if not dataset:
+        return ko("Dataset not found", 404)
+    fmt = (dataset.get("format") or "").lower()
+    
+    source_id = dataset.get("source_id")
+    if not source_id:
+        return ko("Dataset Source not found", 404)
+    source = db.get_source(source_id)
+    version = db.get_version(dataset_id, version)
+    if not version:
+        return ko("Version not found", 404)
+    if source.get("source_type") and source["source_type"] != "local":
+        return ko("Preview only available for local versions", 422)
+
+    location = version["location"]
+    if not os.path.exists(location):
+        return ko(f"File not found: {location}", 404)
+
+    try:
+        if fmt == "csv":
+            df = pd.read_csv(location,
+                             skiprows=range(1, offset + 1),
+                             nrows=limit, dtype=str)
+        elif fmt == "parquet":
+            df = pd.read_parquet(location).iloc[offset: offset + limit]
+        else:
+            return ko(f"Preview not supported for format '{fmt}'", 422)
+
+        clean = [{k: _safe_json_value(v) for k, v in row.items()}
+                 for row in df.to_dict(orient="records")]
+
+        return ok({
+            "dataset_id": dataset_id,
+            "version":    version,
+            "columns":    df.columns.tolist(),
+            "rows":       clean,
+            "pagination": {"limit": limit, "offset": offset,
+                           "count": len(clean)},
+        })
+    except Exception as e:
+        return ko(str(e), 500)
+        
 @app.get("/datasets/{dataset_id:path}/versions", tags=["Versions"],
          summary="List all committed versions (newest first)")
 async def list_versions(dataset_id: str):
@@ -271,6 +322,9 @@ async def create_dataset(body: DatasetCreateRequest):
         return ko("Source not found", 404)
     if body.id.startswith("/"):
         return ko("Dataset 'id' not valid", 400)
+    existing = db.get_dataset(body.id)
+    if existing and existing["format"] != body.format:
+        return ko(f"Cannot change format from '{existing['format']}' to '{body.format.value}' — create a new dataset instead", 409)
     created = db.create_dataset(body.id, body.format, body.description, body.source_id)
     #if not created:
     #    return ko(f"Dataset '{body.id}' already exists", 409)
@@ -306,51 +360,6 @@ async def delete_source(id: str):
     return ok({"id": id, "deleted": True})
         
 ######
-
-@app.get("/datasets/{dataset_id:path}/preview/{version}",
-         tags=["Versions"],
-         summary="Preview rows of a local version")
-async def preview(dataset_id: str, version: str,
-                  limit: int = 10, offset: int = 0):
-    import numpy as np
-    
-    record = db.get_version(dataset_id, version)
-    if not record:
-        return ko("Version not found", 404)
-    if record.get("source_type") and record["source_type"] != "local":
-        return ko("Preview only available for local versions", 422)
-
-    path = record["location"]
-    fmt  = (record.get("format") or "").lower()
-    if not os.path.exists(path):
-        return ko(f"File not found: {path}", 404)
-
-    try:
-        if fmt == "csv":
-            df = pd.read_csv(path,
-                             skiprows=range(1, offset + 1),
-                             nrows=limit, dtype=str)
-        elif fmt == "parquet":
-            print(fmt)
-            df = pd.read_parquet(path).iloc[offset: offset + limit]
-        else:
-            return ko(f"Preview not supported for format '{fmt}'", 422)
-
-        clean = [{k: _safe_json_value(v) for k, v in row.items()}
-                 for row in df.to_dict(orient="records")]
-
-        return ok({
-            "dataset_id": dataset_id,
-            "version":    version,
-            "columns":    df.columns.tolist(),
-            "rows":       clean,
-            "pagination": {"limit": limit, "offset": offset,
-                           "count": len(clean)},
-        })
-    except Exception as e:
-        return ko(str(e), 500)
-
-
 
 
 @app.get("/datasets/{dataset_id:path}/resolve", tags=["Versions"],
@@ -535,7 +544,7 @@ async def approve_dataset(dataset_id: str, body: ApproveRequest):
         "breaking_changes":     schema_result["breaking_changes"],
         "warnings":             schema_result["warnings"],
     }
-    log(f"Approved {dataset_id} by {body.approved_by}")
+    logger.info(f"Approved {dataset_id} by {body.approved_by}")
     if schema_result["breaking_changes"]:
         return warn(data, ["⚠️ Breaking schema changes on approval"] + msgs)
     return warn(data, msgs) if msgs else ok(data)
@@ -545,74 +554,102 @@ async def approve_dataset(dataset_id: str, body: ApproveRequest):
 # Dataset Produce
 
 @app.post("/datasets/{dataset_id:path}/_reserve", tags=["Dataset Produce"],
-          summary="Reserve a new local version (phase 1 of 2-phase write)",
+          summary="Reserve a new version (phase 1 of 2-phase write)",
           status_code=201)
-async def dataset_reserve(dataset_id: str):
+async def dataset_reserve(dataset_id: str, body: ReserveRequest):
     try:
         dataset = db.get_dataset(dataset_id)
         if not dataset:
             return ko("Dataset not found", 404)
+        
+        if body and body.metadata:
+            existing = db.find_version_by_metadata(dataset_id, body.metadata)
+            if existing:
+                logger.info(f"Idempotency hit for {dataset_id} (exact metadata match)")
+                msgs = "Skipped - Identical metadata to latest committed version"
+                return warn({
+                    "dataset_id": dataset_id,
+                    "version":    existing["version"],
+                    "source_id":  dataset["source_id"],
+                    "location":   existing["location"]
+                  }, msg)
+                
+        source = db.get_source(dataset["source_id"])
+        
+        connector = ConnectorFactory.get(source["type"], source["config"])
+    
         version = _version_id()
-        location = _local_path(dataset_id, version, dataset["format"], DATA_PATH)
+        #location = resolve_location(source["type"], dataset_id, version, dataset["format"], DATA_PATH)
+        location = connector.resolve_location(dataset_id, version, dataset["format"], DATA_PATH)
         if not db.reserve(dataset_id, version, location):
             return ko("Version already exists", 409)
-        log(f"Reserved {dataset_id}@{version}")
+        logger.info(f"Reserved {dataset_id}@{version}")
         return ok({"dataset_id": dataset_id,
                    "version":    version,
+                   "source_id":  source["id"],    
                    "location":   location})
     except Exception as e:
-        print(e)
         return ko(str(e), 500)
 
 
 @app.post("/datasets/{dataset_id:path}/_commit/{version}",
           tags=["Dataset Produce"],
-          summary="Commit a reserved version (phase 2 of 2-phase write)")
+          summary="Commit a reserved version (phase 1 of 2-phase write)")
 async def dataset_commit(dataset_id: str, version: str, body: CommitRequest):
+    # Mantengo la chiamata esplicita al dataset come richiesto
+    dataset = db.get_dataset(dataset_id)
+    if not dataset:
+        return ko("Dataset not found", 404)
+        
+    source = db.get_source(dataset["source_id"])
+    connector = ConnectorFactory.get(source["type"], source["config"])
+    
+    # Recupero la versione riservata
     record = db.get_version(dataset_id, version)
     if not record:
         return ko("Version not found", 404)
     if record["status"] != "reserved":
-        return ko(f"Cannot commit — status is '{record['status']}'", 409)
+        return ko(f"Cannot commit - status is '{record['status']}'", 409)
 
     location = record["location"]
-    if not _location_exists(location):
+    if not connector.exists(location):
         return ko(f"Dataset Version not found at: {location}", 422)
 
     try:
-        file_hash = _compute_hash(location)
-        inferred  = _infer_schema(location, record.get("format", ""))
-        schema_kv = (body.columns
-                     or {c["name"]: c["physical_type"] for c in inferred})
-        result    = db.commit(dataset_id, version, file_hash,
-                              body.rows, schema_kv)
+        # 1. Calcolo hash (leggero o pesante a seconda del connector)
+        content_hash = connector.checksum(location)
+        
+        # 2. Transazione DB per il commit
+        result = db.commit(dataset_id, version, content_hash)
 
         if result is None:
-            return ko("Commit failed — version may already be committed", 409)
+            return ko("Dataset version may already be committed", 409)
 
+        # 3. Gestione Idempotenza Fisica (Hash identico)
         if result["skipped"]:
-            log(f"Skipped {dataset_id} — identical to latest")
-            return ok({"dataset_id": dataset_id,
-                       "version":    result["version"],
-                       "skipped":    True,
-                       "reason":     "Identical to latest committed version"})
+            logger.info(f"Skipped {dataset_id}: identical content to {result['version']}")
+            
+            # OPZIONALE: Rimuove i file fisici appena scritti perché duplicati
+            try:
+                connector.delete(location) 
+                logger.info(f"Cleanup: deleted orphaned location {location}")
+            except Exception as cleanup_err:
+                logger.warning(f"Failed to cleanup orphaned location {location}: {cleanup_err}")
 
-        # sys.* metadata — written by server
-        db.set_system_metadata(dataset_id, version, {
-            "format":       record.get("format"),
-            "rows":         body.rows,
-            "hash":         file_hash,
-            "task_id":      record.get("produced_by_task"),
-            "job_id":       record.get("produced_by_job"),
-            "committed_at": _now(),
-        })
+            return ok({
+                "dataset_id": dataset_id,
+                "version":    result["version"],
+                "skipped":    True,
+                "reason":     "Identical content to latest committed version"
+            })
+        
+        # 4. Arricchimento (Metadati, Schema, Lineage)
+        # Salviamo i metadati forniti nella commit
+        for k, v in (body.metadata or {}).items():
+            db.set_metadata(dataset_id, version, k, v)
 
-        # Business metadata from task
-        for k, v in (body.business_meta or {}).items():
-            if not k.startswith("sys."):
-                db.set_metadata(dataset_id, version, k, v)
-
-        # Schema
+        # Gestione Schema
+        inferred = _infer_schema(location, dataset.get("format", ""))
         db.upsert_schema_columns(dataset_id, inferred)
         diff = db.diff_schema_against_inferred(dataset_id, inferred)
 
@@ -621,27 +658,29 @@ async def dataset_commit(dataset_id: str, version: str, body: CommitRequest):
             db.insert_lineage(dataset_id, version,
                               [_model_dump(i) for i in body.inputs])
 
-        log(f"Committed {dataset_id}@{version} hash={file_hash[:8]}…")
+        logger.info(f"Committed {dataset_id}@{version} hash={content_hash[:8]}…")
 
+        # 5. Risposta con gestione Warning/Breaking changes
         all_warnings = diff["breaking"] + diff["warnings"]
         data = {
             "dataset_id": dataset_id,
             "version":    version,
-            "path":       path,
-            "hash":       file_hash,
-            "rows":       body.rows,
+            "location":   location,
+            "hash":       content_hash,
             "skipped":    False,
         }
+        
         if diff["breaking"]:
             return warn(data, ["⚠️ Schema breaking changes"] + all_warnings)
         if all_warnings:
             return warn(data, all_warnings)
+            
         return ok(data)
 
     except Exception as e:
-        log(f"❌ Commit error: {e}")
-        return ko(str(e), 500)
-
+        logger.error(f"❌ Commit error: {e}")
+        return ko(f"Internal commit error: {str(e)}", 500)
+        
 
 @app.post("/datasets/{dataset_id:path}/_fail/{version}",
           tags=["Dataset Produce"],
@@ -664,7 +703,7 @@ async def fail_version(dataset_id: str, version: str):
 async def deprecate(dataset_id: str, version: str):
     if not db.deprecate(dataset_id, version):
         return ko("Version not found", 404)
-    log(f"Deprecated {dataset_id}@{version}")
+    logger.info(f"Deprecated {dataset_id}@{version}")
     return ok({"dataset_id": dataset_id,
                "version":    version,
                "status":     "deprecated"})
@@ -693,7 +732,7 @@ async def register_virtual(dataset_id: str, body: VirtualRegisterRequest):
         db.commit_virtual(dataset_id, version, body.source_id,
                           body.location, body.format,
                           body.task_id, body.job_id)
-        log(f"Virtual {dataset_id}@{version} [{src['type']}]")
+        logger.info(f"Virtual {dataset_id}@{version} [{src['type']}]")
         return ok({"dataset_id":  dataset_id,
                    "version":     version,
                    "source_id":   body.source_id,
@@ -792,7 +831,7 @@ async def materialize(dataset_id: str, body: MaterializeRequest):
             "dataset_id": f"__external__/{body.base_url}{body.endpoint}",
             "version":    "live",
         }])
-        log(f"Materialized {dataset_id}@{version} rows={rows}")
+        logger.info(f"Materialized {dataset_id}@{version} rows={rows}")
         return ok({"dataset_id": dataset_id,
                    "version":    version,
                    "path":       path,
@@ -829,19 +868,22 @@ async def scan_api(body: ScanRequest):
 # ===========================================================================
 # Entrypoint
 # ===========================================================================
-
+  
 def main():
+    with open("logging.yaml") as f:
+        logging.config.dictConfig(yaml.safe_load(f))
+
     if args.scan:
         _scan(args.scan_path or DATA_PATH, args.scan_prefix)
         return
 
-    log("Waluigi Catalog v2")
-    log(f"  Binding : {args.bind_address}:{args.port}")
-    log(f"  URL     : http://{args.host}:{args.port}")
-    log(f"  DB      : {args.db_path}")
-    log(f"  Data    : {args.data_path}")
-    uvicorn.run(app, host=args.bind_address, port=args.port)
-
-
+    logger.info("Waluigi Catalog v2")
+    logger.info(f"  Binding : {args.bind_address}:{args.port}")
+    logger.info(f"  URL     : http://{args.host}:{args.port}")
+    logger.info(f"  DB      : {args.db_path}")
+    logger.info(f"  Data    : {args.data_path}")
+    
+    uvicorn.run(app, host=args.bind_address, port=args.port, log_config=None)
+    
 if __name__ == "__main__":
     main()

@@ -1,53 +1,32 @@
+from __future__ import annotations
 import os
 import warnings
-from typing import Any, Dict, List, Optional
 import httpx
+import logging
+from typing import Any, Dict, Iterator, List, Union
+import pandas as pd
+import pyarrow as pa
 
 from waluigi.core.utils import _model_dump
 from waluigi.catalog.models import *
+from waluigi.sdk.connectors import ConnectorFactory
+
+logger = logging.getLogger("waluigi")
+
+Tabular = Union[
+    list[dict],
+    pd.DataFrame,
+    pa.Table,
+    Iterator[list[dict]],
+    Iterator[pd.DataFrame],
+]
 
 class CatalogError(Exception):
     """Raised when the catalog returns result=KO."""
     
 class CatalogWarning(UserWarning):
     """Raised (as a warning) when the catalog returns result=WARN."""
-
-class DatasetWriter:
-
-    def __init__(self, client: "CatalogClient",
-                 dataset_id: str, version: str, location: str,
-                 inputs: List[dict] = None):
-        self._client                    = client
-        self.dataset_id                = dataset_id
-        self.version                   = version
-        self.inputs                    = inputs or []
-        self.location                  = location
-        self.metadata: Dict[str, str]  = {}
-        self.skipped                   = False
-
-    def __enter__(self) -> "DatasetWriter":
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type is not None:
-            try:
-                self._client._post(
-                    f"/datasets/{self._dataset_id}/_fail/{self._version}",
-                    json={}, unwrap=False)
-            except Exception:
-                pass
-            return False
-
-        result = self._client._post(
-            f"/datasets/{self._dataset_id}/_commit/{self._version}",
-            json={
-                "inputs": self._inputs,
-                "metadata": self.metadata,
-            },
-        )
-        self.skipped           = result.get("skipped", False)
-        self.committed_version = result.get("version", self._version)
-        return False
+    
 
 class CatalogClient:
 
@@ -101,18 +80,23 @@ class CatalogClient:
     
     def delete_dataset(self, id: str) -> dict:
         return self._delete(f"/datasets/{id}")
-    
-    
-    def produce(self, dataset: DatasetCreateRequest,
-                inputs: List[dict] = None) -> DatasetWriter:
+        
+    def produce(self, dataset: DatasetCreateRequest, metadata=None, inputs=None) -> DatasetWriter:
         self.create_dataset(dataset)
-        r = self._post(
-            f"/datasets/{dataset.id}/_reserve"
+        r = self._post(f"/datasets/{dataset.id}/_reserve", { "metadata:": metadata})
+        source = self.get_source(r["source_id"])
+        connector = ConnectorFactory.get(source["type"], source["config"])
+        return DatasetWriter(
+            client=self,
+            dataset_id=dataset.id,
+            version=r["version"],
+            location=r["location"],
+            fmt=dataset.format,
+            connector=connector,
+            metadata=metadata or {},
+            inputs=inputs or [],
         )
-        return DatasetWriter(self, dataset.id,
-                             r["version"], r["location"],
-                             inputs=inputs or [])
-
+        
     # Commons
     
     def _unwrap(self, response: httpx.Response) -> Any:
@@ -156,4 +140,77 @@ class CatalogClient:
     def _delete(self, path: str, params: dict = None) -> Any:
         return self._unwrap(httpx.delete(f"{self.url}{path}", params=params))
         
+class DatasetWriter:
+
+    def __init__(
+        self,
+        client: CatalogClient,
+        dataset_id: str,
+        version: str,
+        location: str,
+        fmt: DatasetFormat = None,
+        connector: BaseConnector = None,
+        metadata: Dict[str, Any] = None,    
+        inputs: List[dict] = None,
+    ):
+        self._client        = client
+        self._connector     = connector
+        self._location      = location
+        self._format        = fmt
+        self.metadata: Dict[str, Any] = metadata
+        self.dataset_id     = dataset_id
+        self.version        = version
+        self.inputs         = inputs or []
+        self.skipped        = False
+        
+    def write(self, data: Tabular) -> int:
+        if self._connector is None:
+            raise CatalogError("Connector not initialized")
+        
+        return self._connector.write(self._location, self._format, data)
+        
+    def __enter__(self) -> DatasetWriter:
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is not None:
+            self._fail()
+            return False
+
+        self._commit()
+        return False
+
+    def _fail(self):
+        try:
+            self._client._post(
+                f"/datasets/{self.dataset_id}/_fail/{self.version}",
+                json={},
+            )
+        except Exception:
+            pass
+
+        self._cleanup()
+
+    def _commit(self):
+        result = self._client._post(
+            f"/datasets/{self.dataset_id}/_commit/{self.version}",
+            json={
+                "inputs": self.inputs,
+                "metadata": self.metadata
+            },
+        )
+
+        self.skipped = result.get("skipped", False)
+
+        if self.skipped:
+            logger.warning(f"Skipped {self.dataset_id} because is equal to the last version")
+            self._cleanup()
+
+    def _cleanup(self):
+        if self._connector is not None:
+            try:
+                self._connector.delete(self._location)
+            except Exception:
+                pass
+                
 catalog = CatalogClient()

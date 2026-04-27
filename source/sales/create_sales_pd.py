@@ -1,10 +1,26 @@
 import pandas as pd
 from waluigi.sdk.task import Task
 from waluigi.sdk.catalog import catalog
+from waluigi.catalog.models import * 
+
+DATASET_ID = "sales/raw/sales_raw_pd"
 
 class CreateSalesDataset(Task):
 
     def run(self):
+        source_id="local"
+        
+        print(f"📊 Creazione local source: {source_id}")
+        
+        source = SourceCreateRequest(
+                id=source_id,
+                type=SourceType.LOCAL,
+                config={},
+                description="Local Source"
+        )
+    
+        catalog.create_source(source)
+        
         print(f"📊 Creazione dataset vendite per data: {self.params.date}")
 
         rows = [
@@ -17,16 +33,20 @@ class CreateSalesDataset(Task):
 
         df = pd.DataFrame(rows)
 
-        with catalog.produce(
-            "sales/raw/sales_raw_pd",
-            format="parquet"
-        ) as ctx:
+        dataset = DatasetCreateRequest(
+            id=DATASET_ID,
+            format=DatasetFormat.PARQUET,
+            description="Sales raw pd",
+            source_id=source_id
+        )
+        with catalog.produce(dataset) as ctx:
+            ctx.write(rows, source="SAP_EXTRACT", date_ref=self.params.date)
+            
+        if ctx.skipped:
+            print(f"⏭️  Contenuto invariato — versione: {ctx.version}")
+            return
 
-            df.to_parquet(ctx.path, index=False)
-
-            ctx.rows = len(df)
-
-        print(f"✅ Dataset sales_raw_pd scritto in Parquet, righe: {ctx.rows}")
+        print(f"✅ {ctx.dataset_id}@{ctx.version} scritto.")
 
 
 if __name__ == "__main__":

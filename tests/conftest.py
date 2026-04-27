@@ -2,23 +2,34 @@ import subprocess
 import time
 import pytest
 import requests
+import os
+import tempfile
+import shutil
 
 @pytest.fixture(scope="session", autouse=True)
 def start_catalog_server():
-    # 1. Comando per avviare il tuo server (es. usando l'entry point wlcatalog o uvicorn)
-    # Assicurati di usare una porta diversa da quella di produzione se necessario
+    # Crea una cartella temporanea per isolare DB e dati dei test
+    test_dir = tempfile.mkdtemp()
+    test_db = os.path.join(test_dir, "test_catalog.db")
+    test_data = os.path.join(test_dir, "test_data")
+    os.makedirs(test_data, exist_ok=True)
+
+    # Copia l'ambiente corrente e aggiungi le variabili per il test
+    test_env = os.environ.copy()
+    test_env["WALUIGI_CATALOG_DB_PATH"] = test_db
+    test_env["WALUIGI_CATALOG_DATA_PATH"] = test_data
+
     proc = subprocess.Popen(
         ["wlcatalog"], 
         stdout=subprocess.DEVNULL, 
-        stderr=subprocess.DEVNULL
+        stderr=subprocess.DEVNULL,
+        env=test_env
     )
     
-    # 2. "Health check": Aspetta che il server sia pronto
     timeout = 5
     start_time = time.time()
     while True:
         try:
-            # Tenta di chiamare l'health check o la root
             requests.get("http://localhost:9000/")
             break
         except requests.ConnectionError:
@@ -27,8 +38,10 @@ def start_catalog_server():
                 raise RuntimeError("Il server del catalogo non si è avviato in tempo")
             time.sleep(0.5)
 
-    yield  # Qui vengono eseguiti i test
+    yield 
     
-    # 3. Shutdown: Spegne il server dopo tutti i test
     proc.terminate()
     proc.wait()
+    
+    # Pulizia: rimuove il database e i file prodotti durante il test
+    shutil.rmtree(test_dir)

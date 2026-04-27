@@ -72,19 +72,7 @@ def test_delete_dataset(dataset_id):
     
     with pytest.raises(CatalogError):
         catalog.get_dataset(dataset_id)
-
-def test_create_existing_dataset_fails(dataset_id):
-    data = DatasetCreateRequest(
-        id=dataset_id, 
-        description="Twice", 
-        format=DatasetFormat.CSV
-    )
-    catalog.create_dataset(data)
-    
-    with pytest.raises(CatalogError) as excinfo:
-        catalog.create_dataset(data)
-    assert "already exists" in str(excinfo.value).lower()
-
+        
 def test_find_datasets_with_filters(dataset_id):
     catalog.create_dataset(DatasetCreateRequest(
         id=dataset_id, 

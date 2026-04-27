@@ -16,20 +16,18 @@ export default {
   setup() {
     const columns = [
       { key: 'name', label: 'Name' },
+      { key: 'format', label: 'Format' },
       { key: 'description', label: 'Description' },
+      { key: 'source_id', label: 'Source' },
       { key: 'type', label: 'Type' },
       { key: 'status', label: 'Status' }
     ];
     
     const columns_history = [
       { key: 'version', label: 'Version' },
-      { key: 'format', label: 'Format' },
-      { key: 'rows', label: 'Rows' },
       { key: 'hash', label: 'Hash' },
-      { key: 'produced_by_job', label: 'Job' },
-      { key: 'produced_by_task', label: 'Task' },
+      { key: 'metadata', label: 'Metadata' },
       { key: 'status', label: 'Status' },
-      //{ key: 'schema_snapshot', label: 'Schema Snapshot' },
       { key: 'actions', label: 'Actions' }
     ];
     
@@ -126,8 +124,8 @@ export default {
       history.value    = [];
 
       try {
-        const h = await api.catalogDatasetVersions(dataset);
-        history.value = Array.isArray(h.data.versions) ? h.data.versions : [];
+        const res = await api.catalogDatasetVersions(dataset);
+        history.value = Array.isArray(res.data) ? res.data : [];
       } catch(e) {
         console.error('Dataset detail error', e);
       }
@@ -288,7 +286,13 @@ export default {
              </span>
             </div>
           </template>
-           
+  
+          <template #cell(format)="{ item }" >
+             <span class="badge badge-info">
+               {{ item.format }}
+             </span>
+          </template>
+  
           <template #cell(status)="{ item }" >
              <span class="badge badge-success">
                {{ item.status }}
@@ -321,12 +325,6 @@ export default {
         <base-table 
           :columns="columns_history" 
           :items="history">
-          
-           <template #cell(format)="{ item }" >
-             <span class="badge badge-info">
-               {{ item.format }}
-             </span>
-           </template>
   
            <template #cell(hash)="{ item }" >
              {{ item.hash ? item.hash.slice(0,8) : '—' }}

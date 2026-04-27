@@ -2,10 +2,14 @@ import os
 import socket
 import configargparse
 import uvicorn
+import logging
 import httpx
+import yaml
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+
+logger = logging.getLogger("waluigi")
 
 app = FastAPI()
 
@@ -22,182 +26,58 @@ BOSS_URL    = args.boss_url.rstrip('/')
 CATALOG_URL = args.catalog_url.rstrip('/')
 STATIC_DIR  = os.path.join(os.getcwd(), "static")
 
-
-def log(msg):
-    print(f"[Console 🖥️] {msg}", flush=True)
-
-
-# ---------------------------------------------------------------------------
-# HTTP helpers
-# ---------------------------------------------------------------------------
-
-async def _boss_get(path):
-    async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.get(f"{BOSS_URL}{path}")
-        r.raise_for_status()
-        return r.json()
-
-async def _boss_post(path, json=None):
-    async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.post(f"{BOSS_URL}{path}", json=json)
-        r.raise_for_status()
-        return r.json()
-
-async def _boss_delete(path):
-    async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.delete(f"{BOSS_URL}{path}")
-        r.raise_for_status()
-        return r.json()
+@app.api_route("/boss/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def proxy_boss(request: Request, path: str):
+    url = f"{BOSS_URL}/{path}"
+    params = dict(request.query_params)
+    content = await request.body()
+    headers = dict(request.headers)
+    headers.pop("host", None)
+    async with httpx.AsyncClient() as client:
+        response = await client.request(
+            method=request.method,
+            url=url,
+            params=params,
+            content=content,
+            headers=headers
+        )
+    return JSONResponse(content=response.json(), status_code=response.status_code)
     
-async def _catalog_post(path, json=None):
-    async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.post(f"{CATALOG_URL}{path}", json=json)
-        r.raise_for_status()
-        return r.json()
-
-async def _catalog_get(path, params=None):
-    async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.get(f"{CATALOG_URL}{path}", params=params or {})
-        r.raise_for_status()
-        return r.json()
-
-
-# ---------------------------------------------------------------------------
-# Boss proxy — /api/*
-# ---------------------------------------------------------------------------
-
-
-@app.get('/api/jobs/{job_id}/tasks')
-async def api_job_tasks(job_id: str):
-    return JSONResponse(await _boss_get(f'/api/jobs/{job_id}/tasks'))
-
-@app.delete('/api/jobs/{job_id}')
-async def delete_job(job_id: str):
-    return JSONResponse(await _boss_delete(f'/api/jobs/{job_id}'))
-
-@app.get('/api/jobs')
-async def api_jobs():
-    return JSONResponse(await _boss_get('/api/jobs'))
-
-@app.get('/api/namespaces')
-async def api_jobs():
-    return JSONResponse(await _boss_get('/api/namespaces'))
-
-@app.get('/api/tasks')
-async def api_tasks():
-    return JSONResponse(await _boss_get('/api/tasks'))
+@app.api_route("/catalog/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def proxy_catalog(request: Request, path: str):
+    url = f"{CATALOG_URL}/{path}"
+    params = dict(request.query_params)
+    content = await request.body()
+    headers = dict(request.headers)
+    headers.pop("host", None)
+    async with httpx.AsyncClient() as client:
+        response = await client.request(
+            method=request.method,
+            url=url,
+            params=params,
+            content=content,
+            headers=headers
+        )
+    return JSONResponse(content=response.json(), status_code=response.status_code)
     
-@app.get('/api/workers')
-async def api_workers():
-    return JSONResponse(await _boss_get('/api/workers'))
-
-@app.get('/api/resources')
-async def api_resources():
-    return JSONResponse(await _boss_get('/api/resources'))
-
-@app.get('/api/logs/{task_id}')
-async def api_logs(task_id: str, limit: int = 20):
-    return JSONResponse(await _boss_get(f'/api/logs/{task_id}?limit={limit}'))
-
-@app.post('/api/reset/task/{id}')
-async def api_reset_task(id: str):
-    return JSONResponse(await _boss_post(f'/api/reset/task/{id}'))
-
-@app.post('/api/reset/namespace/{namespace}')
-async def api_reset_namespace(namespace: str):
-    return JSONResponse(await _boss_post(f'/api/reset/namespace/{namespace}'))
-
-@app.post('/api/delete/task/{id}')
-async def api_delete_task(id: str):
-    return JSONResponse(await _boss_post(f'/api/delete/task/{id}'))
-
-@app.post('/api/delete/namespace/{namespace}')
-async def api_delete_namespace(namespace: str):
-    return JSONResponse(await _boss_post(f'/api/delete/namespace/{namespace}'))
-
-
-# ---------------------------------------------------------------------------
-# Catalog proxy — /catalog/*
-# ---------------------------------------------------------------------------
-
-@app.get('/catalog/folders/{prefix:path}')
-async def catalog_folders(prefix: str):
-    return JSONResponse(await _catalog_get(f'/folders/{prefix}'))
-
-@app.get('/catalog/datasets/{id:path}/history')
-async def catalog_dataset_history(id: str):
-    return JSONResponse(await _catalog_get(f'/datasets/{id}/history'))
-
-@app.get('/catalog/datasets/{id:path}/preview/{version}')
-async def catalog_dataset_preview(id: str, version: str, limit: int = 10, offset: int = 0):
-    return JSONResponse(await _catalog_get(f'/datasets/{id}/preview/{version}', {'limit': limit, 'offset': offset}))
-
-@app.get('/catalog/datasets/{id:path}/lineage/{version}')
-async def catalog_dataset_lineage(id: str, version: str):
-    return JSONResponse(await _catalog_get(f'/datasets/{id}/lineage/{version}'))
-
-@app.get('/catalog/datasets/{id:path}/metadata/{version}')
-async def catalog_dataset_metadata(id: str, version: str):
-    return JSONResponse(await _catalog_get(f'/datasets/{id}/metadata/{version}'))
-
-
-#@app.get('/catalog/namespaces')
-#async def catalog_namespaces():
-#    return JSONResponse(await _catalog_get('/namespaces'))
-
-#@app.get('/catalog/namespaces/{ns:path}/children')
-#async def catalog_ns_children(ns: str):
-#    return JSONResponse(await _catalog_get(f'/namespaces/{ns}/children'))
-
-#@app.get('/catalog/namespaces/{ns:path}/datasets')
-#async def catalog_ns_datasets(ns: str, recursive: bool = False):
-#    return JSONResponse(await _catalog_get(f'/namespaces/{ns}/datasets', {'recursive': str(recursive).lower()}))
-
-#@app.get('/catalog/datasets/{ns:path}/{id}/history')
-#async def catalog_dataset_history(ns: str, id: str):
-#    return JSONResponse(await _catalog_get(f'/datasets/{ns}/{id}/history'))
-
-#@app.get('/catalog/datasets/{ns:path}/{id}/{version}/metadata')
-#async def catalog_dataset_metadata(ns: str, id: str, version: str):
-#    return JSONResponse(await _catalog_get(f'/datasets/{ns}/{id}/{version}/metadata'))
-
-@app.get('/catalog/datasets/{ns:path}/{id}')
-async def catalog_dataset_latest(ns: str, id: str):
-    return JSONResponse(await _catalog_get(f'/datasets/{ns}/{id}'))
-
-@app.post('/catalog/datasets/{ns:path}/{id}/materialize')
-async def catalog_materialize(ns: str, id: str, request: Request):
-    body = await request.json()
-    return JSONResponse(await _catalog_post(f'/datasets/{ns}/{id}/materialize', body))
-
-# ---------------------------------------------------------------------------
-# Static assets — before SPA fallback
-# ---------------------------------------------------------------------------
-
 app.mount("/js",  StaticFiles(directory=os.path.join(STATIC_DIR, "js")),  name="js")
 app.mount("/css", StaticFiles(directory=os.path.join(STATIC_DIR, "css")), name="css")
-
-
-# ---------------------------------------------------------------------------
-# SPA fallback — Vue Router handles client-side routing
-# ---------------------------------------------------------------------------
 
 @app.get("/{full_path:path}")
 async def spa_fallback(full_path: str):
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
+    
 def main():
-    log(f"Waluigi Console:")
-    log(f"    Binding: {args.bind_address}:{args.port}")
-    log(f"    Boss URL: {args.boss_url}")
-    log(f"    Catalog URL: {args.catalog_url}")
-    uvicorn.run(app, host=args.bind_address, port=args.port)
+    with open("logging.yaml") as f:
+        logging.config.dictConfig(yaml.safe_load(f))
 
+    logger.info("Waluigi Console")
+    logger.info(f"    Binding: {args.bind_address}:{args.port}")
+    logger.info(f"    Boss URL: {args.boss_url}")
+    logger.info(f"    Catalog URL: {args.catalog_url}")
+    
+    uvicorn.run(app, host=args.bind_address, port=args.port, log_config=None)
+    
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,24 @@
+version: 1
+disable_existing_loggers: False
+
+formatters:
+  default:
+    (): uvicorn.logging.ColourizedFormatter
+   # fmt: "%(asctime)s [%(process)d] %(filename)s:%(lineno)d %(levelprefix)s %(message)s"
+    fmt: "%(levelprefix)s %(message)s"
+ 
+handlers:
+  console:
+    class: logging.StreamHandler
+    formatter: default
+    stream: ext://sys.stdout
+
+loggers:
+  waluigi:
+    level: INFO
+    handlers: [console]
+    propagate: False
+
+root:
+  level: INFO
+  handlers: [console]

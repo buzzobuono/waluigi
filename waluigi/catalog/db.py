@@ -192,6 +192,20 @@ class CatalogDB:
                 f"UPDATE sources SET {cols} WHERE id = ?", vals)
             return cur.rowcount > 0
     
+    def upsert_source(self, id: str, type: str, config: dict,
+                  description: str = None) -> None:
+        now = _now()
+        with self.conn:
+            self.conn.execute("""
+                INSERT INTO sources (id, type, config, description, username, createdate, updatedate)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    config      = excluded.config,
+                    description = excluded.description,
+                    username    = excluded.username,
+                    updatedate  = excluded.updatedate
+            """, (id, type, json.dumps(config), description, _user(), now, now))
+            
     def delete_source(self, id: str) -> bool:
         with self.conn:
             cur = self.conn.execute("DELETE FROM sources WHERE id = ?", (id,))
@@ -216,7 +230,6 @@ class CatalogDB:
             return cur.rowcount > 0
   
     def exists_dataset(self, id: str) -> bool:
-        print(id)
         cur = self.conn.execute("SELECT 1 FROM datasets WHERE id = ?", (id,))
         return cur.fetchone() is not None
     
@@ -257,8 +270,7 @@ class CatalogDB:
         rows = cur.fetchall()
         return [_version({**dict(r), "id": dataset_id}) for r in rows]
  
-    
-    
+ 
     def get_version(self, dataset_id: str, version: str) -> dict | None:
         cur = self.conn.execute("""
             SELECT *
@@ -267,6 +279,32 @@ class CatalogDB:
         """, (dataset_id, version))
         return _version(cur.fetchone())
         
+    def find_version_by_metadata(self, dataset_id: str, metadata: dict) -> dict | None:
+        if metadata is None:
+            return None
+
+        cur = self.conn.execute("""
+            SELECT * FROM versions 
+            WHERE dataset_id = ? AND status = 'committed'
+            ORDER BY updatedate DESC LIMIT 1
+        """, (dataset_id,))
+        
+        row = cur.fetchone()
+        if not row:
+            return None
+            
+        version_id = row["version"]
+
+        existing_meta = self.get_metadata(dataset_id, version_id)
+
+        target_meta = {k: str(v) for k, v in metadata.items()}
+
+        if existing_meta == target_meta:
+            return _version(row)
+            
+        return None
+
+     
     # Dataset Produce
     
     def reserve(self, dataset_id: str, version: str, location: str) -> bool:
@@ -285,32 +323,70 @@ class CatalogDB:
             print(e)
             return False
 
-    def commit(self, dataset_id: str, version: str, hash: str,
-               rows: int | None, schema: dict | None) -> dict | None:
+    def commit(self, dataset_id: str, version: str, hash: str) -> dict | None:
         with self.conn:
+            # 1. Recuperiamo l'ultima committed
             latest = self.conn.execute("""
                 SELECT version, hash FROM versions
                 WHERE dataset_id = ? AND status = 'committed'
                 ORDER BY updatedate DESC LIMIT 1
             """, (dataset_id,)).fetchone()
-
-            if latest and dict(latest)["hash"] == file_hash:
+    
+            # 2. Se l'hash è valido e identico, skippiamo
+            if latest and latest["hash"] and latest["hash"] == hash:
+                # Eliminiamo la prenotazione corrente perché inutile
                 self.conn.execute("""
                     DELETE FROM versions
                     WHERE dataset_id = ? AND version = ? AND status = 'reserved'
                 """, (dataset_id, version))
-                return {"skipped": True, "version": dict(latest)["version"]}
-
+                return {"skipped": True, "version": latest["version"]}
+    
+            # 3. Altrimenti procediamo al commit della nuova versione
+            now = _now()
             cur = self.conn.execute("""
                 UPDATE versions SET
                     hash = ?,
-                    updatedate = ?, status = 'committed'
+                    updatedate = ?, 
+                    status = 'committed'
                 WHERE dataset_id = ? AND version = ? AND status = 'reserved'
-            """, (hash, _now(), dataset_id, version))
-
+            """, (hash, now, dataset_id, version))
+    
             if cur.rowcount == 0:
                 return None
+                
             return {"skipped": False, "version": version}
+                
+    # Version metadata
+    
+    def set_metadata(self, dataset_id: str, version: str,
+                     key: str, value: str):
+        now = _now()
+        with self.conn:
+            self.conn.execute("""
+                INSERT INTO version_metadata (dataset_id, version, key, value, username, createdate, updatedate)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(dataset_id, version, key)
+                DO UPDATE SET value = excluded.value
+            """, (dataset_id, version, key, str(value), _user(), now, now))
+            
+    def delete_metadata(self, dataset_id: str, version: str, key: str) -> bool:
+        if key.startswith("sys."):
+            return False   # sys.* keys are immutable
+        with self.conn:
+            cur = self.conn.execute("""
+                DELETE FROM version_metadata
+                WHERE dataset_id = ? AND version = ? AND key = ?
+            """, (dataset_id, version, key))
+            return cur.rowcount > 0
+
+    def get_metadata(self, dataset_id: str, version: str) -> dict:
+        cur = self.conn.execute("""
+            SELECT key, value FROM version_metadata
+            WHERE dataset_id = ? AND version = ?
+            ORDER BY key
+        """, (dataset_id, version))
+        return {r["key"]: r["value"] for r in cur.fetchall()}
+            
         
     # ------
     def set_in_review(self, id: str) -> bool:
@@ -530,46 +606,4 @@ class CatalogDB:
     
     
 
-    # ------------------------------------------------------------------
-    # Version metadata
-    # ------------------------------------------------------------------
-
-    def set_metadata(self, dataset_id: str, version: str,
-                     key: str, value: str):
-        with self.conn:
-            self.conn.execute("""
-                INSERT INTO version_metadata (dataset_id, version, key, value)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(dataset_id, version, key)
-                DO UPDATE SET value = excluded.value
-            """, (dataset_id, version, key, str(value)))
-
-    def set_system_metadata(self, dataset_id: str, version: str,
-                            fields: dict):
-        """Write sys.* metadata — keys are prefixed with 'sys.' automatically."""
-        with self.conn:
-            self.conn.executemany("""
-                INSERT INTO version_metadata (dataset_id, version, key, value)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(dataset_id, version, key)
-                DO UPDATE SET value = excluded.value
-            """, [(dataset_id, version, f"sys.{k}", str(v))
-                  for k, v in fields.items() if v is not None])
-
-    def delete_metadata(self, dataset_id: str, version: str, key: str) -> bool:
-        if key.startswith("sys."):
-            return False   # sys.* keys are immutable
-        with self.conn:
-            cur = self.conn.execute("""
-                DELETE FROM version_metadata
-                WHERE dataset_id = ? AND version = ? AND key = ?
-            """, (dataset_id, version, key))
-            return cur.rowcount > 0
-
-    def get_metadata(self, dataset_id: str, version: str) -> dict:
-        cur = self.conn.execute("""
-            SELECT key, value FROM version_metadata
-            WHERE dataset_id = ? AND version = ?
-            ORDER BY key
-        """, (dataset_id, version))
-        return {r["key"]: r["value"] for r in cur.fetchall()}
+    

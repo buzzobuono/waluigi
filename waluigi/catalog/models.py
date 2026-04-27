@@ -33,6 +33,7 @@ class DatasetFormat(str, Enum):
     FEATHER = "feather"
     ORC = "orc"
     TXT = "txt"
+    SQL = "SQL"
     
 class DatasetStatus(str, Enum):
     DRAFT = "draft"
@@ -51,17 +52,21 @@ class DatasetUpdateRequest(BaseModel):
     description:  Optional[str]  = None
     status:       Optional[DatasetStatus]  = DatasetStatus.IN_REVIEW
         
-#----------
-
-    
+class ReserveRequest(BaseModel):
+    metadata:      Dict[str, str]  = Field(default_factory=dict)
+        
 class LineageRef(BaseModel):
     dataset_id: str = Field(..., example="finance/erp/fatture")
     version:    str = Field(..., example="2026-04-11T10:00:00+00:00")
-
-
+        
 class CommitRequest(BaseModel):
-    inputs:        List[LineageRef]         = Field(default_factory=list)
-    metadata:      Dict[str, str]           = Field(default_factory=dict)
+    metadata:      Dict[str, str]  = Field(default_factory=dict)
+    inputs:        List[LineageRef]  = Field(default_factory=list)
+    
+#----------
+
+
+
 
 class VirtualRegisterRequest(BaseModel):
     source_id:    str            = Field(...,   example="pg-dwh")
