@@ -2,12 +2,17 @@ from waluigi.sdk.catalog import catalog, CatalogError
 from waluigi.catalog.models import *
 
 # Source SQLite
+source_id = "sqlite_local"
+dataset_id = "sales/raw/sales_raw_sqlite"
 source = SourceCreateRequest(
-    id="local",
-    type=SourceType.LOCAL,
-    description="Catalog local"
-)
-
+        id=source_id,
+        type=SourceType.SQL,
+        config={
+            "url": f"sqlite:///test.db"
+        },
+        description="SQLite locale temporaneo"
+        )
+    
 catalog.create_source(source)
 
 rows = [
@@ -20,10 +25,10 @@ rows = [
 ]
 #catalog.delete_dataset("sales/raw/sales")
 dataset = DatasetCreateRequest(
-    id="sales/raw/sales",
-    format=DatasetFormat.CSV,
+    id=dataset_id,
+    format=DatasetFormat.SQL,
     description="Sales raw",
-    source_id="local"
+    source_id=source_id
 )
 
 
@@ -31,8 +36,4 @@ metadata = { "source": "SAP_EXTRACT", "date_ref": "2026" }
 
 with catalog.produce(dataset, metadata) as writer:
     writer.write(rows)
-
-if writer.skipped:
-    print(f"⏭️  Già prodotto — versione: {writer.version}")
-else:
-    print(f"✅ {writer.dataset_id}@{writer.version} scritto.")
+    

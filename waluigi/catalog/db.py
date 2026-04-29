@@ -323,7 +323,22 @@ class CatalogDB:
             print(e)
             return False
 
-    def commit(self, dataset_id: str, version: str, hash: str) -> dict | None:
+    def commit(self, dataset_id: str, version: str) -> dict | None:
+        with self.conn:
+            now = _now()
+            cur = self.conn.execute("""
+                UPDATE versions SET
+                    updatedate = ?, 
+                    status = 'committed'
+                WHERE dataset_id = ? AND version = ? AND status = 'reserved'
+            """, (now, dataset_id, version))
+    
+            if cur.rowcount == 0:
+                return False
+                
+            return True
+
+    def commit_if_different_from_last(self, dataset_id: str, version: str, hash: str) -> dict | None:
         with self.conn:
             # 1. Recuperiamo l'ultima committed
             latest = self.conn.execute("""

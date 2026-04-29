@@ -26,7 +26,7 @@ def start_catalog_server():
         env=test_env
     )
     
-    timeout = 5
+    timeout = 10
     start_time = time.time()
     while True:
         try:

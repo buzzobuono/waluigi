@@ -1,6 +1,5 @@
 from __future__ import annotations
 import os
-import warnings
 import httpx
 import logging
 from typing import Any, Dict, Iterator, List, Union
@@ -82,20 +81,21 @@ class CatalogClient:
     def delete_dataset(self, id: str) -> dict:
         return self._delete(f"/datasets/{id}")
         
-    def produce(self, dataset: DatasetCreateRequest, metadata=None, inputs=None) -> DatasetWriter:
+    def produce(self, dataset: DatasetCreateRequest, metadata: Dict[str, Any] = {}, inputs: List[dict] = []) -> DatasetWriter:
         self.create_dataset(dataset)
-        r = self._post(f"/datasets/{dataset.id}/_reserve", json = { "metadata:": metadata})
-        source = self.get_source(r["source_id"])
+        result = self._post(f"/datasets/{dataset.id}/_reserve", json = { "metadata": metadata})
+        source = self.get_source(result["source_id"])
         connector = ConnectorFactory.get(source["type"], source["config"])
         return DatasetWriter(
             client=self,
             dataset_id=dataset.id,
-            version=r["version"],
-            location=r["location"],
+            version=result["version"],
+            location=result["location"],
             fmt=dataset.format,
             connector=connector,
-            metadata=metadata or {},
-            inputs=inputs or [],
+            metadata=metadata,
+            inputs=inputs,
+            skipped=result["skipped"]
         )
         
     # Commons
@@ -123,7 +123,7 @@ class CatalogClient:
             raise CatalogError("; ".join(messages) if messages else "Unknown error")
         
         if result == "WARN" and messages:
-            warnings.warn(f"[Catalog WARN] {'; '.join(messages)}", CatalogWarning, stacklevel=3)
+            logger.warning(f"{'; '.join(messages)}")
         
         return data
     
@@ -141,6 +141,7 @@ class CatalogClient:
     def _delete(self, path: str, params: dict = None) -> Any:
         return self._unwrap(httpx.delete(f"{self.url}{path}", params=params))
         
+        
 class DatasetWriter:
 
     def __init__(
@@ -151,8 +152,9 @@ class DatasetWriter:
         location: str,
         fmt: DatasetFormat = None,
         connector: BaseConnector = None,
-        metadata: Dict[str, Any] = None,    
-        inputs: List[dict] = None,
+        metadata: Dict[str, Any] = {},    
+        inputs: List[dict] = [],
+        skipped: bool = False    
     ):
         self._client        = client
         self._connector     = connector
@@ -162,22 +164,24 @@ class DatasetWriter:
         self.dataset_id     = dataset_id
         self.version        = version
         self.inputs         = inputs or []
-        self.skipped        = False
+        self.skipped        = skipped
         
     def write(self, data: Tabular) -> int:
+        if self.skipped:
+            return 0
         if self._connector is None:
             raise CatalogError("Connector not initialized")
-        
         return self._connector.write(self._location, self._format, data)
         
     def __enter__(self) -> DatasetWriter:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.skipped:
+            return False
         if exc_type is not None:
             self._fail()
             return False
-
         self._commit()
         return False
 
@@ -200,18 +204,5 @@ class DatasetWriter:
                 "metadata": self.metadata
             },
         )
-
-        self.skipped = result.get("skipped", False)
-
-        if self.skipped:
-            logger.warning(f"Skipped {self.dataset_id} because is equal to the last version")
-            self._cleanup()
-
-    def _cleanup(self):
-        if self._connector is not None:
-            try:
-                self._connector.delete(self._location)
-            except Exception:
-                pass
-                
+        
 catalog = CatalogClient()

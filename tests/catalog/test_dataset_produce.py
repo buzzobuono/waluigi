@@ -41,11 +41,11 @@ def test_produce_dataset_from_local_source(sample_rows):
         description="Sales raw",
         source_id=source_id
     )
-
-    with catalog.produce(dataset) as ctx:
+    
+    metadata = {"rows": len(sample_rows), "source": "SAP_EXTRACT", "date_ref": "2026yyyyyyyy"}
+    with catalog.produce(dataset, metadata) as ctx:
         count = ctx.write(sample_rows)
-        ctx.metadata(rows=count, source="SAP_EXTRACT", date_ref="2026")
-
+        
     assert count == len(sample_rows)
     info = catalog.get_dataset(dataset_id)
     assert info["id"] == dataset_id
@@ -71,10 +71,10 @@ def test_produce_dataset_from_sql_source_sqlite(temp_db_dir, sample_rows):
         source_id=source_id
     )
 
-    with catalog.produce(dataset) as ctx:
+    metadata = {"rows": len(sample_rows), "source": "SAP_EXTRACT", "date_ref": "2026"}
+    with catalog.produce(dataset, metadata) as ctx:
         count = ctx.write(sample_rows)
-        ctx.metadata(rows=count, source="SAP_EXTRACT", date_ref="2026")
-
+        
     assert count == len(sample_rows)
     assert not ctx.skipped
 
@@ -99,10 +99,10 @@ def _test_produce_dataset_from_postgresql(sample_rows):
         source_id=source_id
     )
 
-    with catalog.produce(dataset) as writer:
+    metadata = {"rows": len(sample_rows), "source": "SAP_EXTRACT", "date_ref": "2026"}
+    with catalog.produce(dataset, metadata) as writer:
         writer.write(sample_rows)
-        writer.metadata(source="SAP_EXTRACT", date_ref="2026")
-
+        
     if writer.skipped:
         assert writer.version is not None
     else:
