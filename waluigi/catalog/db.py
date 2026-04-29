@@ -63,7 +63,6 @@ class CatalogDB:
                     dataset_id       TEXT NOT NULL REFERENCES datasets(id),
                     version          TEXT NOT NULL,
                     location         TEXT NOT NULL,
-                    hash             TEXT NOT NULL,
                     status           TEXT NOT NULL DEFAULT 'reserved',
                     username         TEXT NOT NULL,
                     createdate       TEXT NOT NULL,
@@ -304,26 +303,21 @@ class CatalogDB:
             
         return None
 
-     
-    # Dataset Produce
-    
-    def reserve(self, dataset_id: str, version: str, location: str) -> bool:
+    def reserve_version(self, dataset_id: str, version: str, location: str) -> bool:
         now = _now()
         try:
             with self.conn:
                 self.conn.execute("""
                     INSERT INTO versions
-                        (dataset_id, version, location, hash,
-                         status, username, createdate, updatedate)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (dataset_id, version, location, '',
-                      'reserved', _user(), now, now))
+                        (dataset_id, version, location, status, 
+                        username, createdate, updatedate)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (dataset_id, version, location, 'reserved', _user(), now, now))
             return True
         except sqlite3.IntegrityError as e:
-            print(e)
             return False
 
-    def commit(self, dataset_id: str, version: str) -> dict | None:
+    def commit_version(self, dataset_id: str, version: str) -> dict | None:
         with self.conn:
             now = _now()
             cur = self.conn.execute("""
@@ -332,44 +326,32 @@ class CatalogDB:
                     status = 'committed'
                 WHERE dataset_id = ? AND version = ? AND status = 'reserved'
             """, (now, dataset_id, version))
-    
             if cur.rowcount == 0:
                 return False
-                
+            return True
+    
+    def fail_version(self, dataset_id: str, version: str):
+        now = _now()
+        with self.conn:
+            cur = self.conn.execute("""
+                UPDATE versions SET 
+                    updatedate = ?, 
+                    status = 'failed'
+                WHERE dataset_id = ? AND version = ? AND status = 'reserved'
+            """, (now, dataset_id, version))
+            if cur.rowcount == 0:
+                return False
             return True
 
-    def commit_if_different_from_last(self, dataset_id: str, version: str, hash: str) -> dict | None:
+    def delete_version(self, dataset_id: str, version: str) -> dict | None:
         with self.conn:
-            # 1. Recuperiamo l'ultima committed
-            latest = self.conn.execute("""
-                SELECT version, hash FROM versions
-                WHERE dataset_id = ? AND status = 'committed'
-                ORDER BY updatedate DESC LIMIT 1
-            """, (dataset_id,)).fetchone()
-    
-            # 2. Se l'hash è valido e identico, skippiamo
-            if latest and latest["hash"] and latest["hash"] == hash:
-                # Eliminiamo la prenotazione corrente perché inutile
-                self.conn.execute("""
-                    DELETE FROM versions
-                    WHERE dataset_id = ? AND version = ? AND status = 'reserved'
-                """, (dataset_id, version))
-                return {"skipped": True, "version": latest["version"]}
-    
-            # 3. Altrimenti procediamo al commit della nuova versione
-            now = _now()
             cur = self.conn.execute("""
-                UPDATE versions SET
-                    hash = ?,
-                    updatedate = ?, 
-                    status = 'committed'
-                WHERE dataset_id = ? AND version = ? AND status = 'reserved'
-            """, (hash, now, dataset_id, version))
-    
+                DELETE FROM versions
+                    WHERE dataset_id = ? AND version = ?
+            """, (dataset_id, version))    
             if cur.rowcount == 0:
-                return None
-                
-            return {"skipped": False, "version": version}
+                return False
+            return True
                 
     # Version metadata
     
@@ -423,9 +405,6 @@ class CatalogDB:
                 WHERE id = ? AND status != 'deprecated'
             """, (approved_by, now, id))
             return cur.rowcount > 0
-
-    
-    
     
     def commit_virtual(self, dataset_id: str, version: str, source_id: str,
                        location: str, fmt: str,
@@ -443,12 +422,7 @@ class CatalogDB:
                   task_id, job_id, now, now))
         return {"skipped": False, "version": version}
 
-    def fail(self, dataset_id: str, version: str):
-        with self.conn:
-            self.conn.execute("""
-                UPDATE versions SET status = 'failed'
-                WHERE dataset_id = ? AND version = ? AND status = 'reserved'
-            """, (dataset_id, version))
+
 
     def deprecate(self, dataset_id: str, version: str) -> bool:
         with self.conn:

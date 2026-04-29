@@ -168,7 +168,7 @@ def _scan(data_path: str, prefix: str = None) -> int:
                 file_hash = _compute_hash(filepath)
                 schema    = _infer_schema(filepath, fmt)
                 db.create_dataset(dataset_id)
-                db.reserve_version(dataset_id, version, filepath, fmt,
+                db.reserve(dataset_id, version, filepath, fmt,
                            "scanner", "scan")
                 result = db.commit(dataset_id, version, file_hash, None,
                                    {c["name"]: c["physical_type"] for c in schema})
@@ -241,41 +241,6 @@ async def delete_source(id: str):
     if not deleted:
         return ko("Source not found", 404)
     return ok({"id": id})
-
-
-# Routes — Version metadata
-
-@app.get("/datasets/{dataset_id:path}/metadata/{version:path}",
-         tags=["Metadata"],
-         summary="Get all metadata for a version")
-async def get_metadata(dataset_id: str, version: str):
-    if not db.get_version(dataset_id, version):
-        return ko("Version not found", 404)
-    return ok(db.get_metadata(dataset_id, version))
-
-
-@app.post("/datasets/{dataset_id:path}/metadata/{version:path}",
-          tags=["Metadata"],
-          summary="Set a metadata key on a version")
-async def set_metadata(dataset_id: str, version: str,
-                       body: MetadataSetRequest):
-    if not db.get_version(dataset_id, version):
-        return ko("Version not found", 404)
-    if body.key.startswith("sys."):
-        return ko("sys.* keys are reserved for the server", 422)
-    db.set_metadata(dataset_id, version, body.key, body.value)
-    return ok({"key": body.key, "value": body.value})
-
-
-@app.delete("/datasets/{dataset_id:path}/metadata/{version:path}/{key}",
-            tags=["Metadata"],
-            summary="Delete a metadata key from a version")
-async def delete_metadata(dataset_id: str, version: str, key: str):
-    if not db.get_version(dataset_id, version):
-        return ko("Version not found", 404)
-    if not db.delete_metadata(dataset_id, version, key):
-        return ko("Key not found or protected (sys.*)", 404)
-    return ok({"key": key, "deleted": True})
 
 
 # Routes - Versions
@@ -596,33 +561,32 @@ async def dataset_reserve(dataset_id: str, body: ReserveRequest):
         dataset = db.get_dataset(dataset_id)
         if not dataset:
             return ko("Dataset not found", 404)
-        source = db.get_source(dataset["source_id"])
         
         if body and body.metadata:
             existing = db.find_version_by_metadata(dataset_id, body.metadata)
             if existing:
-                msg = f"Skipped {dataset_id} new version creation because of identical metadata to {existing['version']} version"
-                logger.info(msg)
+                logger.info(f"Idempotency hit for {dataset_id} (exact metadata match)")
+                msg = "Skipped - Identical metadata to latest committed version"
                 return warn({
                     "dataset_id": dataset_id,
                     "version":    existing["version"],
-                    "source_id":  source["id"],
-                    "location":   existing["location"],
-                    "skipped":    True    
-                  }, [msg])
-                  
+                    "source_id":  dataset["source_id"],
+                    "location":   existing["location"]
+                  }, msg)
+                
+        source = db.get_source(dataset["source_id"])
+        
         connector = ConnectorFactory.get(source["type"], source["config"])
     
         version = _version_id()
         location = connector.resolve_location(dataset_id, version, dataset["format"], DATA_PATH)
-        if not db.reserve_version(dataset_id, version, location):
+        if not db.reserve(dataset_id, version, location):
             return ko("Version already exists", 409)
         logger.info(f"Reserved {dataset_id}@{version}")
         return ok({"dataset_id": dataset_id,
                    "version":    version,
                    "source_id":  source["id"],    
-                   "location":   location,
-                   "skipped":    False })
+                   "location":   location})
     except Exception as e:
         return ko(str(e), 500)
 
@@ -631,12 +595,15 @@ async def dataset_reserve(dataset_id: str, body: ReserveRequest):
           tags=["Dataset Produce"],
           summary="Commit a reserved version (phase 1 of 2-phase write)")
 async def dataset_commit(dataset_id: str, version: str, body: CommitRequest):
+    # Mantengo la chiamata esplicita al dataset come richiesto
     dataset = db.get_dataset(dataset_id)
     if not dataset:
         return ko("Dataset not found", 404)
+        
     source = db.get_source(dataset["source_id"])
     connector = ConnectorFactory.get(source["type"], source["config"])
     
+    # Recupero la versione riservata
     record = db.get_version(dataset_id, version)
     if not record:
         return ko("Version not found", 404)
@@ -648,46 +615,70 @@ async def dataset_commit(dataset_id: str, version: str, body: CommitRequest):
         return ko(f"Dataset Version not found at: {location}", 422)
 
     try:
-        if not db.commit_version(dataset_id, version +"g"):
-            db.delete_version(dataset_id, version +"g")
-            raise Exception
+        # 1. Calcolo hash (leggero o pesante a seconda del connector)
+        content_hash = connector.checksum(location)
         
+        # 2. Transazione DB per il commit
+        result = db.commit(dataset_id, version, content_hash)
+
+        if result is None:
+            return ko("Dataset version may already be committed", 409)
+
+        # 3. Gestione Idempotenza Fisica (Hash identico)
+        if result["skipped"]:
+            logger.info(f"Skipped {dataset_id}: identical content to {result['version']}")
+            
+            # OPZIONALE: Rimuove i file fisici appena scritti perché duplicati
+            try:
+                connector.delete(location) 
+                logger.info(f"Cleanup: deleted orphaned location {location}")
+            except Exception as cleanup_err:
+                logger.warning(f"Failed to cleanup orphaned location {location}: {cleanup_err}")
+
+            return ok({
+                "dataset_id": dataset_id,
+                "version":    result["version"],
+                "skipped":    True,
+                "reason":     "Identical content to latest committed version"
+            })
+        
+        # 4. Arricchimento (Metadati, Schema, Lineage)
+        # Salviamo i metadati forniti nella commit
         for k, v in (body.metadata or {}).items():
             db.set_metadata(dataset_id, version, k, v)
 
+        # Gestione Schema
         inferred = _infer_schema(location, dataset.get("format", ""))
         db.upsert_schema_columns(dataset_id, inferred)
         diff = db.diff_schema_against_inferred(dataset_id, inferred)
-        
+
+        # Lineage
         if body.inputs:
             db.insert_lineage(dataset_id, version,
                               [_model_dump(i) for i in body.inputs])
 
-        logger.info(f"Committed {dataset_id}@{version}")
+        logger.info(f"Committed {dataset_id}@{version} hash={content_hash[:8]}…")
 
+        # 5. Risposta con gestione Warning/Breaking changes
         all_warnings = diff["breaking"] + diff["warnings"]
         data = {
             "dataset_id": dataset_id,
             "version":    version,
-            "location":   location
+            "location":   location,
+            "hash":       content_hash,
+            "skipped":    False,
         }
         
         if diff["breaking"]:
-            return warn(data, ["Schema breaking changes"] + all_warnings)
+            return warn(data, ["⚠️ Schema breaking changes"] + all_warnings)
         if all_warnings:
             return warn(data, all_warnings)
             
         return ok(data)
 
     except Exception as e:
-        msg = f"Fail to commit {dataset_id}@{version}"
-        logger.error(msg, e)
-        try:
-            connector.delete(location) 
-            logger.info(f"Cleanup: deleted orphaned location {location}")
-        except Exception as cleanup_err:
-            logger.warning(f"Failed to cleanup orphaned location {location}: {cleanup_err}")
-        return ko(msg, 500)
+        logger.error(f"❌ Commit error: {e}")
+        return ko(f"Internal commit error: {str(e)}", 500)
         
 
 @app.post("/datasets/{dataset_id:path}/_fail/{version}",
@@ -697,7 +688,7 @@ async def fail_version(dataset_id: str, version: str):
     record = db.get_version(dataset_id, version)
     if not record:
         return ko("Version not found", 404)
-    db.fail_version(dataset_id, version)
+    db.fail(dataset_id, version)
     return ok({"dataset_id": dataset_id,
                "version":    version,
                "status":     "failed"})
@@ -751,6 +742,42 @@ async def register_virtual(dataset_id: str, body: VirtualRegisterRequest):
         return ko(str(e), 500)
 
 
+# ===========================================================================
+# Routes — Version metadata
+# ===========================================================================
+
+@app.get("/datasets/{dataset_id:path}/metadata/{version:path}",
+         tags=["Metadata"],
+         summary="Get all metadata for a version")
+async def get_metadata(dataset_id: str, version: str):
+    if not db.get_version(dataset_id, version):
+        return ko("Version not found", 404)
+    return ok(db.get_metadata(dataset_id, version))
+
+
+@app.post("/datasets/{dataset_id:path}/metadata/{version:path}",
+          tags=["Metadata"],
+          summary="Set a metadata key on a version")
+async def set_metadata(dataset_id: str, version: str,
+                       body: MetadataSetRequest):
+    if not db.get_version(dataset_id, version):
+        return ko("Version not found", 404)
+    if body.key.startswith("sys."):
+        return ko("sys.* keys are reserved for the server", 422)
+    db.set_metadata(dataset_id, version, body.key, body.value)
+    return ok({"key": body.key, "value": body.value})
+
+
+@app.delete("/datasets/{dataset_id:path}/metadata/{version:path}/{key}",
+            tags=["Metadata"],
+            summary="Delete a metadata key from a version")
+async def delete_metadata(dataset_id: str, version: str, key: str):
+    if not db.get_version(dataset_id, version):
+        return ko("Version not found", 404)
+    if not db.delete_metadata(dataset_id, version, key):
+        return ko("Key not found or protected (sys.*)", 404)
+    return ok({"key": key, "deleted": True})
+
 
 # ===========================================================================
 # Routes — Materialize
@@ -767,7 +794,7 @@ async def materialize(dataset_id: str, body: MaterializeRequest):
         db.create_dataset(dataset_id,
                           display_name=body.display_name,
                           description=body.description)
-        db.reserve_version(dataset_id, version, path,
+        db.reserve(dataset_id, version, path,
                    "csv", body.task_id, body.job_id)
 
         rows, schema_cols = await _fetch_and_write(
@@ -783,7 +810,7 @@ async def materialize(dataset_id: str, body: MaterializeRequest):
                               file_hash, rows, schema_kv)
 
         if result is None:
-            db.fail_version(dataset_id, version)
+            db.fail(dataset_id, version)
             return ko("Commit failed", 409)
 
         if result["skipped"]:
