@@ -81,6 +81,22 @@ class CatalogClient:
     def delete_dataset(self, id: str) -> dict:
         return self._delete(f"/datasets/{id}")
         
+    def resolve(self, dataset_id: str) -> "DatasetReader":
+        dataset  = self.get_dataset(dataset_id)
+        versions = self._get(f"/datasets/{dataset_id}/versions")
+        if not versions:
+            raise CatalogError(f"No committed version found for {dataset_id}")
+        latest   = versions[0]
+        source   = self.get_source(dataset["source_id"])
+        connector = ConnectorFactory.get(source["type"], source["config"])
+        return DatasetReader(
+            dataset_id=dataset_id,
+            version=latest["version"],
+            location=latest["location"],
+            fmt=DatasetFormat(dataset["format"]),
+            connector=connector,
+        )
+
     def produce(self, dataset: DatasetCreateRequest, metadata: Dict[str, Any] = {}, inputs: List[dict] = []) -> DatasetWriter:
         self.create_dataset(dataset)
         result = self._post(f"/datasets/{dataset.id}/_reserve", json = { "metadata": metadata})
@@ -205,4 +221,24 @@ class DatasetWriter:
             },
         )
         
+class DatasetReader:
+
+    def __init__(
+        self,
+        dataset_id: str,
+        version: str,
+        location: str,
+        fmt: DatasetFormat,
+        connector: BaseConnector,
+    ):
+        self.dataset_id = dataset_id
+        self.version    = version
+        self.location   = location
+        self.format     = fmt
+        self._connector = connector
+
+    def read(self) -> Any:
+        return self._connector.read(self.location, self.format)
+
+
 catalog = CatalogClient()

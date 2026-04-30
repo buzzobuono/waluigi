@@ -277,7 +277,15 @@ class CatalogDB:
             WHERE dataset_id = ? AND version = ?
         """, (dataset_id, version))
         return _version(cur.fetchone())
-        
+
+    def get_latest_version(self, dataset_id: str) -> dict | None:
+        cur = self.conn.execute("""
+            SELECT * FROM versions
+            WHERE dataset_id = ? AND status = 'committed'
+            ORDER BY updatedate DESC LIMIT 1
+        """, (dataset_id,))
+        return self._row(cur.fetchone())
+     
     def find_version_by_metadata(self, dataset_id: str, metadata: dict) -> dict | None:
         if metadata is None:
             return None
@@ -431,17 +439,6 @@ class CatalogDB:
                 WHERE dataset_id = ? AND version = ?
             """, (dataset_id, version))
             return cur.rowcount > 0
-
-    
-    def get_latest(self, dataset_id: str) -> dict | None:
-        cur = self.conn.execute("""
-            SELECT v.*, s.type AS source_type, s.config AS source_config
-            FROM versions v
-            LEFT JOIN sources s ON s.id = v.source_id
-            WHERE v.dataset_id = ? AND v.status = 'committed'
-            ORDER BY v.committed_at DESC LIMIT 1
-        """, (dataset_id,))
-        return self._row(cur.fetchone())
         
                
     # ------------------------------------------------------------------

@@ -400,7 +400,7 @@ async def delete_source(id: str):
 @app.get("/datasets/{dataset_id:path}/resolve", tags=["Versions"],
          summary="Resolve connection info for the latest committed version")
 async def resolve(dataset_id: str):
-    latest = db.get_latest(dataset_id)
+    latest = db.get_latest_version(dataset_id)
     if not latest:
         return ko("Dataset not found or no committed version", 404)
 
@@ -464,7 +464,7 @@ async def resolve(dataset_id: str):
 async def get_lineage(dataset_id: str,
                       version: str):
     record = (db.get_version(dataset_id, version) if version
-              else db.get_latest(dataset_id))
+              else db.get_latest_version(dataset_id))
     if not record:
         return ko("Dataset version not found", 404)
 
@@ -648,8 +648,8 @@ async def dataset_commit(dataset_id: str, version: str, body: CommitRequest):
         return ko(f"Dataset Version not found at: {location}", 422)
 
     try:
-        if not db.commit_version(dataset_id, version +"g"):
-            db.delete_version(dataset_id, version +"g")
+        if not db.commit_version(dataset_id, version):
+            db.delete_version(dataset_id, version)
             raise Exception
         
         for k, v in (body.metadata or {}).items():

@@ -36,4 +36,6 @@ metadata = { "source": "SAP_EXTRACT", "date_ref": "2026" }
 
 with catalog.produce(dataset, metadata) as writer:
     writer.write(rows)
-    
+
+result = catalog._get(f"/datasets/{dataset_id}/resolve")
+print(result)

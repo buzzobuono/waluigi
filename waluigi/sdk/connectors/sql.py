@@ -50,7 +50,8 @@ class SQLConnector(BaseConnector):
             conn.commit()
 
     def read(self, location: str, format: DatasetFormat) -> Any:
-        return pd.read_sql_table(*self._split(location), con=self._engine)
+        schema, table = self._split(location)
+        return pd.read_sql_table(table, con=self._engine, schema=schema)
 
     def _split(self, location: str):
         """Restituisce (schema, table) da schema.table o (None, table)."""
