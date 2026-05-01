@@ -78,22 +78,51 @@ class LocalConnector(BaseConnector):
         if os.path.exists(location):
             os.remove(location)
 
-    def read(self, location: str, format: DatasetFormat) -> Any:
+    def read(self, location: str, format: DatasetFormat,
+             limit: int = None, offset: int = 0) -> Any:
         if format == DatasetFormat.CSV:
+            if limit is not None:
+                skip = range(1, offset + 1) if offset else None
+                return pd.read_csv(location, skiprows=skip, nrows=limit)
             return pd.read_csv(location)
+
         elif format == DatasetFormat.PARQUET:
-            return pd.read_parquet(location)
+            df = pd.read_parquet(location)
+            if limit is not None:
+                return df.iloc[offset: offset + limit]
+            return df
+
         elif format == DatasetFormat.JSON:
             with open(location) as f:
-                return json.load(f)
+                data = json.load(f)
+            if limit is not None and isinstance(data, list):
+                return data[offset: offset + limit]
+            return data
+
         elif format in (DatasetFormat.PKL, DatasetFormat.PICKLE):
             with open(location, "rb") as f:
-                return pickle.load(f)
+                data = pickle.load(f)
+            if limit is not None and isinstance(data, list):
+                return data[offset: offset + limit]
+            return data
+
         elif format in (DatasetFormat.XLS, DatasetFormat.XLSX):
-            return pd.read_excel(location)
+            df = pd.read_excel(location)
+            if limit is not None:
+                return df.iloc[offset: offset + limit]
+            return df
+
         elif format == DatasetFormat.FEATHER:
-            return pd.read_feather(location)
+            df = pd.read_feather(location)
+            if limit is not None:
+                return df.iloc[offset: offset + limit]
+            return df
+
         elif format == DatasetFormat.ORC:
-            return pd.read_orc(location)
+            df = pd.read_orc(location)
+            if limit is not None:
+                return df.iloc[offset: offset + limit]
+            return df
+
         else:
             raise NotImplementedError(f"Format {format} not supported by LocalConnector")

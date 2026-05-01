@@ -285,49 +285,53 @@ async def delete_metadata(dataset_id: str, version: str, key: str):
          summary="Preview rows of Dataset Version")
 async def preview(dataset_id: str, version: str,
                   limit: int = 10, offset: int = 0):
-    
+
     dataset = db.get_dataset(dataset_id)
     if not dataset:
         return ko("Dataset not found", 404)
+
     fmt = (dataset.get("format") or "").lower()
-    
+
     source_id = dataset.get("source_id")
     if not source_id:
-        return ko("Dataset Source not found", 404)
-    source = db.get_source(source_id)
-    version = db.get_version(dataset_id, version)
-    if not version:
-        return ko("Version not found", 404)
-    if source.get("source_type") and source["source_type"] != "local":
-        return ko("Preview only available for local versions", 422)
+        return ko("Dataset has no source", 404)
 
-    location = version["location"]
-    if not os.path.exists(location):
-        return ko(f"File not found: {location}", 404)
+    source = db.get_source(source_id)
+    if not source:
+        return ko(f"Source '{source_id}' not found", 404)
+
+    version_record = db.get_version(dataset_id, version)
+    if not version_record:
+        return ko("Version not found", 404)
+
+    location  = version_record["location"]
+    source_type = source.get("type", "local")
 
     try:
-        if fmt == "csv":
-            df = pd.read_csv(location,
-                             skiprows=range(1, offset + 1),
-                             nrows=limit, dtype=str)
-        elif fmt == "parquet":
-            df = pd.read_parquet(location).iloc[offset: offset + limit]
-        else:
-            return ko(f"Preview not supported for format '{fmt}'", 422)
-
-        clean = [{k: _safe_json_value(v) for k, v in row.items()}
-                 for row in df.to_dict(orient="records")]
-
-        return ok({
-            "dataset_id": dataset_id,
-            "version":    version,
-            "columns":    df.columns.tolist(),
-            "rows":       clean,
-            "pagination": {"limit": limit, "offset": offset,
-                           "count": len(clean)},
-        })
+        connector = ConnectorFactory.get(source_type, source.get("config") or {})
+        result = connector.read(location, fmt, limit=limit, offset=offset)
+    except NotImplementedError as e:
+        return ko(str(e), 422)
     except Exception as e:
-        return ko(str(e), 500)
+        return ko(f"Read error: {e}", 500)
+
+    if isinstance(result, pd.DataFrame):
+        df = result
+    elif isinstance(result, list):
+        df = pd.DataFrame(result)
+    else:
+        return ko(f"Preview not supported for format '{fmt}'", 422)
+
+    clean = [{k: _safe_json_value(v) for k, v in row.items()}
+             for row in df.to_dict(orient="records")]
+
+    return ok({
+        "dataset_id": dataset_id,
+        "version":    version_record["version"],
+        "columns":    df.columns.tolist(),
+        "rows":       clean,
+        "pagination": {"limit": limit, "offset": offset, "count": len(clean)},
+    })
         
 @app.get("/datasets/{dataset_id:path}/versions", tags=["Versions"],
          summary="List all committed versions (newest first)")

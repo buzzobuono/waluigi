@@ -49,9 +49,29 @@ class SQLConnector(BaseConnector):
             conn.execute(text(f'DROP TABLE IF EXISTS {location}'))
             conn.commit()
 
-    def read(self, location: str, format: DatasetFormat) -> Any:
-        schema, table = self._split(location)
-        return pd.read_sql_table(table, con=self._engine, schema=schema)
+    def read(self, location: str, format: DatasetFormat,
+             limit: int = None, offset: int = 0) -> Any:
+        with self._engine.connect() as conn:
+            if self._is_query(location):
+                # Virtual dataset: location is a raw SQL query
+                if limit is not None:
+                    sql = (f"SELECT * FROM ({location}) AS _sub"
+                           f" LIMIT {int(limit)} OFFSET {int(offset)}")
+                else:
+                    sql = location
+                return pd.read_sql(text(sql), conn)
+            else:
+                # Written dataset: location is a table (optionally schema.table)
+                schema, table = self._split(location)
+                if limit is not None:
+                    qualified = f"{schema}.{table}" if schema else table
+                    sql = (f"SELECT * FROM {qualified}"
+                           f" LIMIT {int(limit)} OFFSET {int(offset)}")
+                    return pd.read_sql(text(sql), conn)
+                return pd.read_sql_table(table, con=self._engine, schema=schema)
+
+    def _is_query(self, location: str) -> bool:
+        return location.strip().upper().startswith("SELECT")
 
     def _split(self, location: str):
         """Restituisce (schema, table) da schema.table o (None, table)."""
