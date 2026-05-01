@@ -18,6 +18,14 @@ class CatalogDB:
         self._local  = threading.local()
         self._init()
 
+    @staticmethod
+    def _row(row) -> dict | None:
+        return dict(row) if row is not None else None
+
+    @staticmethod
+    def _rows(cur) -> list[dict]:
+        return [dict(r) for r in cur.fetchall()]
+
     @property
     def conn(self) -> sqlite3.Connection:
         if not hasattr(self._local, "connection"):
@@ -284,7 +292,7 @@ class CatalogDB:
             WHERE dataset_id = ? AND status = 'committed'
             ORDER BY updatedate DESC LIMIT 1
         """, (dataset_id,))
-        return self._row(cur.fetchone())
+        return _version(cur.fetchone())
      
     def find_version_by_metadata(self, dataset_id: str, metadata: dict) -> dict | None:
         if metadata is None:
