@@ -1,9 +1,11 @@
-import BasePage    from './BasePage.js';
-import BasePanel   from './BasePanel.js';
-import BaseTable   from './BaseTable.js';
-import BaseButton  from './BaseButton.js';
-import BaseModal   from './BaseModal.js';
-import BaseInput   from './BaseInput.js';
+import BasePage       from './BasePage.js';
+import BasePanel      from './BasePanel.js';
+import BaseTable      from './BaseTable.js';
+import BaseButton     from './BaseButton.js';
+import BaseButtonGroup from './BaseButtonGroup.js';
+import BaseModal      from './BaseModal.js';
+import BaseInput      from './BaseInput.js';
+import ConfirmDialog  from './ConfirmDialog.js';
 
 const { ref, computed, onMounted } = Vue;
 
@@ -54,7 +56,7 @@ function buildConfig(rawConfig, type) {
 
 export default {
   name: 'Sources',
-  components: { BasePage, BasePanel, BaseTable, BaseButton, BaseModal, BaseInput },
+  components: { BasePage, BasePanel, BaseTable, BaseButton, BaseButtonGroup, BaseModal, BaseInput, ConfirmDialog },
 
   setup() {
     const sources     = ref([]);
@@ -67,8 +69,7 @@ export default {
     const mode        = ref('create');
 
     const modalRef    = ref(null);
-    const deleteRef   = ref(null);
-    const deleteTarget = ref(null);
+    const confirmRef  = ref(null);
 
     const form = ref({ id: '', type: 'local', description: '', config: {} });
 
@@ -105,7 +106,6 @@ export default {
     }
 
     function onTypeChange() {
-      // Reset config when type changes (only relevant in create mode)
       form.value.config = {};
     }
 
@@ -144,14 +144,12 @@ export default {
 
     function openEdit(src) {
       mode.value = 'edit';
-      // Deep-clone config so edits don't mutate the table data
       form.value = {
         id:          src.id,
         type:        src.type,
         description: src.description || '',
         config:      src.config ? { ...src.config } : {},
       };
-      // Normalise port back to string for the input field
       if (src.type === 'sftp' && form.value.config.port !== undefined) {
         form.value.config.port = String(form.value.config.port);
       }
@@ -191,19 +189,17 @@ export default {
 
     // ── delete ────────────────────────────────────────────────────────────────
 
-    function askDelete(src) {
-      deleteTarget.value = src;
-      deleteRef.value?.open();
-    }
-
-    async function confirmDelete() {
-      if (!deleteTarget.value) return;
-      try {
-        await fetch(`/catalog/sources/${encodeURIComponent(deleteTarget.value.id)}`, { method: 'DELETE' });
-      } catch { /* best-effort */ }
-      deleteRef.value?.close();
-      deleteTarget.value = null;
-      await loadSources();
+    function deleteSource(src) {
+      confirmRef.value.ask(
+        `Delete source "<b>${src.id}</b>"?<br><small class="text-muted">Datasets linked to this source may become unreadable.</small>`,
+        async (ok) => {
+          if (!ok) return;
+          try {
+            await fetch(`/catalog/sources/${encodeURIComponent(src.id)}`, { method: 'DELETE' });
+          } catch { /* best-effort */ }
+          await loadSources();
+        }
+      );
     }
 
     onMounted(loadSources);
@@ -211,10 +207,10 @@ export default {
     return {
       sources, loading, saving, pageError, formError,
       mode, modalTitle,
-      modalRef, deleteRef, deleteTarget,
+      modalRef, confirmRef,
       form, configFields, columns: COLUMNS,
       SOURCE_TYPES, TYPE_COLORS,
-      loadSources, openCreate, openEdit, onTypeChange, submitForm, askDelete, confirmDelete,
+      loadSources, openCreate, openEdit, onTypeChange, submitForm, deleteSource,
     };
   },
 
@@ -262,21 +258,20 @@ export default {
           </template>
 
           <template #cell(actions)="{ item }">
-            <base-button
-              icon="fas fa-pencil-alt"
-              color="outline-secondary"
-              size="sm"
-              title="Edit source"
-              class="mr-1"
-              @click="openEdit(item)"
-            />
-            <base-button
-              icon="fas fa-trash"
-              color="outline-danger"
-              size="sm"
-              title="Delete source"
-              @click="askDelete(item)"
-            />
+            <base-button-group>
+              <base-button
+                icon="fas fa-pencil-alt"
+                color="outline-secondary"
+                title="Edit source"
+                @click="openEdit(item)"
+              />
+              <base-button
+                icon="fas fa-trash"
+                color="outline-danger"
+                title="Delete source"
+                @click="deleteSource(item)"
+              />
+            </base-button-group>
           </template>
 
         </base-table>
@@ -285,7 +280,6 @@ export default {
       <!-- ── Create / Edit modal ────────────────────────────────────────────── -->
       <base-modal ref="modalRef" :title="modalTitle" icon="fa-plug" size="lg">
 
-        <!-- ID: editable only in create mode -->
         <div class="form-group">
           <label class="font-weight-bold">
             ID <span v-if="mode === 'create'" class="text-danger">*</span>
@@ -310,7 +304,6 @@ export default {
           </small>
         </div>
 
-        <!-- Type: only in create mode -->
         <div v-if="mode === 'create'" class="form-group">
           <label class="font-weight-bold">
             Type <span class="text-danger">*</span>
@@ -365,29 +358,7 @@ export default {
         </template>
       </base-modal>
 
-      <!-- ── Confirm delete modal ──────────────────────────────────────────── -->
-      <base-modal ref="deleteRef" title="Delete Source" icon="fa-exclamation-triangle" variant="danger">
-        <p v-if="deleteTarget">
-          Delete source <code>{{ deleteTarget.id }}</code>?
-        </p>
-        <p class="text-muted small mb-0">
-          Datasets linked to this source may become unreadable.
-        </p>
-        <template #footer>
-          <base-button
-            label="Cancel"
-            icon="fas fa-times"
-            color="outline-secondary"
-            @click="deleteRef.close()"
-          />
-          <base-button
-            label="Delete"
-            icon="fas fa-trash"
-            color="danger"
-            @click="confirmDelete"
-          />
-        </template>
-      </base-modal>
+      <confirm-dialog title="Confirm" ref="confirmRef" />
 
     </base-page>
   `,
