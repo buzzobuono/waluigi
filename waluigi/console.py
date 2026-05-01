@@ -26,7 +26,7 @@ BOSS_URL    = args.boss_url.rstrip('/')
 CATALOG_URL = args.catalog_url.rstrip('/')
 STATIC_DIR  = os.path.join(os.getcwd(), "static")
 
-@app.api_route("/boss/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+@app.api_route("/boss/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_boss(request: Request, path: str):
     url = f"{BOSS_URL}/{path}"
     params = dict(request.query_params)
@@ -43,7 +43,7 @@ async def proxy_boss(request: Request, path: str):
         )
     return JSONResponse(content=response.json(), status_code=response.status_code)
     
-@app.api_route("/catalog/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+@app.api_route("/catalog/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_catalog(request: Request, path: str):
     url = f"{CATALOG_URL}/{path}"
     params = dict(request.query_params)
