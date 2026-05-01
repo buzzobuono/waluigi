@@ -29,5 +29,9 @@ class BaseConnector(ABC):
         """Rimuove il dato scritto in location (rollback)."""
 
     @abstractmethod
-    def read(self, location: str, format: DatasetFormat) -> Any:
-        """Legge e restituisce i dati da location."""
+    def read(self, location: str, format: DatasetFormat,
+             limit: int = None, offset: int = 0) -> Any:
+        """Legge e restituisce i dati da location.
+
+        limit/offset abilitano la paginazione: None = leggi tutto.
+        """

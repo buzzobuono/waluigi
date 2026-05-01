@@ -237,8 +237,9 @@ class DatasetReader:
         self.format     = fmt
         self._connector = connector
 
-    def read(self) -> Any:
-        return self._connector.read(self.location, self.format)
+    def read(self, limit: int = None, offset: int = 0) -> Any:
+        return self._connector.read(self.location, self.format,
+                                    limit=limit, offset=offset)
 
 
 catalog = CatalogClient()
