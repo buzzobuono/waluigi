@@ -18,9 +18,9 @@ const CONFIG_FIELDS = {
     { key: 'data_path', label: 'Data Path', placeholder: '/path/to/data' },
   ],
   s3: [
-    { key: 'bucket',       label: 'Bucket',              placeholder: 'my-bucket' },
-    { key: 'endpoint_url', label: 'Endpoint URL (MinIO)', placeholder: 'http://minio:9000' },
-    { key: 'region',       label: 'Region',              placeholder: 'us-east-1' },
+    { key: 'bucket',       label: 'Bucket',               placeholder: 'my-bucket' },
+    { key: 'endpoint_url', label: 'Endpoint URL (MinIO)',  placeholder: 'http://minio:9000' },
+    { key: 'region',       label: 'Region',               placeholder: 'us-east-1' },
   ],
   sql: [
     { key: 'dsn', label: 'DSN', placeholder: 'postgresql://user:pass@host/db' },
@@ -44,27 +44,44 @@ const COLUMNS = [
   { key: 'actions',     label: '', class: 'text-right pr-3' },
 ];
 
+function buildConfig(rawConfig, type) {
+  const config = Object.fromEntries(
+    Object.entries(rawConfig).filter(([, v]) => v && String(v).trim() !== '')
+  );
+  if (type === 'sftp' && config.port) config.port = parseInt(config.port, 10) || 22;
+  return config;
+}
+
 export default {
   name: 'Sources',
   components: { BasePage, BasePanel, BaseTable, BaseButton, BaseModal, BaseInput },
 
   setup() {
-    const sources    = ref([]);
-    const loading    = ref(false);
-    const saving     = ref(false);
-    const pageError  = ref(null);
-    const formError  = ref(null);
+    const sources     = ref([]);
+    const loading     = ref(false);
+    const saving      = ref(false);
+    const pageError   = ref(null);
+    const formError   = ref(null);
 
-    const modalRef   = ref(null);
-    const deleteRef  = ref(null);
+    // 'create' | 'edit'
+    const mode        = ref('create');
+
+    const modalRef    = ref(null);
+    const deleteRef   = ref(null);
     const deleteTarget = ref(null);
 
     const form = ref({ id: '', type: 'local', description: '', config: {} });
 
     const configFields = computed(() => CONFIG_FIELDS[form.value.type] || []);
 
+    const modalTitle = computed(() =>
+      mode.value === 'edit' ? `Edit Source — ${form.value.id}` : 'New Source'
+    );
+
+    // ── load ──────────────────────────────────────────────────────────────────
+
     async function loadSources() {
-      loading.value  = true;
+      loading.value   = true;
       pageError.value = null;
       try {
         const r    = await fetch('/catalog/sources');
@@ -78,13 +95,17 @@ export default {
       }
     }
 
+    // ── create ────────────────────────────────────────────────────────────────
+
     function openCreate() {
-      form.value  = { id: '', type: 'local', description: '', config: {} };
+      mode.value      = 'create';
+      form.value      = { id: '', type: 'local', description: '', config: {} };
       formError.value = null;
       modalRef.value?.open();
     }
 
     function onTypeChange() {
+      // Reset config when type changes (only relevant in create mode)
       form.value.config = {};
     }
 
@@ -93,21 +114,17 @@ export default {
       const id = form.value.id.trim();
       if (!id) { formError.value = 'ID is required.'; return; }
 
-      // Build config, skip empty strings
-      const rawConfig = form.value.config;
-      const config    = Object.fromEntries(
-        Object.entries(rawConfig).filter(([, v]) => v && String(v).trim() !== '')
-      );
-      if (form.value.type === 'sftp' && config.port) {
-        config.port = parseInt(config.port, 10) || 22;
-      }
-
       saving.value = true;
       try {
         const r = await fetch('/catalog/sources', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ id, type: form.value.type, description: form.value.description || '', config }),
+          body:    JSON.stringify({
+            id,
+            type:        form.value.type,
+            description: form.value.description || '',
+            config:      buildConfig(form.value.config, form.value.type),
+          }),
         });
         const json = await r.json();
         if (json.diagnostic?.result === 'KO') {
@@ -122,6 +139,57 @@ export default {
         saving.value = false;
       }
     }
+
+    // ── edit ──────────────────────────────────────────────────────────────────
+
+    function openEdit(src) {
+      mode.value = 'edit';
+      // Deep-clone config so edits don't mutate the table data
+      form.value = {
+        id:          src.id,
+        type:        src.type,
+        description: src.description || '',
+        config:      src.config ? { ...src.config } : {},
+      };
+      // Normalise port back to string for the input field
+      if (src.type === 'sftp' && form.value.config.port !== undefined) {
+        form.value.config.port = String(form.value.config.port);
+      }
+      formError.value = null;
+      modalRef.value?.open();
+    }
+
+    async function submitEdit() {
+      formError.value = null;
+      saving.value    = true;
+      try {
+        const r = await fetch(`/catalog/sources/${encodeURIComponent(form.value.id)}`, {
+          method:  'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            description: form.value.description || '',
+            config:      buildConfig(form.value.config, form.value.type),
+          }),
+        });
+        const json = await r.json();
+        if (json.diagnostic?.result === 'KO') {
+          formError.value = json.diagnostic?.messages?.[0] || `Error ${r.status}`;
+          return;
+        }
+        modalRef.value?.close();
+        await loadSources();
+      } catch (e) {
+        formError.value = e.message;
+      } finally {
+        saving.value = false;
+      }
+    }
+
+    function submitForm() {
+      mode.value === 'edit' ? submitEdit() : submitCreate();
+    }
+
+    // ── delete ────────────────────────────────────────────────────────────────
 
     function askDelete(src) {
       deleteTarget.value = src;
@@ -142,10 +210,11 @@ export default {
 
     return {
       sources, loading, saving, pageError, formError,
+      mode, modalTitle,
       modalRef, deleteRef, deleteTarget,
       form, configFields, columns: COLUMNS,
       SOURCE_TYPES, TYPE_COLORS,
-      loadSources, openCreate, onTypeChange, submitCreate, askDelete, confirmDelete,
+      loadSources, openCreate, openEdit, onTypeChange, submitForm, askDelete, confirmDelete,
     };
   },
 
@@ -194,6 +263,14 @@ export default {
 
           <template #cell(actions)="{ item }">
             <base-button
+              icon="fas fa-pencil-alt"
+              color="outline-secondary"
+              size="sm"
+              title="Edit source"
+              class="mr-1"
+              @click="openEdit(item)"
+            />
+            <base-button
               icon="fas fa-trash"
               color="outline-danger"
               size="sm"
@@ -205,22 +282,36 @@ export default {
         </base-table>
       </base-panel>
 
-      <!-- ── Create modal ─────────────────────────────────────────── -->
-      <base-modal ref="modalRef" title="New Source" icon="fa-plug" size="lg">
+      <!-- ── Create / Edit modal ────────────────────────────────────────────── -->
+      <base-modal ref="modalRef" :title="modalTitle" icon="fa-plug" size="lg">
 
+        <!-- ID: editable only in create mode -->
         <div class="form-group">
           <label class="font-weight-bold">
-            ID <span class="text-danger">*</span>
+            ID <span v-if="mode === 'create'" class="text-danger">*</span>
           </label>
           <base-input
+            v-if="mode === 'create'"
             v-model="form.id"
             placeholder="e.g. pg-dwh, s3-data-lake, local-data"
-            @keyup.enter="submitCreate"
+            @keyup.enter="submitForm"
           />
-          <small class="text-muted">Unique identifier used to reference this source in datasets.</small>
+          <div v-else class="d-flex align-items-center">
+            <code class="mr-2">{{ form.id }}</code>
+            <span :class="['badge', 'badge-' + (TYPE_COLORS[form.type] || 'secondary')]">
+              {{ form.type }}
+            </span>
+          </div>
+          <small v-if="mode === 'create'" class="text-muted">
+            Unique identifier used to reference this source in datasets.
+          </small>
+          <small v-else class="text-muted">
+            ID and type cannot be changed after creation.
+          </small>
         </div>
 
-        <div class="form-group">
+        <!-- Type: only in create mode -->
+        <div v-if="mode === 'create'" class="form-group">
           <label class="font-weight-bold">
             Type <span class="text-danger">*</span>
           </label>
@@ -231,7 +322,11 @@ export default {
 
         <div class="form-group">
           <label class="font-weight-bold">Description</label>
-          <base-input v-model="form.description" placeholder="Optional description" />
+          <base-input
+            v-model="form.description"
+            placeholder="Optional description"
+            @keyup.enter="submitForm"
+          />
         </div>
 
         <template v-if="configFields.length">
@@ -241,7 +336,11 @@ export default {
           </p>
           <div v-for="field in configFields" :key="field.key" class="form-group mb-2">
             <label class="small text-muted mb-1">{{ field.label }}</label>
-            <base-input v-model="form.config[field.key]" :placeholder="field.placeholder" />
+            <base-input
+              v-model="form.config[field.key]"
+              :placeholder="field.placeholder"
+              @keyup.enter="submitForm"
+            />
           </div>
         </template>
 
@@ -257,16 +356,16 @@ export default {
             @click="modalRef.close()"
           />
           <base-button
-            label="Create"
-            icon="fas fa-check"
+            :label="mode === 'edit' ? 'Save' : 'Create'"
+            :icon="mode === 'edit' ? 'fas fa-save' : 'fas fa-check'"
             color="primary"
             :loading="saving"
-            @click="submitCreate"
+            @click="submitForm"
           />
         </template>
       </base-modal>
 
-      <!-- ── Confirm delete modal ──────────────────────────────────── -->
+      <!-- ── Confirm delete modal ──────────────────────────────────────────── -->
       <base-modal ref="deleteRef" title="Delete Source" icon="fa-exclamation-triangle" variant="danger">
         <p v-if="deleteTarget">
           Delete source <code>{{ deleteTarget.id }}</code>?
