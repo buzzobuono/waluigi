@@ -22,6 +22,16 @@ async function _postJson(url, data) {
   return r.json();
 }
 
+async function _patchJson(url, data) {
+  const r = await fetch(url, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!r.ok) throw new Error(`PATCH ${url} → ${r.status}`);
+  return r.json();
+}
+
 async function _delete(url) {
   const r = await fetch(url, { method: 'DELETE' });
   if (!r.ok) throw new Error(`DELETE ${url} → ${r.status}`);
@@ -50,6 +60,7 @@ export const api = {
   
   catalogSources:       ()      => _get('/catalog/sources'),
   catalogCreateSource:  (body)  => _postJson('/catalog/sources', body),
+  catalogUpdateSource:  (id, body) => _patchJson(`/catalog/sources/${_enc(id)}`, body),
   catalogDeleteSource:  (id)    => _delete(`/catalog/sources/${_enc(id)}`),
 
   catalogFolders:  (prefix) => _get(`/catalog/folders/${_enc(prefix)}/`),
