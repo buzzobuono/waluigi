@@ -12,6 +12,16 @@ async function _post(url) {
   return r.json();
 }
 
+async function _postJson(url, data) {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!r.ok) throw new Error(`POST ${url} → ${r.status}`);
+  return r.json();
+}
+
 async function _delete(url) {
   const r = await fetch(url, { method: 'DELETE' });
   if (!r.ok) throw new Error(`DELETE ${url} → ${r.status}`);
@@ -38,6 +48,10 @@ export const api = {
 
   resources: () => _get('/boss/api/resources'),
   
+  catalogSources:       ()      => _get('/catalog/sources'),
+  catalogCreateSource:  (body)  => _postJson('/catalog/sources', body),
+  catalogDeleteSource:  (id)    => _delete(`/catalog/sources/${_enc(id)}`),
+
   catalogFolders:  (prefix) => _get(`/catalog/folders/${_enc(prefix)}/`),
   catalogDatasetVersions:  (id) => _get(`/catalog/datasets/${_enc(id)}/versions`),
   catalogDatasetMetadata: (id, ver) => _get(`/catalog/datasets/${_enc(id)}/metadata/${_enc(ver)}`),
