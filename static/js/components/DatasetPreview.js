@@ -13,11 +13,19 @@ export default {
     const route = VueRouter.useRoute();
     const router = VueRouter.useRouter();
 
-    const columns  = Vue.ref([]);
-    const rows     = Vue.ref([]);
-    const loading  = Vue.ref(false);
-    const error    = Vue.ref(null);
-    const metadata = Vue.ref({});
+    const columns       = Vue.ref([]);
+    const rows          = Vue.ref([]);
+    const loading       = Vue.ref(false);
+    const error         = Vue.ref(null);
+    const metadata      = Vue.ref({});
+    const schema        = Vue.ref([]);
+    const schemaColumns = [
+      { key: 'column_name', label: 'Column' },
+      { key: 'physical_type', label: 'Type' },
+      { key: 'description', label: 'Description' },
+      { key: 'pii', label: 'PII' },
+      { key: 'status', label: 'Status' },
+    ];
     const currentPage = Vue.ref(1);
     const pageSize    = Vue.ref(10);
 
@@ -43,10 +51,14 @@ export default {
       try {
         const limit = pageSize.value;
         const offset = (currentPage.value - 1) * limit;
-        const [previewRes, metaRes] = await Promise.all([
+        const isFirstPage = currentPage.value === 1;
+        const requests = [
           api.catalogDatasetPreview(id, version, limit, offset),
           api.catalogDatasetMetadata(id, version),
-        ]);
+        ];
+        if (isFirstPage) requests.push(api.catalogDatasetSchema(id));
+
+        const [previewRes, metaRes, schemaRes] = await Promise.all(requests);
 
         columns.value = (previewRes.data.columns || []).map(col => ({
           key: col,
@@ -54,6 +66,7 @@ export default {
         }));
         rows.value     = previewRes.data.rows || [];
         metadata.value = metaRes.data || {};
+        if (schemaRes) schema.value = schemaRes.data?.columns || [];
       } catch (e) {
         console.error("Preview load error:", e);
         error.value = "Loading error: " + e.message;
@@ -82,7 +95,7 @@ export default {
     Vue.onMounted(loadPreview);
 
     return {
-      columns, rows, loading, error, params, metadata,
+      columns, rows, loading, error, params, metadata, schema, schemaColumns,
       currentPage, changePage, goBack
     };
   },
@@ -173,6 +186,20 @@ export default {
             <span class="ml-2">{{ val }}</span>
           </div>
         </div>
+      </base-panel>
+
+      <base-panel v-if="schema.length" title="Schema" :no-padding="true">
+        <base-table :columns="schemaColumns" :items="schema">
+          <template #cell(pii)="{ item }">
+            <span v-if="item.pii" class="badge badge-danger">PII</span>
+            <span v-else class="text-muted">—</span>
+          </template>
+          <template #cell(status)="{ item }">
+            <span :class="['badge', item.status === 'published' ? 'badge-success' : 'badge-secondary']">
+              {{ item.status }}
+            </span>
+          </template>
+        </base-table>
       </base-panel>
 
     </base-page>

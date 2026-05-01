@@ -484,7 +484,7 @@ async def get_lineage(dataset_id: str,
 @app.get("/datasets/{dataset_id:path}/schema", tags=["Schema"],
          summary="Get current schema with PII flags and status per column")
 async def get_schema(dataset_id: str):
-    if not db.dataset_exists(dataset_id):
+    if not db.exists_dataset(dataset_id):
         return ko("Dataset not found", 404)
     columns   = db.get_schema(dataset_id)
     pii_count = sum(1 for c in columns if c.get("pii"))
@@ -517,7 +517,7 @@ async def get_schema(dataset_id: str):
 async def patch_schema_column(dataset_id: str, column_name: str,
                                body: SchemaColumnPatch,
                                editor: str = Query("anonymous")):
-    if not db.dataset_exists(dataset_id):
+    if not db.exists_dataset(dataset_id):
         return ko("Dataset not found", 404)
     updates = _model_dump(body)
     updated = db.update_schema_column(dataset_id, column_name,
@@ -539,7 +539,7 @@ async def patch_schema_column(dataset_id: str, column_name: str,
           tags=["Schema"],
           summary="Publish schema — promotes all columns to 'published'")
 async def publish_schema(dataset_id: str, body: SchemaPublishRequest):
-    if not db.dataset_exists(dataset_id):
+    if not db.exists_dataset(dataset_id):
         return ko("Dataset not found", 404)
     result = db.publish_schema(dataset_id, body.published_by)
     msgs   = result["breaking_changes"] + result["warnings"]
@@ -561,7 +561,7 @@ async def publish_schema(dataset_id: str, body: SchemaPublishRequest):
           tags=["Datasets Status"],
           summary="Approve a dataset — marks it as reviewed and publishes its schema")
 async def approve_dataset(dataset_id: str, body: ApproveRequest):
-    dataset = db.dataset_exists(dataset_id)
+    dataset = db.get_dataset(dataset_id)
     if not dataset:
         return ko("Dataset not found", 404)
     if dataset.get("status") == "deprecated":
