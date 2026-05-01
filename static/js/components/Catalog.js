@@ -26,7 +26,6 @@ export default {
     const columns_history = [
       { key: 'version', label: 'Version' },
       { key: 'hash', label: 'Hash' },
-      { key: 'metadata', label: 'Metadata' },
       { key: 'status', label: 'Status' },
       { key: 'actions', label: 'Actions' }
     ];
@@ -45,7 +44,8 @@ export default {
     const selFolder      = Vue.ref(null);
     const selDataset      = Vue.ref(null); // selected dataset id
     const history    = Vue.ref([]);
-    const metadata   = Vue.ref({});
+    const metadata         = Vue.ref({});
+    const selectedVersion  = Vue.ref(null);
     const detailOpen = Vue.ref(false);
 
     const currentFolder = computed(() =>
@@ -118,16 +118,29 @@ export default {
     }
 
     async function loadDataset(folder, dataset) {
-      selFolder.value  = folder;
-      selDataset.value = dataset;
-      detailOpen.value = true;
-      history.value    = [];
+      selFolder.value       = folder;
+      selDataset.value      = dataset;
+      detailOpen.value      = true;
+      history.value         = [];
+      selectedVersion.value = null;
+      metadata.value        = {};
 
       try {
         const res = await api.catalogDatasetVersions(dataset);
         history.value = Array.isArray(res.data) ? res.data : [];
       } catch(e) {
         console.error('Dataset detail error', e);
+      }
+    }
+
+    async function selectVersion(ver) {
+      selectedVersion.value = ver.version;
+      metadata.value = {};
+      try {
+        const res = await api.catalogDatasetMetadata(selDataset.value, ver.version);
+        metadata.value = res.data || {};
+      } catch(e) {
+        console.error('Metadata load error', e);
       }
     }
 
@@ -214,8 +227,9 @@ export default {
     return {
       columns, items, folderStack, children, datasets, loading,
       selFolder, selDataset, columns_history, history, metadata, detailOpen,
-      currentFolder,
-      navigateTo, navigateBreadcrumb, openDataset, closeDetail, goBack, materializeRef,
+      selectedVersion, currentFolder,
+      navigateTo, navigateBreadcrumb, openDataset, closeDetail, goBack,
+      selectVersion, materializeRef,
     };
   },
 
@@ -245,7 +259,7 @@ export default {
         :no-padding="true">
   
         <template #title>
-          <ol class="breadcrumb" style="background:transparent; padding:0;">
+          <ol class="breadcrumb bg-transparent p-0">
             <li class="breadcrumb-item">
               <a href="#" @click.prevent="navigateBreadcrumb(-1)">🏠</a>
             </li>
@@ -309,8 +323,7 @@ export default {
         <template #title>
           <div class="d-flex align-items-center">
             <i class="fas fa-table mr-2"></i>
-            <span style="color:#aaa; font-size:0.85em;">{{ selNs }}/</span>
-            <code style="color:#00d4ff;">{{ selDataset }}</code>
+            <code class="text-info">{{ selDataset }}</code>
           </div>
         </template>
   
@@ -326,6 +339,13 @@ export default {
           :columns="columns_history" 
           :items="history">
   
+           <template #cell(version)="{ item }">
+             <a href="#" @click.prevent="selectVersion(item)"
+                :class="selectedVersion === item.version ? 'font-weight-bold text-primary' : ''">
+               {{ item.version.slice(0, 19) }}
+             </a>
+           </template>
+
            <template #cell(hash)="{ item }" >
              {{ item.hash ? item.hash.slice(0,8) : '—' }}
            </template>
@@ -355,20 +375,17 @@ export default {
   
         </base-table>
   
-        <div class="card card-outline">
-          <div class="card-body p-0">
-
-            <!-- Custom metadata -->
-            <div v-if="Object.keys(metadata).length"
-                 class="p-3" style="border-bottom:1px solid #3a005a;">
-              <h6 style="color:#d080ff; margin-bottom:8px;">Custom Metadata</h6>
-              <div v-for="(val, key) in metadata" :key="key"
-                   style="font-size:0.85em; margin-bottom:4px;">
-                <span style="color:#aaa;">{{ key }}:</span>
-                <span class="ml-2">{{ val }}</span>
-              </div>
-            </div>
-
+        <div v-if="selectedVersion" class="p-3 border-top">
+          <h6 class="text-muted mb-2">
+            Metadata
+            <small class="ml-2 font-weight-normal text-secondary">{{ selectedVersion.slice(0,19) }}</small>
+          </h6>
+          <div v-if="!Object.keys(metadata).length" class="text-muted small">
+            No metadata for this version.
+          </div>
+          <div v-for="(val, key) in metadata" :key="key" class="small mb-1">
+            <span class="text-muted">{{ key }}:</span>
+            <span class="ml-2">{{ val }}</span>
           </div>
         </div>
   

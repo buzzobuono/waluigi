@@ -13,10 +13,11 @@ export default {
     const route = VueRouter.useRoute();
     const router = VueRouter.useRouter();
 
-    const columns = Vue.ref([]);
-    const rows    = Vue.ref([]);
-    const loading = Vue.ref(false);
-    const error   = Vue.ref(null);
+    const columns  = Vue.ref([]);
+    const rows     = Vue.ref([]);
+    const loading  = Vue.ref(false);
+    const error    = Vue.ref(null);
+    const metadata = Vue.ref({});
     const currentPage = Vue.ref(1);
     const pageSize    = Vue.ref(10);
 
@@ -42,13 +43,17 @@ export default {
       try {
         const limit = pageSize.value;
         const offset = (currentPage.value - 1) * limit;
-        const response = await api.catalogDatasetPreview(id, version, limit, offset);
-        
-        columns.value = (response.data.columns || []).map(col => ({
+        const [previewRes, metaRes] = await Promise.all([
+          api.catalogDatasetPreview(id, version, limit, offset),
+          api.catalogDatasetMetadata(id, version),
+        ]);
+
+        columns.value = (previewRes.data.columns || []).map(col => ({
           key: col,
           label: col
         }));
-        rows.value    = response.data.rows || [];
+        rows.value     = previewRes.data.rows || [];
+        metadata.value = metaRes.data || {};
       } catch (e) {
         console.error("Preview load error:", e);
         error.value = "Loading error: " + e.message;
@@ -76,8 +81,8 @@ export default {
 
     Vue.onMounted(loadPreview);
 
-    return { 
-      columns, rows, loading, error, params, 
+    return {
+      columns, rows, loading, error, params, metadata,
       currentPage, changePage, goBack
     };
   },
@@ -103,9 +108,7 @@ export default {
         <template #title>
           <i class="fas fa-table mr-2 text-warning"></i>
           <span class="font-weight-bold">Data Preview: </span>
-          <span class="ns-header-yellow ml-1 font-weight-bold" style="font-size: 1.1em; font-family: monospace;">
-              {{ params.id }}
-          </span>
+          <code class="ml-1 text-warning">{{ params.id }}</code>
         </template>
 
         <template #tools>
@@ -163,6 +166,15 @@ export default {
         
       </base-panel>
 
-    </base-page >
+      <base-panel v-if="Object.keys(metadata).length" title="Metadata">
+        <div class="p-3">
+          <div v-for="(val, key) in metadata" :key="key" class="small mb-1">
+            <span class="text-muted">{{ key }}:</span>
+            <span class="ml-2">{{ val }}</span>
+          </div>
+        </div>
+      </base-panel>
+
+    </base-page>
   `
 };
