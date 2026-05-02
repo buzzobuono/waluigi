@@ -140,6 +140,7 @@ export default {
         const res = await api.catalogDatasetMetadata(selDataset.value, ver.version);
         metadata.value = res.data || {};
       } catch(e) {
+        alert(e)
         console.error('Metadata load error', e);
       }
     }

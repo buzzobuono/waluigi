@@ -25,7 +25,7 @@ const CONFIG_FIELDS = {
     { key: 'region',       label: 'Region',               placeholder: 'us-east-1' },
   ],
   sql: [
-    { key: 'dsn', label: 'DSN', placeholder: 'postgresql://user:pass@host/db' },
+    { key: 'url', label: 'url', placeholder: 'postgresql://user:pass@host/db' },
   ],
   sftp: [
     { key: 'host',     label: 'Host',     placeholder: 'sftp.example.com' },

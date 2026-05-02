@@ -37,3 +37,31 @@ print(f"location   : {reader.location}")
 print(f"format     : {reader.format}")
 data = reader.read()
 print(data)
+
+
+source_id  = "local"
+dataset_id = "sales/raw/sales_raw_local"
+
+# Assicura che source e dataset esistano (idempotente)
+source = SourceCreateRequest(
+    id=source_id,
+    type=SourceType.LOCAL,
+    description="Local source"
+)
+catalog.create_source(source)
+
+dataset = DatasetCreateRequest(
+    id=dataset_id,
+    format=DatasetFormat.CSV,
+    description="Sales raw",
+    source_id=source_id
+)
+
+rows = [
+    {"date": "2026", "product": "A", "quantity": 11, "revenue": 100.0},
+    {"date": "2026", "product": "B", "quantity": 25, "revenue": 250.0},
+]
+metadata = {"source": "SAP_EXTRACT", "date_ref": "2026"}
+
+with catalog.produce(dataset, metadata) as writer:
+    writer.write(rows)

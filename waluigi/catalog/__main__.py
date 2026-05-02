@@ -209,7 +209,6 @@ async def list_sources():
           status_code=200)
 async def create_source(body: SourceCreateRequest):
     existing = db.get_source(body.id)
-    logger.info("ghhuh")
     if existing and existing["type"] != body.type:
         return ko(f"Cannot change source type from '{existing['type']}' to '{body.type.value}' — create a new source instead", 409)
     db.upsert_source(body.id, body.type, body.config, body.description)
@@ -243,9 +242,9 @@ async def delete_source(id: str):
     return ok({"id": id})
 
 
-# Routes — Version metadata
+# Routes — Version Metadata
 
-@app.get("/datasets/{dataset_id:path}/metadata/{version:path}",
+@app.get("/datasets/{dataset_id:path}/versions/{version}/metadata",
          tags=["Metadata"],
          summary="Get all metadata for a version")
 async def get_metadata(dataset_id: str, version: str):
@@ -254,7 +253,7 @@ async def get_metadata(dataset_id: str, version: str):
     return ok(db.get_metadata(dataset_id, version))
 
 
-@app.post("/datasets/{dataset_id:path}/metadata/{version:path}",
+@app.post("/datasets/{dataset_id:path}/versions/{version}/metadata",
           tags=["Metadata"],
           summary="Set a metadata key on a version")
 async def set_metadata(dataset_id: str, version: str,
@@ -267,7 +266,7 @@ async def set_metadata(dataset_id: str, version: str,
     return ok({"key": body.key, "value": body.value})
 
 
-@app.delete("/datasets/{dataset_id:path}/metadata/{version:path}/{key}",
+@app.delete("/datasets/{dataset_id:path}/versions/{version}/metadata/{key}",
             tags=["Metadata"],
             summary="Delete a metadata key from a version")
 async def delete_metadata(dataset_id: str, version: str, key: str):
@@ -340,146 +339,7 @@ async def list_versions(dataset_id: str):
         return ko("Dataset not found", 404)
     return ok(db.list_versions(dataset_id))
 
-# Routes - Datasets
-
-@app.get("/datasets", tags=["Datasets"],
-    summary="Find datasets",
-    description="status: draft | in_review | approved | deprecated"
-)
-async def find_datasets(status: DatasetStatus | None = Query(default=None, example=DatasetStatus.DRAFT), 
-                        description: str | None = Query(default=None, example="sales dataset")):
-    if not status and not description:
-        return ok(db.list_datasets())
-    return ok(db.find_datasets(status=status, description=description))
-
-
-@app.post("/datasets", tags=["Datasets"],
-          summary="Register a new dataset",
-          status_code=201)
-async def create_dataset(body: DatasetCreateRequest):
-    if body.source_id and not db.exists_source(body.source_id):
-        return ko("Source not found", 404)
-    if body.id.startswith("/"):
-        return ko("Dataset 'id' not valid", 400)
-    existing = db.get_dataset(body.id)
-    if existing and existing["format"] != body.format:
-        return ko(f"Cannot change format from '{existing['format']}' to '{body.format.value}' — create a new dataset instead", 409)
-    created = db.create_dataset(body.id, body.format, body.description, body.source_id)
-    #if not created:
-    #    return ko(f"Dataset '{body.id}' already exists", 409)
-    return ok(db.get_dataset(body.id))
-
-@app.get("/datasets/{id:path}", tags=["Datasets"],
-           summary="Get a dataset details")
-async def get_dataset(id: str):
-    dataset = db.get_dataset(id)
-    if not dataset:
-        return ko("Dataset not found", 404)
-    msgs = []
-    if dataset.get("status") != "approved":
-        msgs.append(f"Dataset status is '{dataset.get('status')}' — not yet approved")
-    return warn(dataset, msgs) if msgs else ok(dataset)
-
-
-@app.patch("/datasets/{id:path}", tags=["Datasets"],
-           summary="Update a dataset")
-async def update_dataset(id: str, body: DatasetUpdateRequest):
-    updated = db.update_dataset(id, **_model_dump(body))
-    if not updated:
-        return ko("Dataset not found", 404)
-    return ok(db.get_dataset(id))
-
-
-@app.delete("/datasets/{id:path}", tags=["Datasets"],
-            summary="Delete a dataset")
-async def delete_source(id: str):
-    deleted = db.delete_dataset(id)
-    if not deleted:
-        return ko("Dataset not found", 404)
-    return ok({"id": id, "deleted": True})
-        
-######
-
-
-@app.get("/datasets/{dataset_id:path}/resolve", tags=["Versions"],
-         summary="Resolve connection info for the latest committed version")
-async def resolve(dataset_id: str):
-    latest = db.get_latest_version(dataset_id)
-    if not latest:
-        return ko("Dataset not found or no committed version", 404)
-
-    source_type = latest.get("source_type") or "local"
-    source_cfg  = latest.get("source_config") or {}
-
-    if source_type == "local":
-        connection_info = {"path": latest["location"]}
-    elif source_type == "s3":
-        connection_info = {
-            "uri":          latest["location"],
-            "endpoint_url": source_cfg.get("endpoint_url"),
-            "region":       source_cfg.get("region"),
-        }
-    elif source_type == "sql":
-        connection_info = {
-            "dsn":   source_cfg.get("dsn"),
-            "query": latest["location"],
-        }
-    elif source_type == "sftp":
-        connection_info = {
-            "host":        source_cfg.get("host"),
-            "port":        source_cfg.get("port", 22),
-            "remote_path": latest["location"],
-        }
-    else:
-        connection_info = {"url": latest["location"]}
-
-    schema    = db.get_schema(dataset_id)
-    pii_cols  = [c["column_name"] for c in schema if c.get("pii")]
-
-    data = {
-        "dataset_id":      dataset_id,
-        "version":         latest["version"],
-        "source_type":     source_type,
-        "format":          latest.get("format"),
-        "rows":            latest.get("rows"),
-        "committed_at":    latest.get("committed_at"),
-        "connection_info": connection_info,
-        "schema_status":   schema[0]["status"] if schema else None,
-        "pii_columns":     pii_cols,
-    }
-
-    msgs = []
-    if latest_dataset := db.get_dataset(dataset_id):
-        ds_status = latest_dataset.get("status", "draft")
-        data["dataset_status"]  = ds_status
-        data["approved_by"]     = latest_dataset.get("approved_by")
-        data["approved_at"]     = latest_dataset.get("approved_at")
-        if ds_status != "approved":
-            msgs.append(
-                f"Dataset status is '{ds_status}' — "
-                "schema has not been approved by a data steward")
-    if pii_cols:
-        msgs.append(f"Dataset contains PII columns: {', '.join(pii_cols)}")
-    return warn(data, msgs) if msgs else ok(data)
-
-
-@app.get("/datasets/{dataset_id:path}/lineage/{version}", tags=["Lineage"],
-         summary="Get upstream and downstream lineage")
-async def get_lineage(dataset_id: str,
-                      version: str):
-    record = (db.get_version(dataset_id, version) if version
-              else db.get_latest_version(dataset_id))
-    if not record:
-        return ko("Dataset version not found", 404)
-
-    ver = record["version"]
-    return ok({
-        "dataset_id": dataset_id,
-        "version":    ver,
-        "upstream":   db.get_upstream(dataset_id, ver),
-        "downstream": db.get_downstream(dataset_id, ver),
-    })
-
+# Routes - Datasets Schema
 
 @app.get("/datasets/{dataset_id:path}/schema", tags=["Schema"],
          summary="Get current schema with PII flags and status per column")
@@ -541,18 +401,90 @@ async def patch_schema_column(dataset_id: str, column_name: str,
 async def publish_schema(dataset_id: str, body: SchemaPublishRequest):
     if not db.exists_dataset(dataset_id):
         return ko("Dataset not found", 404)
-    result = db.publish_schema(dataset_id, body.published_by)
-    msgs   = result["breaking_changes"] + result["warnings"]
-    data   = {
-        "dataset_id":      dataset_id,
-        "published_at":    result["published_at"],
-        "published_by":    body.published_by,
-        "breaking_changes": result["breaking_changes"],
-        "warnings":        result["warnings"],
-    }
-    if result["breaking_changes"]:
-        return warn(data, ["⚠️ Breaking changes vs previous schema"] + msgs)
-    return warn(data, msgs) if msgs else ok(data)
+    db.publish_schema(dataset_id, body.published_by)
+    return ok({"dataset_id" : dataset_id})
+
+# Routes - Datasets
+
+@app.get("/datasets", tags=["Datasets"],
+    summary="Find datasets",
+    description="status: draft | in_review | approved | deprecated"
+)
+async def find_datasets(status: DatasetStatus | None = Query(default=None, example=DatasetStatus.DRAFT), 
+                        description: str | None = Query(default=None, example="sales dataset")):
+    if not status and not description:
+        return ok(db.list_datasets())
+    return ok(db.find_datasets(status=status, description=description))
+
+
+@app.post("/datasets", tags=["Datasets"],
+          summary="Register a new dataset",
+          status_code=201)
+async def create_dataset(body: DatasetCreateRequest):
+    if body.source_id and not db.exists_source(body.source_id):
+        return ko("Source not found", 404)
+    if body.id.startswith("/"):
+        return ko("Dataset 'id' not valid", 400)
+    existing = db.get_dataset(body.id)
+    if existing and existing["format"] != body.format:
+        return ko(f"Cannot change format from '{existing['format']}' to '{body.format.value}' — create a new dataset instead", 409)
+    created = db.create_dataset(body.id, body.format, body.description, body.source_id)
+    # FIX ME gestire upsert in db.py analogogamemte a come fatto in source
+    #if not created:
+    #    return ko(f"Dataset '{body.id}' already exists", 409)
+    return ok(db.get_dataset(body.id))
+
+@app.get("/datasets/{id:path}", tags=["Datasets"],
+           summary="Get a dataset details")
+async def get_dataset(id: str):
+    dataset = db.get_dataset(id)
+    if not dataset:
+        return ko("Dataset not found", 404)
+    msgs = []
+    if dataset.get("status") != "approved":
+        msgs.append(f"Dataset status is '{dataset.get('status')}' — not yet approved")
+    return warn(dataset, msgs) if msgs else ok(dataset)
+
+
+@app.patch("/datasets/{id:path}", tags=["Datasets"],
+           summary="Update a dataset")
+async def update_dataset(id: str, body: DatasetUpdateRequest):
+    updated = db.update_dataset(id, **_model_dump(body))
+    if not updated:
+        return ko("Dataset not found", 404)
+    return ok(db.get_dataset(id))
+
+
+@app.delete("/datasets/{id:path}", tags=["Datasets"],
+            summary="Delete a dataset")
+async def delete_source(id: str):
+    deleted = db.delete_dataset(id)
+    ## Fix: loop su tutte le versioni di questo dataset e esegue la cancellazione anche delle vesioni
+    # la cancellazione di una versione rimuove anche il dataset fisico correlato tramite il connector specifico
+    if not deleted:
+        return ko("Dataset not found", 404)
+    return ok({"id": id, "deleted": True})
+        
+######
+
+
+@app.get("/datasets/{dataset_id:path}/lineage/{version}", tags=["Lineage"],
+         summary="Get upstream and downstream lineage")
+async def get_lineage(dataset_id: str,
+                      version: str):
+    record = (db.get_version(dataset_id, version) if version
+              else db.get_latest_version(dataset_id))
+    if not record:
+        return ko("Dataset version not found", 404)
+
+    ver = record["version"]
+    return ok({
+        "dataset_id": dataset_id,
+        "version":    ver,
+        "upstream":   db.get_upstream(dataset_id, ver),
+        "downstream": db.get_downstream(dataset_id, ver),
+    })
+
 
 
 # Dataset Status
@@ -650,10 +582,9 @@ async def dataset_commit(dataset_id: str, version: str, body: CommitRequest):
     location = record["location"]
     if not connector.exists(location):
         return ko(f"Dataset Version not found at: {location}", 422)
-
+    msgs = []        
     try:
         if not db.commit_version(dataset_id, version):
-            db.delete_version(dataset_id, version)
             raise Exception
         
         for k, v in (body.metadata or {}).items():
@@ -677,7 +608,8 @@ async def dataset_commit(dataset_id: str, version: str, body: CommitRequest):
         }
         
         if diff["breaking"]:
-            return warn(data, ["Schema breaking changes"] + all_warnings)
+            msgs.append(["Schema breaking changes"] + all_warnings)
+            raise Exception
         if all_warnings:
             return warn(data, all_warnings)
             
@@ -685,8 +617,10 @@ async def dataset_commit(dataset_id: str, version: str, body: CommitRequest):
 
     except Exception as e:
         msg = f"Fail to commit {dataset_id}@{version}"
-        logger.error(msg, e)
+        msgs.append(msg)
+        logger.error(msgs, e)
         try:
+            db.delete_version(dataset_id, version)
             connector.delete(location) 
             logger.info(f"Cleanup: deleted orphaned location {location}")
         except Exception as cleanup_err:
@@ -698,10 +632,22 @@ async def dataset_commit(dataset_id: str, version: str, body: CommitRequest):
           tags=["Dataset Produce"],
           summary="Mark a reserved version as failed")
 async def fail_version(dataset_id: str, version: str):
+    dataset = db.get_dataset(dataset_id)
+    if not dataset:
+        return ko("Dataset not found", 404)
+    source = db.get_source(dataset["source_id"])
+    connector = ConnectorFactory.get(source["type"], source["config"])
     record = db.get_version(dataset_id, version)
     if not record:
         return ko("Version not found", 404)
+    location = record["location"]
     db.fail_version(dataset_id, version)
+    try:
+        db.delete_version(dataset_id, version)
+        connector.delete(location) 
+        logger.info(f"Cleanup: deleted orphaned location {location}")
+    except Exception as cleanup_err:
+        logger.warning(f"Failed to cleanup orphaned location {location}: {cleanup_err}")
     return ok({"dataset_id": dataset_id,
                "version":    version,
                "status":     "failed"})

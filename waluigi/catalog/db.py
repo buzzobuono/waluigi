@@ -449,13 +449,8 @@ class CatalogDB:
             return cur.rowcount > 0
         
                
-    # ------------------------------------------------------------------
-    # Schema columns
-    # ------------------------------------------------------------------
-
+    # Dataset Schema
     def upsert_schema_columns(self, dataset_id: str, columns: list[dict]):
-            
-            
         now = _now()
         with self.conn:
             for col in columns:
@@ -492,8 +487,8 @@ class CatalogDB:
         if "pii" in updates:
             updates["pii"] = int(updates["pii"])
 
-        updates["last_edited_by"] = editor
-        updates["last_edited_at"] = _now()
+        updates["username"] = editor
+        updates["updatedate"] = _now()
 
         set_parts = [f"{k} = ?" for k in updates]
         set_parts.append(
@@ -515,15 +510,10 @@ class CatalogDB:
         with self.conn:
             self.conn.execute("""
                 UPDATE schema_columns
-                SET status = 'published', last_edited_at = ?
+                SET status = 'published', updatedate = ?
                 WHERE dataset_id = ? AND status IN ('inferred', 'draft')
             """, (now, dataset_id))
-
-            current = self.get_schema(dataset_id)
             
-        return {"published_at":    now,
-                "breaking_changes": breaking,
-                "warnings":         warnings}
 
     def diff_schema_against_inferred(self, dataset_id: str,
                                       inferred: list[dict]) -> dict:

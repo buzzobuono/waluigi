@@ -65,7 +65,7 @@ export const api = {
 
   catalogFolders:  (prefix) => _get(`/catalog/folders/${_enc(prefix)}/`),
   catalogDatasetVersions:  (id) => _get(`/catalog/datasets/${_enc(id)}/versions`),
-  catalogDatasetMetadata: (id, ver) => _get(`/catalog/datasets/${_enc(id)}/metadata/${_enc(ver)}`),
+  catalogDatasetMetadata: (id, ver) => _get(`/catalog/datasets/${_enc(id)}/versions/${_enc(ver)}/metadata`),
   catalogDatasetPreview: (id, ver, limit = 10, offset = 0) => _get(`/catalog/datasets/${_enc(id)}/_preview/${_enc(ver)}`, { limit, offset }),
   catalogDatasetSchema:  (id) => _get(`/catalog/datasets/${_enc(id)}/schema`),
   catalogSchemaUpdateColumn: (id, col, body) => _patchJson(`/catalog/datasets/${_enc(id)}/schema/${_enc(col)}`, body),

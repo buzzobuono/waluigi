@@ -82,6 +82,7 @@ class CatalogClient:
         return self._delete(f"/datasets/{id}")
         
     def resolve(self, dataset_id: str) -> "DatasetReader":
+        # FIX aggiungere gestione per prendere specifica versione
         dataset  = self.get_dataset(dataset_id)
         versions = self._get(f"/datasets/{dataset_id}/versions")
         if not versions:
@@ -209,8 +210,7 @@ class DatasetWriter:
             )
         except Exception:
             pass
-
-        self._cleanup()
+            
 
     def _commit(self):
         result = self._client._post(
