@@ -41,16 +41,19 @@ export default {
       return joined.replace(/^\/|\/$/g, '');
     });
 
-    const schemaData  = Vue.ref(null);   // { columns, summary }
-    const loading     = Vue.ref(false);
-    const saving      = Vue.ref(false);
-    const pageError   = Vue.ref(null);
-    const formError   = Vue.ref(null);
+    const schemaData       = Vue.ref(null);
+    const loading          = Vue.ref(false);
+    const saving           = Vue.ref(false);
+    const pageError        = Vue.ref(null);
+    const formError        = Vue.ref(null);
 
-    const modalRef         = Vue.ref(null);
+    const modalRef          = Vue.ref(null);
     const confirmPublishRef = Vue.ref(null);
+    const confirmDeleteRef  = Vue.ref(null);
 
-    const editCol = Vue.ref(null);   // column_name being edited
+    const editCol      = Vue.ref(null);
+    const pendingDelete = Vue.ref(null);
+
     const form = Vue.ref({
       logical_type: '',
       description:  '',
@@ -75,15 +78,15 @@ export default {
     }
 
     function openEdit(col) {
-      editCol.value     = col.column_name;
-      formError.value   = null;
+      editCol.value   = col.column_name;
+      formError.value = null;
       form.value = {
-        logical_type: col.logical_type  || '',
-        description:  col.description   || '',
+        logical_type: col.logical_type || '',
+        description:  col.description  || '',
         nullable:     col.nullable !== false,
         pii:          !!col.pii,
-        pii_type:     col.pii_type      || 'none',
-        pii_notes:    col.pii_notes     || '',
+        pii_type:     col.pii_type     || 'none',
+        pii_notes:    col.pii_notes    || '',
       };
       modalRef.value?.open();
     }
@@ -97,8 +100,8 @@ export default {
           description:  form.value.description  || null,
           nullable:     form.value.nullable,
           pii:          form.value.pii,
-          pii_type:     form.value.pii_type     || null,
-          pii_notes:    form.value.pii_notes     || null,
+          pii_type:     form.value.pii_type  || null,
+          pii_notes:    form.value.pii_notes  || null,
         };
         const res = await api.catalogSchemaUpdateColumn(datasetId.value, editCol.value, body);
         if (res.diagnostic?.result === 'KO') {
@@ -114,14 +117,64 @@ export default {
       }
     }
 
-    function askPublish() {
+    function askApproveColumn(col) {
       confirmPublishRef.value?.ask(
-        'Promote all columns to "published"? This cannot be undone.',
-        async (ok) => { if (ok) await publishSchema(); }
+        `Approve column "${col.column_name}"? It will be promoted to "published".`,
+        async (ok) => { if (ok) await approveColumn(col.column_name); }
       );
     }
 
-    async function publishSchema() {
+    async function approveColumn(columnName) {
+      saving.value    = true;
+      pageError.value = null;
+      try {
+        const res = await api.catalogSchemaApproveColumn(datasetId.value, columnName);
+        if (res.diagnostic?.result === 'KO') {
+          pageError.value = res.diagnostic?.messages?.[0] || 'Error approving column';
+          return;
+        }
+        await loadSchema();
+      } catch (e) {
+        pageError.value = e.message;
+      } finally {
+        saving.value = false;
+      }
+    }
+
+    function askDeleteColumn(col) {
+      pendingDelete.value = col.column_name;
+      confirmDeleteRef.value?.ask(
+        `Delete column "${col.column_name}" from the schema? This cannot be undone.`,
+        async (ok) => { if (ok) await deleteColumn(col.column_name); }
+      );
+    }
+
+    async function deleteColumn(columnName) {
+      saving.value    = true;
+      pageError.value = null;
+      try {
+        const res = await api.catalogSchemaDeleteColumn(datasetId.value, columnName);
+        if (res.diagnostic?.result === 'KO') {
+          pageError.value = res.diagnostic?.messages?.[0] || 'Error deleting column';
+          return;
+        }
+        await loadSchema();
+      } catch (e) {
+        pageError.value = e.message;
+      } finally {
+        saving.value    = false;
+        pendingDelete.value = null;
+      }
+    }
+
+    function askPublishAll() {
+      confirmPublishRef.value?.ask(
+        'Promote ALL remaining columns to "published"?',
+        async (ok) => { if (ok) await publishAll(); }
+      );
+    }
+
+    async function publishAll() {
       saving.value    = true;
       pageError.value = null;
       try {
@@ -139,8 +192,10 @@ export default {
     return {
       datasetId, schemaData, loading, saving, pageError, formError,
       SCHEMA_COLUMNS, STATUS_BADGE, PII_TYPES,
-      modalRef, confirmPublishRef, editCol, form,
-      openEdit, submitEdit, askPublish,
+      modalRef, confirmPublishRef, confirmDeleteRef,
+      editCol, pendingDelete, form,
+      openEdit, submitEdit,
+      askApproveColumn, askDeleteColumn, askPublishAll,
       goBack: () => router.go(-1),
     };
   },
@@ -160,16 +215,15 @@ export default {
           @click="goBack"
         />
         <base-button
-          label="Publish Schema"
-          icon="fas fa-check-circle"
+          label="Publish All"
+          icon="fas fa-check-double"
           color="outline-success"
           class="ml-2"
           :disabled="saving || !schemaData"
-          @click="askPublish"
+          @click="askPublishAll"
         />
       </template>
 
-      <!-- error -->
       <div v-if="pageError" class="alert alert-danger">{{ pageError }}</div>
 
       <!-- summary -->
@@ -177,7 +231,7 @@ export default {
         <div class="d-flex flex-wrap p-3" style="gap:1.5rem;">
           <div class="text-center">
             <div class="display-4 font-weight-bold">{{ schemaData.summary.total }}</div>
-            <small class="text-muted">Total columns</small>
+            <small class="text-muted">Total</small>
           </div>
           <div class="text-center">
             <div class="display-4 font-weight-bold text-secondary">{{ schemaData.summary.inferred }}</div>
@@ -193,7 +247,7 @@ export default {
           </div>
           <div class="text-center">
             <div class="display-4 font-weight-bold text-danger">{{ schemaData.summary.pii }}</div>
-            <small class="text-muted">PII columns</small>
+            <small class="text-muted">PII</small>
           </div>
         </div>
       </base-panel>
@@ -221,12 +275,29 @@ export default {
           </template>
 
           <template #cell(actions)="{ item }">
-            <base-button
-              icon="fas fa-pencil-alt"
-              color="outline-primary"
-              title="Edit column"
-              @click="openEdit(item)"
-            />
+            <base-button-group>
+              <base-button
+                icon="fas fa-pencil-alt"
+                color="outline-primary"
+                title="Edit"
+                @click="openEdit(item)"
+              />
+              <base-button
+                v-if="item.status !== 'published'"
+                icon="fas fa-check"
+                color="outline-success"
+                title="Approve column"
+                :disabled="saving"
+                @click="askApproveColumn(item)"
+              />
+              <base-button
+                icon="fas fa-trash"
+                color="outline-danger"
+                title="Delete column"
+                :disabled="saving"
+                @click="askDeleteColumn(item)"
+              />
+            </base-button-group>
           </template>
 
         </base-table>
@@ -290,6 +361,7 @@ export default {
       </base-modal>
 
       <confirm-dialog ref="confirmPublishRef" />
+      <confirm-dialog ref="confirmDeleteRef" />
 
     </base-page>
   `

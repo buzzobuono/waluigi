@@ -395,6 +395,33 @@ async def patch_schema_column(dataset_id: str, column_name: str,
     return warn(col, msgs) if msgs else ok(col)
 
 
+@app.post("/datasets/{dataset_id:path}/schema/{column_name}/approve",
+          tags=["Schema"],
+          summary="Approve a single column — promotes it to 'published'")
+async def approve_schema_column(dataset_id: str, column_name: str,
+                                 publisher: str = Query("anonymous")):
+    if not db.exists_dataset(dataset_id):
+        return ko("Dataset not found", 404)
+    updated = db.approve_schema_column(dataset_id, column_name, publisher)
+    if not updated:
+        return ko("Column not found in schema", 404)
+    col = next((c for c in db.get_schema(dataset_id)
+                if c["column_name"] == column_name), None)
+    return ok(col)
+
+
+@app.delete("/datasets/{dataset_id:path}/schema/{column_name}",
+            tags=["Schema"],
+            summary="Delete a column from the schema definition")
+async def delete_schema_column(dataset_id: str, column_name: str):
+    if not db.exists_dataset(dataset_id):
+        return ko("Dataset not found", 404)
+    deleted = db.delete_schema_column(dataset_id, column_name)
+    if not deleted:
+        return ko("Column not found in schema", 404)
+    return ok({"column_name": column_name, "deleted": True})
+
+
 @app.post("/datasets/{dataset_id:path}/schema/publish",
           tags=["Schema"],
           summary="Publish schema — promotes all columns to 'published'")
