@@ -329,8 +329,15 @@ export default {
   
         <template #tools>
           <base-button
-            icon="fas fa-times" 
-            color="outline-secondary" 
+            icon="fas fa-project-diagram"
+            label="Schema"
+            color="outline-warning"
+            title="Manage Schema"
+            @click="$router.push('/schema/' + selDataset)"
+          />
+          <base-button
+            icon="fas fa-times"
+            color="outline-secondary"
             class="ml-auto"
             @click="closeDetail"/>
         </template>

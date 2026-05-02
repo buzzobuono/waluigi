@@ -7,7 +7,8 @@ import Catalog       from './components/Catalog.js';
 import Sources       from './components/Sources.js';
 import Lineage       from './components/Lineage.js';
 import JobDag        from './components/JobDag.js';
-import DatasetPreview from './components/DatasetPreview.js';
+import DatasetPreview  from './components/DatasetPreview.js';
+import DatasetSchema   from './components/DatasetSchema.js';
 
 const routes = [
   { path: '/',          redirect: '/jobs' },
@@ -20,6 +21,7 @@ const routes = [
   { path: '/catalog',   component: Catalog,   meta: { title: 'Catalog' } },
   { path: '/sources',   component: Sources,   meta: { title: 'Sources' } },
   { path: '/datasets/:id+/:version', component: DatasetPreview, meta: { title: 'Dataset Preview'} },
+  { path: '/schema/:id+',            component: DatasetSchema,  meta: { title: 'Schema' } },
   { path: '/lineage',   component: Lineage,   meta: { title: 'Lineage' } },
   { path: '/jobs/:jobId', component: JobDag,  meta: { title: 'Job DAG' } }
 ];

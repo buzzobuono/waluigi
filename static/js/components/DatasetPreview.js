@@ -13,19 +13,11 @@ export default {
     const route = VueRouter.useRoute();
     const router = VueRouter.useRouter();
 
-    const columns       = Vue.ref([]);
-    const rows          = Vue.ref([]);
-    const loading       = Vue.ref(false);
-    const error         = Vue.ref(null);
-    const metadata      = Vue.ref({});
-    const schema        = Vue.ref([]);
-    const schemaColumns = [
-      { key: 'column_name', label: 'Column' },
-      { key: 'physical_type', label: 'Type' },
-      { key: 'description', label: 'Description' },
-      { key: 'pii', label: 'PII' },
-      { key: 'status', label: 'Status' },
-    ];
+    const columns     = Vue.ref([]);
+    const rows        = Vue.ref([]);
+    const loading     = Vue.ref(false);
+    const error       = Vue.ref(null);
+    const metadata    = Vue.ref({});
     const currentPage = Vue.ref(1);
     const pageSize    = Vue.ref(10);
 
@@ -35,10 +27,9 @@ export default {
         const joined = Array.isArray(val) ? val.join('/') : String(val);
         return joined.replace(/^\/|\/$/g, '');
       };
-
       return {
-        id:        formatParam(route.params.id),
-        version:   route.params.version
+        id:      formatParam(route.params.id),
+        version: route.params.version
       };
     });
 
@@ -49,24 +40,15 @@ export default {
       loading.value = true;
       error.value = null;
       try {
-        const limit = pageSize.value;
+        const limit  = pageSize.value;
         const offset = (currentPage.value - 1) * limit;
-        const isFirstPage = currentPage.value === 1;
-        const requests = [
+        const [previewRes, metaRes] = await Promise.all([
           api.catalogDatasetPreview(id, version, limit, offset),
           api.catalogDatasetMetadata(id, version),
-        ];
-        if (isFirstPage) requests.push(api.catalogDatasetSchema(id));
-
-        const [previewRes, metaRes, schemaRes] = await Promise.all(requests);
-
-        columns.value = (previewRes.data.columns || []).map(col => ({
-          key: col,
-          label: col
-        }));
+        ]);
+        columns.value  = (previewRes.data.columns || []).map(col => ({ key: col, label: col }));
         rows.value     = previewRes.data.rows || [];
         metadata.value = metaRes.data || {};
-        if (schemaRes) schema.value = schemaRes.data?.columns || [];
       } catch (e) {
         console.error("Preview load error:", e);
         error.value = "Loading error: " + e.message;
@@ -75,9 +57,7 @@ export default {
       }
     }
 
-    function goBack() {
-      router.go(-1);
-    }
+    function goBack() { router.go(-1); }
 
     function changePage(delta) {
       const next = currentPage.value + delta;
@@ -94,26 +74,30 @@ export default {
 
     Vue.onMounted(loadPreview);
 
-    return {
-      columns, rows, loading, error, params, metadata, schema, schemaColumns,
-      currentPage, changePage, goBack
-    };
+    return { columns, rows, loading, error, params, metadata, currentPage, changePage, goBack };
   },
 
   template: `
-    <base-page 
-      title="Dataset" 
+    <base-page
+      title="Dataset"
       subtitle="Preview"
       icon="fas fa-table"
       :loading="loading">
-      
+
       <template #actions>
-         <base-button 
-            label="Back" 
-            icon="fas fa-arrow-left" 
-            color="outline-secondary"
-            @click="goBack"
-          />
+        <base-button
+          label="Back"
+          icon="fas fa-arrow-left"
+          color="outline-secondary"
+          @click="goBack"
+        />
+        <base-button
+          label="Schema"
+          icon="fas fa-project-diagram"
+          color="outline-warning"
+          class="ml-2"
+          @click="$router.push('/schema/' + params.id)"
+        />
       </template>
 
       <base-panel :no-padding="true">
@@ -126,21 +110,21 @@ export default {
 
         <template #tools>
           <base-button-group class="ml-auto">
-            <base-button 
+            <base-button
               :disabled="loading || currentPage <= 1"
               icon="fas fa-chevron-left"
-              color="outline-primary" 
+              color="outline-primary"
               @click="changePage(-1)"
             />
-            <base-button 
+            <base-button
               :label="currentPage"
               :disabled="true"
-              color="outline-secondary" 
+              color="outline-secondary"
             />
-            <base-button 
+            <base-button
               :disabled="loading || rows.length < 10"
               icon="fas fa-chevron-right"
-              color="outline-primary" 
+              color="outline-primary"
               @click="changePage(1)"
             />
           </base-button-group>
@@ -160,23 +144,19 @@ export default {
           <i class="fas fa-filter fa-3x mb-3"></i>
           <p>No more data available.</p>
         </div>
-        
-        <base-table :columns="columns" :items="rows">
 
-        </base-table>
+        <base-table :columns="columns" :items="rows" />
 
         <template #footer>
-          <div class="text-muted" >
-            Rows {{ (currentPage-1)*10 + 1 }} - {{ (currentPage-1)*10 + rows.length }}
+          <div class="text-muted">
+            Rows {{ (currentPage-1)*10 + 1 }} – {{ (currentPage-1)*10 + rows.length }}
           </div>
           <div class="text-muted">
-            <span>Path: {{ params.id }}</span>
-            <span>
-                v.{{ params.version }}
-            </span>
+            <span>{{ params.id }}</span>
+            <span class="ml-2">v.{{ params.version }}</span>
           </div>
         </template>
-        
+
       </base-panel>
 
       <base-panel v-if="Object.keys(metadata).length" title="Metadata">
@@ -186,20 +166,6 @@ export default {
             <span class="ml-2">{{ val }}</span>
           </div>
         </div>
-      </base-panel>
-
-      <base-panel v-if="schema.length" title="Schema" :no-padding="true">
-        <base-table :columns="schemaColumns" :items="schema">
-          <template #cell(pii)="{ item }">
-            <span v-if="item.pii" class="badge badge-danger">PII</span>
-            <span v-else class="text-muted">—</span>
-          </template>
-          <template #cell(status)="{ item }">
-            <span :class="['badge', item.status === 'published' ? 'badge-success' : 'badge-secondary']">
-              {{ item.status }}
-            </span>
-          </template>
-        </base-table>
       </base-panel>
 
     </base-page>
