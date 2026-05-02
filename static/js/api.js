@@ -68,6 +68,8 @@ export const api = {
   catalogDatasetMetadata: (id, ver) => _get(`/catalog/datasets/${_enc(id)}/metadata/${_enc(ver)}`),
   catalogDatasetPreview: (id, ver, limit = 10, offset = 0) => _get(`/catalog/datasets/${_enc(id)}/_preview/${_enc(ver)}`, { limit, offset }),
   catalogDatasetSchema:  (id) => _get(`/catalog/datasets/${_enc(id)}/schema`),
+  catalogSchemaUpdateColumn: (id, col, body) => _patchJson(`/catalog/datasets/${_enc(id)}/schema/${_enc(col)}`, body),
+  catalogSchemaPublish:  (id, body) => _postJson(`/catalog/datasets/${_enc(id)}/schema/publish`, body),
   catalogDatasetLineage:   (id, ver) => _get(`/catalog/datasets/${_enc(id)}/lineage/${_enc(ver)}`),
   
 };
