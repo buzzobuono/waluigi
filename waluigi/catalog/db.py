@@ -503,9 +503,7 @@ class CatalogDB:
             return cur.rowcount > 0
 
     def publish_schema(self, dataset_id: str, publisher: str) -> dict:
-        """
-        Promote all columns to published
-        """
+        """Promote all columns to published."""
         now = _now()
         with self.conn:
             self.conn.execute("""
@@ -513,6 +511,26 @@ class CatalogDB:
                 SET status = 'published', updatedate = ?
                 WHERE dataset_id = ? AND status IN ('inferred', 'draft')
             """, (now, dataset_id))
+
+    def approve_schema_column(self, dataset_id: str, column_name: str, publisher: str) -> bool:
+        """Promote a single column to published."""
+        now = _now()
+        with self.conn:
+            cur = self.conn.execute("""
+                UPDATE schema_columns
+                SET status = 'published', username = ?, updatedate = ?
+                WHERE dataset_id = ? AND column_name = ?
+            """, (publisher, now, dataset_id, column_name))
+            return cur.rowcount > 0
+
+    def delete_schema_column(self, dataset_id: str, column_name: str) -> bool:
+        """Remove a column from the schema definition."""
+        with self.conn:
+            cur = self.conn.execute("""
+                DELETE FROM schema_columns
+                WHERE dataset_id = ? AND column_name = ?
+            """, (dataset_id, column_name))
+            return cur.rowcount > 0
             
 
     def diff_schema_against_inferred(self, dataset_id: str,
