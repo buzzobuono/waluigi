@@ -1,6 +1,7 @@
 import os
 import sys
 import csv
+import json
 import socket
 import yaml
 from datetime import datetime, timezone
@@ -74,11 +75,17 @@ def _run_dq_nonblocking(dataset_id: str, version: str,
     try:
         df = connector.read(location, fmt)
         result = dq_manager.run_suite(dq_suite, {"this": df})
+        details = json.dumps([
+            {"rule_id": r.rule_id, "success": r.success,
+             "score": r.score, "error": r.error}
+            for r in result.results
+        ])
         summary = {
             "sys.dq.score":   str(round(result.score, 4)),
             "sys.dq.passed":  str(result.passed),
             "sys.dq.total":   str(result.total),
             "sys.dq.success": str(result.success),
+            "sys.dq.details": details,
         }
         for k, v in summary.items():
             db.set_metadata(dataset_id, version, k, v)
@@ -455,6 +462,51 @@ async def publish_schema(dataset_id: str, body: SchemaPublishRequest):
         return ko("Dataset not found", 404)
     db.publish_schema(dataset_id, body.published_by)
     return ok({"dataset_id" : dataset_id})
+
+# Routes - Data Quality
+
+@app.get("/dq/rules", tags=["Data Quality"],
+         summary="List all DQ rules available in the catalogue")
+async def list_dq_rules():
+    rules = [
+        {
+            "id":            rule_id,
+            "description":   rule.description,
+            "formula":       rule.formula.strip(),
+            "inputs_schema": rule.inputs_schema,
+            "params_schema": rule.params_schema or {},
+        }
+        for rule_id, rule in sorted(dq_manager.catalogue.items())
+    ]
+    return ok(rules)
+
+
+@app.get("/dq/suite", tags=["Data Quality"],
+         summary="Read a suite YAML and return its rules enriched with catalogue definitions")
+async def get_dq_suite(path: str = Query(..., description="Absolute path to the suite YAML file")):
+    if not os.path.isfile(path):
+        return ko(f"Suite file not found: {path}", 404)
+    try:
+        with open(path, "r") as f:
+            raw = yaml.safe_load(f) or []
+    except Exception as e:
+        return ko(f"Cannot read suite file: {e}", 422)
+
+    enriched = []
+    for item in raw:
+        rule_id = item.get("rule_id", "?")
+        defn    = dq_manager.catalogue.get(rule_id)
+        enriched.append({
+            "rule_id":     rule_id,
+            "inputs":      item.get("inputs", {}),
+            "params":      item.get("params", {}),
+            "tolerance":   item.get("tolerance", 1.0),
+            "description": defn.description if defn else None,
+            "formula":     defn.formula.strip() if defn else None,
+            "found":       defn is not None,
+        })
+    return ok(enriched)
+
 
 # Routes - Datasets
 

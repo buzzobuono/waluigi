@@ -75,5 +75,7 @@ export const api = {
   catalogSchemaDeleteColumn:  (id, col) => _delete(`/catalog/datasets/${_enc(id)}/schema/${_enc(col)}`),
   catalogSchemaPublish:  (id, body) => _postJson(`/catalog/datasets/${_enc(id)}/schema/publish`, body),
   catalogDatasetLineage:   (id, ver) => _get(`/catalog/datasets/${_enc(id)}/lineage/${_enc(ver)}`),
-  
+
+  dqRules: ()       => _get('/catalog/dq/rules'),
+  dqSuite: (path)   => _get('/catalog/dq/suite', { path }),
 };

@@ -43,6 +43,7 @@ export default {
 
     const schemaData       = Vue.ref(null);
     const dataset          = Vue.ref(null);
+    const suiteRules       = Vue.ref([]);
     const loading          = Vue.ref(false);
     const saving           = Vue.ref(false);
     const dqSaving         = Vue.ref(false);
@@ -66,6 +67,17 @@ export default {
       pii_notes:    '',
     });
 
+    async function loadSuiteRules(path) {
+      suiteRules.value = [];
+      if (!path) return;
+      try {
+        const res = await api.dqSuite(path);
+        suiteRules.value = res.data || [];
+      } catch (e) {
+        // suite load is best-effort; don't block the page
+      }
+    }
+
     async function loadAll() {
       if (!datasetId.value) return;
       loading.value   = true;
@@ -75,9 +87,10 @@ export default {
           api.catalogDatasetSchema(datasetId.value),
           api.catalogDataset(datasetId.value),
         ]);
-        schemaData.value = schemaRes.data || null;
-        dataset.value    = datasetRes.data || null;
+        schemaData.value  = schemaRes.data || null;
+        dataset.value     = datasetRes.data || null;
         dqSuitePath.value = dataset.value?.dq_suite || '';
+        await loadSuiteRules(dataset.value?.dq_suite);
       } catch (e) {
         pageError.value = e.message;
       } finally {
@@ -98,6 +111,7 @@ export default {
         }
         dataset.value = res.data;
         dqSuitePath.value = res.data?.dq_suite || '';
+        await loadSuiteRules(res.data?.dq_suite);
       } catch (e) {
         pageError.value = e.message;
       } finally {
@@ -222,7 +236,7 @@ export default {
     Vue.onMounted(loadAll);
 
     return {
-      datasetId, schemaData, dataset, loading, saving, dqSaving, pageError, formError,
+      datasetId, schemaData, dataset, suiteRules, loading, saving, dqSaving, pageError, formError,
       dqSuitePath,
       SCHEMA_COLUMNS, STATUS_BADGE, PII_TYPES,
       modalRef, confirmPublishRef, confirmDeleteRef,
@@ -317,6 +331,47 @@ export default {
           </div>
           <div v-else class="mt-2 text-muted small">No DQ suite configured.</div>
         </div>
+      </base-panel>
+
+      <!-- suite rules -->
+      <base-panel v-if="suiteRules.length" title="Suite Rules" :no-padding="true">
+        <table class="table table-sm table-hover mb-0">
+          <thead>
+            <tr>
+              <th style="width:40%">Rule</th>
+              <th>Inputs</th>
+              <th>Params</th>
+              <th style="width:10%">Tolerance</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(r, i) in suiteRules" :key="i">
+              <td>
+                <code class="small">{{ r.rule_id }}</code>
+                <div v-if="r.description" class="text-muted small">{{ r.description }}</div>
+                <span v-if="!r.found" class="badge badge-danger mt-1">not found</span>
+              </td>
+              <td class="small">
+                <span v-for="(col, ph) in r.inputs" :key="ph" class="d-block">
+                  <code>{{ ph }}</code> → <span class="text-muted">{{ col }}</span>
+                </span>
+              </td>
+              <td class="small">
+                <span v-for="(val, name) in r.params" :key="name" class="d-block">
+                  <code>{{ name }}</code>: <span class="text-muted">{{ val }}</span>
+                </span>
+                <span v-if="!Object.keys(r.params).length" class="text-muted">—</span>
+              </td>
+              <td class="small text-center">{{ r.tolerance === 1 ? '100%' : (r.tolerance * 100).toFixed(0) + '%' }}</td>
+              <td class="text-right pr-2">
+                <a :href="'/dq/rules'" class="btn btn-xs btn-outline-secondary" title="View rule">
+                  <i class="fas fa-external-link-alt"></i>
+                </a>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </base-panel>
 
       <!-- schema table -->
