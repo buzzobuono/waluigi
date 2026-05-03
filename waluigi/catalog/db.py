@@ -400,7 +400,113 @@ class CatalogDB:
         """, (dataset_id, version))
         return {r["key"]: r["value"] for r in cur.fetchall()}
             
-        
+    # Dataset Schema
+    
+    def upsert_schema_columns(self, dataset_id: str, columns: list[dict]):
+        now = _now()
+        with self.conn:
+            for col in columns:
+                self.conn.execute("""
+                    INSERT INTO schema_columns (dataset_id , column_name, physical_type, logical_type, nullable, pii, pii_type, pii_notes, description, status, username, createdate, updatedate)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(dataset_id, column_name) DO UPDATE SET
+                        physical_type  = excluded.physical_type,
+                        updatedate = excluded.updatedate
+                    WHERE schema_columns.status = 'inferred'
+                """, (dataset_id , col["name"], col.get("physical_type"), col.get("logical_type"), 1, 0, 'none', '', '', 'inferred', _user(), now, now) )
+    
+    def get_schema(self, dataset_id: str) -> list[dict]:
+        cur = self.conn.execute("""
+            SELECT * FROM schema_columns
+            WHERE dataset_id = ?
+            ORDER BY column_name
+        """, (dataset_id,))
+        return self._rows(cur)
+
+    def update_schema_column(self, dataset_id: str, column_name: str, **kwargs) -> bool:
+        allowed = {
+            "logical_type", "nullable", "pii", "pii_type",
+            "pii_notes", "description"
+        }
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return False
+
+        if "nullable" in updates:
+            updates["nullable"] = int(updates["nullable"])
+        if "pii" in updates:
+            updates["pii"] = int(updates["pii"])
+
+        updates["username"] = _user()
+        updates["updatedate"] = _now()
+
+        set_parts = [f"{k} = ?" for k in updates]
+        set_parts.append(
+            "status = CASE WHEN status = 'published' THEN 'published' ELSE 'draft' END"
+        )
+        vals = list(updates.values()) + [dataset_id, column_name]
+
+        with self.conn:
+            cur = self.conn.execute(
+                f"UPDATE schema_columns SET {', '.join(set_parts)} "
+                f"WHERE dataset_id = ? AND column_name = ?", vals)
+            return cur.rowcount > 0
+
+    def publish_schema(self, dataset_id: str, publisher: str) -> dict:
+        """Promote all columns to published."""
+        now = _now()
+        with self.conn:
+            self.conn.execute("""
+                UPDATE schema_columns
+                SET status = 'published', updatedate = ?
+                WHERE dataset_id = ? AND status IN ('inferred', 'draft')
+            """, (now, dataset_id))
+
+    def approve_schema_column(self, dataset_id: str, column_name: str) -> bool:
+        """Promote a single column to published."""
+        now = _now()
+        with self.conn:
+            cur = self.conn.execute("""
+                UPDATE schema_columns
+                SET status = 'published', username = ?, updatedate = ?
+                WHERE dataset_id = ? AND column_name = ?
+            """, (_user(), now, dataset_id, column_name))
+            return cur.rowcount > 0
+
+    def delete_schema_column(self, dataset_id: str, column_name: str) -> bool:
+        """Remove a column from the schema definition."""
+        with self.conn:
+            cur = self.conn.execute("""
+                DELETE FROM schema_columns
+                WHERE dataset_id = ? AND column_name = ?
+            """, (dataset_id, column_name))
+            return cur.rowcount > 0
+            
+    def diff_schema_against_inferred(self, dataset_id: str,
+                                      inferred: list[dict]) -> dict:
+        """Compare freshly inferred columns against published schema."""
+        published = self.conn.execute("""
+            SELECT * FROM schema_columns
+            WHERE dataset_id = ? AND status = 'published'
+        """, (dataset_id,)).fetchall()
+
+        if not published:
+            return {"breaking": [], "warnings": []}
+
+        pub = {dict(r)["column_name"]: dict(r) for r in published}
+        inf = {c["name"]: c for c in inferred}
+
+        breaking, warnings = [], []
+        for col, meta in pub.items():
+            if col not in inf:
+                breaking.append(f"Published column '{col}' missing in new data")
+            elif inf[col].get("physical_type") != meta["physical_type"]:
+                breaking.append(
+                    f"Type change on '{col}': "
+                    f"{meta['physical_type']} → {inf[col].get('physical_type')}")
+        return {"breaking": breaking, "warnings": warnings}
+
+
     # ------
     def set_in_review(self, id: str) -> bool:
         """Promote dataset from draft to in_review. No-op if approved."""
@@ -447,120 +553,11 @@ class CatalogDB:
                 WHERE dataset_id = ? AND version = ?
             """, (dataset_id, version))
             return cur.rowcount > 0
-        
-               
-    # Dataset Schema
-    def upsert_schema_columns(self, dataset_id: str, columns: list[dict]):
-        now = _now()
-        with self.conn:
-            for col in columns:
-                self.conn.execute("""
-                    INSERT INTO schema_columns (dataset_id , column_name, physical_type, logical_type, nullable, pii, pii_type, pii_notes, description, status, username, createdate, updatedate)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(dataset_id, column_name) DO UPDATE SET
-                        physical_type  = excluded.physical_type,
-                        updatedate = excluded.updatedate
-                    WHERE schema_columns.status = 'inferred'
-                """, (dataset_id , col["name"], col.get("physical_type"), col.get("logical_type"), 1, 0, 'none', '', '', 'inferred', _user(), now, now) )
-    def get_schema(self, dataset_id: str) -> list[dict]:
-        cur = self.conn.execute("""
-            SELECT * FROM schema_columns
-            WHERE dataset_id = ?
-            ORDER BY column_name
-        """, (dataset_id,))
-        return self._rows(cur)
-
-    def update_schema_column(self, dataset_id: str, column_name: str,
-                              editor: str, **kwargs) -> bool:
-        allowed = {
-            "logical_type", "nullable", "pii", "pii_type",
-            "pii_notes", "description", "tags"
-        }
-        updates = {k: v for k, v in kwargs.items() if k in allowed}
-        if not updates:
-            return False
-
-        if "tags" in updates and isinstance(updates["tags"], list):
-            updates["tags"] = json.dumps(updates["tags"])
-        if "nullable" in updates:
-            updates["nullable"] = int(updates["nullable"])
-        if "pii" in updates:
-            updates["pii"] = int(updates["pii"])
-
-        updates["username"] = editor
-        updates["updatedate"] = _now()
-
-        set_parts = [f"{k} = ?" for k in updates]
-        set_parts.append(
-            "status = CASE WHEN status = 'published' THEN 'published' ELSE 'draft' END"
-        )
-        vals = list(updates.values()) + [dataset_id, column_name]
-
-        with self.conn:
-            cur = self.conn.execute(
-                f"UPDATE schema_columns SET {', '.join(set_parts)} "
-                f"WHERE dataset_id = ? AND column_name = ?", vals)
-            return cur.rowcount > 0
-
-    def publish_schema(self, dataset_id: str, publisher: str) -> dict:
-        """Promote all columns to published."""
-        now = _now()
-        with self.conn:
-            self.conn.execute("""
-                UPDATE schema_columns
-                SET status = 'published', updatedate = ?
-                WHERE dataset_id = ? AND status IN ('inferred', 'draft')
-            """, (now, dataset_id))
-
-    def approve_schema_column(self, dataset_id: str, column_name: str, publisher: str) -> bool:
-        """Promote a single column to published."""
-        now = _now()
-        with self.conn:
-            cur = self.conn.execute("""
-                UPDATE schema_columns
-                SET status = 'published', username = ?, updatedate = ?
-                WHERE dataset_id = ? AND column_name = ?
-            """, (publisher, now, dataset_id, column_name))
-            return cur.rowcount > 0
-
-    def delete_schema_column(self, dataset_id: str, column_name: str) -> bool:
-        """Remove a column from the schema definition."""
-        with self.conn:
-            cur = self.conn.execute("""
-                DELETE FROM schema_columns
-                WHERE dataset_id = ? AND column_name = ?
-            """, (dataset_id, column_name))
-            return cur.rowcount > 0
-            
-
-    def diff_schema_against_inferred(self, dataset_id: str,
-                                      inferred: list[dict]) -> dict:
-        """Compare freshly inferred columns against published schema."""
-        published = self.conn.execute("""
-            SELECT * FROM schema_columns
-            WHERE dataset_id = ? AND status = 'published'
-        """, (dataset_id,)).fetchall()
-
-        if not published:
-            return {"breaking": [], "warnings": []}
-
-        pub = {dict(r)["column_name"]: dict(r) for r in published}
-        inf = {c["name"]: c for c in inferred}
-
-        breaking, warnings = [], []
-        for col, meta in pub.items():
-            if col not in inf:
-                breaking.append(f"Published column '{col}' missing in new data")
-            elif inf[col].get("physical_type") != meta["physical_type"]:
-                breaking.append(
-                    f"Type change on '{col}': "
-                    f"{meta['physical_type']} → {inf[col].get('physical_type')}")
-        return {"breaking": breaking, "warnings": warnings}
-
-    # ------------------------------------------------------------------
+    
+    
+    
     # Lineage
-    # ------------------------------------------------------------------
-
+   
     def insert_lineage(self, out_id: str, out_ver: str,
                        inputs: list[dict]):
         """inputs: [{"dataset_id": ..., "version": ...}]"""

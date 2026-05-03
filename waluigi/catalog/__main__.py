@@ -375,13 +375,11 @@ async def get_schema(dataset_id: str):
            tags=["Schema"],
            summary="Edit a column's semantic metadata and PII flags")
 async def patch_schema_column(dataset_id: str, column_name: str,
-                               body: SchemaColumnPatch,
-                               editor: str = Query("anonymous")):
+                               body: SchemaColumnPatch):
     if not db.exists_dataset(dataset_id):
         return ko("Dataset not found", 404)
     updates = _model_dump(body)
-    updated = db.update_schema_column(dataset_id, column_name,
-                                      editor, **updates)
+    updated = db.update_schema_column(dataset_id, column_name, **updates)
     if not updated:
         return ko("Column not found in schema", 404)
     # Any schema edit promotes dataset to in_review
@@ -398,11 +396,10 @@ async def patch_schema_column(dataset_id: str, column_name: str,
 @app.post("/datasets/{dataset_id:path}/schema/{column_name}/approve",
           tags=["Schema"],
           summary="Approve a single column — promotes it to 'published'")
-async def approve_schema_column(dataset_id: str, column_name: str,
-                                 publisher: str = Query("anonymous")):
+async def approve_schema_column(dataset_id: str, column_name: str):
     if not db.exists_dataset(dataset_id):
         return ko("Dataset not found", 404)
-    updated = db.approve_schema_column(dataset_id, column_name, publisher)
+    updated = db.approve_schema_column(dataset_id, column_name)
     if not updated:
         return ko("Column not found in schema", 404)
     col = next((c for c in db.get_schema(dataset_id)
@@ -670,8 +667,8 @@ async def fail_version(dataset_id: str, version: str):
     location = record["location"]
     db.fail_version(dataset_id, version)
     try:
-        db.delete_version(dataset_id, version)
         connector.delete(location) 
+        db.delete_version(dataset_id, version)
         logger.info(f"Cleanup: deleted orphaned location {location}")
     except Exception as cleanup_err:
         logger.warning(f"Failed to cleanup orphaned location {location}: {cleanup_err}")

@@ -62,10 +62,21 @@ class LineageRef(BaseModel):
 class CommitRequest(BaseModel):
     metadata:      Dict[str, str]  = Field(default_factory=dict)
     inputs:        List[LineageRef]  = Field(default_factory=list)
+        
+class MetadataSetRequest(BaseModel):
+    key:   str = Field(..., example="source")
+    value: str = Field(..., example="SAP_EXTRACT")
     
+class SchemaColumnPatch(BaseModel):
+    logical_type: Optional[str]       = None
+    nullable:     Optional[bool]      = None
+    pii:          Optional[bool]      = None
+    pii_type:     Optional[str]       = None
+    pii_notes:    Optional[str]       = None
+    description:  Optional[str]       = None
+    tags:         Optional[List[str]] = None
+
 #----------
-
-
 
 
 class VirtualRegisterRequest(BaseModel):
@@ -80,14 +91,6 @@ class VirtualRegisterRequest(BaseModel):
     tags:         Optional[List[str]] = None
 
 
-class SchemaColumnPatch(BaseModel):
-    logical_type: Optional[str]       = None
-    nullable:     Optional[bool]      = None
-    pii:          Optional[bool]      = None
-    pii_type:     Optional[str]       = None
-    pii_notes:    Optional[str]       = None
-    description:  Optional[str]       = None
-    tags:         Optional[List[str]] = None
 
 
 class SchemaPublishRequest(BaseModel):
@@ -99,9 +102,6 @@ class ApproveRequest(BaseModel):
     notes:       str  = Field("",   example="PII verified, schema confirmed")
 
 
-class MetadataSetRequest(BaseModel):
-    key:   str = Field(..., example="source")
-    value: str = Field(..., example="SAP_EXTRACT")
 
 
 class MaterializeRequest(BaseModel):

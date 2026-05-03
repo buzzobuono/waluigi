@@ -13,12 +13,12 @@ source = SourceCreateRequest(
 catalog.create_source(source)
 
 rows = [
-    {"date": "2026", "product": "A", "quantity": 11, "revenue1": 100.0},
-    {"date": "2026", "product": "B", "quantity": 25, "revenue1": 250.0},
-    {"date": "2026", "product": "C", "quantity":  7, "revenue1":  70.0},
-    {"date": "2026", "product": "D", "quantity": 43, "revenue1": 420.0},
-    {"date": "2026", "product": "E", "quantity":  3, "revenue1":  30.0},
-    {"date": "2026", "product": "F", "quantity":  9, "revenue1": 350.0},
+    {"date": "2026", "product": "A", "quantity": 11, "revenue": 100.0},
+    {"date": "2026", "product": "B", "quantity": 25, "revenue": 250.0},
+    {"date": "2026", "product": "C", "quantity":  7, "revenue":  70.0},
+    {"date": "2026", "product": "D", "quantity": 43, "revenue": 420.0},
+    {"date": "2026", "product": "E", "quantity":  3, "revenue":  30.0},
+    {"date": "2026", "product": "F", "quantity":  9, "revenue": 350.0},
 ]
 #catalog.delete_dataset("sales/raw/sales")
 dataset = DatasetCreateRequest(
@@ -29,7 +29,7 @@ dataset = DatasetCreateRequest(
 )
 
 
-metadata = { "source": "SAP_EXTRACT", "date_ref": "2026.4" }
+metadata = { "source": "SAP_EXTRACT", "date_ref": "2026.6" }
 
 with catalog.produce(dataset, metadata) as writer:
     writer.write(rows)
