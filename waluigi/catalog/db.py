@@ -552,8 +552,8 @@ class CatalogDB:
             if col not in inf:
                 breaking.append(f"Published column '{col}' missing in new data")
             elif inf[col].get("physical_type") != meta["physical_type"]:
-                warnings.append(
-                    f"Physical type drift on '{col}': "
+                breaking.append(
+                    f"Type change on '{col}': "
                     f"{meta['physical_type']} → {inf[col].get('physical_type')}")
         return {"breaking": breaking, "warnings": warnings}
 
