@@ -6,7 +6,10 @@ import BaseButtonGroup from './BaseButtonGroup.js';
 import BaseTable     from './BaseTable.js';
 import BaseModal     from './BaseModal.js';
 import BaseInput     from './BaseInput.js';
+import BaseInfoBox   from './BaseInfoBox.js';
 import ConfirmDialog from './ConfirmDialog.js';
+
+const { ref, computed, onMounted } = Vue;
 
 const PII_TYPES = ['none', 'direct', 'indirect', 'sensitive'];
 
@@ -27,38 +30,48 @@ const SCHEMA_COLUMNS = [
   { key: 'actions',       label: '', class: 'text-right pr-3' },
 ];
 
+const SUITE_COLUMNS = [
+  { key: 'rule_id',   label: 'Rule' },
+  { key: 'inputs',    label: 'Inputs' },
+  { key: 'params',    label: 'Params' },
+  { key: 'tolerance', label: 'Tolerance', class: 'text-center' },
+  { key: 'actions',   label: '',          class: 'text-right pr-3' },
+];
+
 export default {
   name: 'DatasetSchema',
-  components: { BasePage, BasePanel, BaseButton, BaseButtonGroup, BaseTable, BaseModal, BaseInput, ConfirmDialog },
+  components: {
+    BasePage, BasePanel, BaseButton, BaseButtonGroup,
+    BaseTable, BaseModal, BaseInput, BaseInfoBox, ConfirmDialog,
+  },
 
   setup() {
     const route  = VueRouter.useRoute();
     const router = VueRouter.useRouter();
 
-    const datasetId = Vue.computed(() => {
+    const datasetId = computed(() => {
       const raw = route.params.id;
       const joined = Array.isArray(raw) ? raw.join('/') : String(raw || '');
       return joined.replace(/^\/|\/$/g, '');
     });
 
-    const schemaData       = Vue.ref(null);
-    const dataset          = Vue.ref(null);
-    const suiteRules       = Vue.ref([]);
-    const loading          = Vue.ref(false);
-    const saving           = Vue.ref(false);
-    const dqSaving         = Vue.ref(false);
-    const pageError        = Vue.ref(null);
-    const formError        = Vue.ref(null);
-    const dqSuitePath      = Vue.ref('');
+    const schemaData    = ref(null);
+    const dataset       = ref(null);
+    const suiteRules    = ref([]);
+    const loading       = ref(false);
+    const saving        = ref(false);
+    const dqSaving      = ref(false);
+    const pageError     = ref(null);
+    const formError     = ref(null);
+    const dqSuitePath   = ref('');
 
-    const modalRef          = Vue.ref(null);
-    const confirmPublishRef = Vue.ref(null);
-    const confirmDeleteRef  = Vue.ref(null);
+    const modalRef          = ref(null);
+    const confirmPublishRef = ref(null);
+    const confirmDeleteRef  = ref(null);
+    const editCol           = ref(null);
+    const pendingDelete     = ref(null);
 
-    const editCol      = Vue.ref(null);
-    const pendingDelete = Vue.ref(null);
-
-    const form = Vue.ref({
+    const form = ref({
       logical_type: '',
       description:  '',
       nullable:     true,
@@ -73,9 +86,7 @@ export default {
       try {
         const res = await api.dqSuite(path);
         suiteRules.value = res.data || [];
-      } catch (e) {
-        // suite load is best-effort; don't block the page
-      }
+      } catch { /* best-effort */ }
     }
 
     async function loadAll() {
@@ -109,7 +120,7 @@ export default {
           pageError.value = res.diagnostic?.messages?.[0] || 'Error saving DQ suite';
           return;
         }
-        dataset.value = res.data;
+        dataset.value     = res.data;
         dqSuitePath.value = res.data?.dq_suite || '';
         await loadSuiteRules(res.data?.dq_suite);
       } catch (e) {
@@ -117,10 +128,6 @@ export default {
       } finally {
         dqSaving.value = false;
       }
-    }
-
-    async function loadSchema() {
-      await loadAll();
     }
 
     function openEdit(col) {
@@ -131,8 +138,8 @@ export default {
         description:  col.description  || '',
         nullable:     col.nullable !== false,
         pii:          !!col.pii,
-        pii_type:     col.pii_type     || 'none',
-        pii_notes:    col.pii_notes    || '',
+        pii_type:     col.pii_type  || 'none',
+        pii_notes:    col.pii_notes || '',
       };
       modalRef.value?.open();
     }
@@ -147,7 +154,7 @@ export default {
           nullable:     form.value.nullable,
           pii:          form.value.pii,
           pii_type:     form.value.pii_type  || null,
-          pii_notes:    form.value.pii_notes  || null,
+          pii_notes:    form.value.pii_notes || null,
         };
         const res = await api.catalogSchemaUpdateColumn(datasetId.value, editCol.value, body);
         if (res.diagnostic?.result === 'KO') {
@@ -155,7 +162,7 @@ export default {
           return;
         }
         modalRef.value?.close();
-        await loadSchema();
+        await loadAll();
       } catch (e) {
         formError.value = e.message;
       } finally {
@@ -171,15 +178,14 @@ export default {
     }
 
     async function approveColumn(columnName) {
-      saving.value    = true;
-      pageError.value = null;
+      saving.value = true;
       try {
         const res = await api.catalogSchemaApproveColumn(datasetId.value, columnName);
         if (res.diagnostic?.result === 'KO') {
           pageError.value = res.diagnostic?.messages?.[0] || 'Error approving column';
           return;
         }
-        await loadSchema();
+        await loadAll();
       } catch (e) {
         pageError.value = e.message;
       } finally {
@@ -196,15 +202,14 @@ export default {
     }
 
     async function deleteColumn(columnName) {
-      saving.value    = true;
-      pageError.value = null;
+      saving.value = true;
       try {
         const res = await api.catalogSchemaDeleteColumn(datasetId.value, columnName);
         if (res.diagnostic?.result === 'KO') {
           pageError.value = res.diagnostic?.messages?.[0] || 'Error deleting column';
           return;
         }
-        await loadSchema();
+        await loadAll();
       } catch (e) {
         pageError.value = e.message;
       } finally {
@@ -221,11 +226,10 @@ export default {
     }
 
     async function publishAll() {
-      saving.value    = true;
-      pageError.value = null;
+      saving.value = true;
       try {
         await api.catalogSchemaPublish(datasetId.value, { published_by: 'admin' });
-        await loadSchema();
+        await loadAll();
       } catch (e) {
         pageError.value = e.message;
       } finally {
@@ -233,18 +237,19 @@ export default {
       }
     }
 
-    Vue.onMounted(loadAll);
+    onMounted(loadAll);
 
     return {
-      datasetId, schemaData, dataset, suiteRules, loading, saving, dqSaving, pageError, formError,
-      dqSuitePath,
-      SCHEMA_COLUMNS, STATUS_BADGE, PII_TYPES,
+      datasetId, schemaData, dataset, suiteRules, loading, saving, dqSaving,
+      pageError, formError, dqSuitePath,
+      SCHEMA_COLUMNS, SUITE_COLUMNS, STATUS_BADGE, PII_TYPES,
       modalRef, confirmPublishRef, confirmDeleteRef,
       editCol, pendingDelete, form,
       openEdit, submitEdit,
       askApproveColumn, askDeleteColumn, askPublishAll,
       saveDqSuite,
       goBack: () => router.go(-1),
+      goToRules: () => router.push('/dq/rules'),
     };
   },
 
@@ -275,43 +280,32 @@ export default {
       <div v-if="pageError" class="alert alert-danger">{{ pageError }}</div>
 
       <!-- summary -->
-      <base-panel v-if="schemaData" title="Summary">
-        <div class="d-flex flex-wrap p-3" style="gap:1.5rem;">
-          <div class="text-center">
-            <div class="display-4 font-weight-bold">{{ schemaData.summary.total }}</div>
-            <small class="text-muted">Total</small>
-          </div>
-          <div class="text-center">
-            <div class="display-4 font-weight-bold text-secondary">{{ schemaData.summary.inferred }}</div>
-            <small class="text-muted">Inferred</small>
-          </div>
-          <div class="text-center">
-            <div class="display-4 font-weight-bold text-warning">{{ schemaData.summary.draft }}</div>
-            <small class="text-muted">Draft</small>
-          </div>
-          <div class="text-center">
-            <div class="display-4 font-weight-bold text-success">{{ schemaData.summary.published }}</div>
-            <small class="text-muted">Published</small>
-          </div>
-          <div class="text-center">
-            <div class="display-4 font-weight-bold text-danger">{{ schemaData.summary.pii }}</div>
-            <small class="text-muted">PII</small>
-          </div>
+      <div v-if="schemaData" class="row mb-3">
+        <div class="col-sm-6 col-md-4 col-lg-2">
+          <base-info-box label="Total"     :value="schemaData.summary.total"     icon="fas fa-list"       color="primary"   />
         </div>
-      </base-panel>
+        <div class="col-sm-6 col-md-4 col-lg-2">
+          <base-info-box label="Inferred"  :value="schemaData.summary.inferred"  icon="fas fa-robot"      color="secondary" />
+        </div>
+        <div class="col-sm-6 col-md-4 col-lg-2">
+          <base-info-box label="Draft"     :value="schemaData.summary.draft"     icon="fas fa-pen"        color="warning"   />
+        </div>
+        <div class="col-sm-6 col-md-4 col-lg-2">
+          <base-info-box label="Published" :value="schemaData.summary.published" icon="fas fa-check"      color="success"   />
+        </div>
+        <div class="col-sm-6 col-md-4 col-lg-2">
+          <base-info-box label="PII"       :value="schemaData.summary.pii"       icon="fas fa-user-lock"  color="danger"    />
+        </div>
+      </div>
 
       <!-- DQ suite config -->
-      <base-panel title="Data Quality Suite">
-        <div class="p-3">
-          <p class="text-muted small mb-2">
-            Specify a suite YAML path on the server. The suite runs automatically at each commit
-            and saves the score as version metadata (<code>sys.dq.*</code>). Non-blocking.
-          </p>
+      <base-panel title="Data Quality Suite" icon="fa-shield-alt">
+        <div class="form-group mb-2">
+          <label class="small text-muted">Suite path (YAML file on the server)</label>
           <div class="input-group input-group-sm">
-            <input
-              class="form-control"
-              placeholder="/rules/suites/my_suite.yaml (leave empty to disable)"
+            <base-input
               v-model="dqSuitePath"
+              placeholder="/rules/suites/my_suite.yaml — leave empty to disable"
             />
             <div class="input-group-append">
               <base-button
@@ -319,63 +313,66 @@ export default {
                 icon="fas fa-save"
                 color="primary"
                 :disabled="dqSaving"
+                :loading="dqSaving"
                 @click="saveDqSuite"
               />
             </div>
           </div>
-          <div v-if="dataset && dataset.dq_suite" class="mt-2">
-            <span class="badge badge-success">
-              <i class="fas fa-check-circle mr-1"></i>DQ active
-            </span>
-            <code class="ml-2 small">{{ dataset.dq_suite }}</code>
-          </div>
-          <div v-else class="mt-2 text-muted small">No DQ suite configured.</div>
         </div>
+        <div v-if="dataset && dataset.dq_suite">
+          <span class="badge badge-success mr-2">
+            <i class="fas fa-check-circle mr-1"></i>DQ active
+          </span>
+          <code class="small">{{ dataset.dq_suite }}</code>
+        </div>
+        <div v-else class="text-muted small">No DQ suite configured — quality checks will be skipped at commit.</div>
       </base-panel>
 
       <!-- suite rules -->
-      <base-panel v-if="suiteRules.length" title="Suite Rules" :no-padding="true">
-        <table class="table table-sm table-hover mb-0">
-          <thead>
-            <tr>
-              <th style="width:40%">Rule</th>
-              <th>Inputs</th>
-              <th>Params</th>
-              <th style="width:10%">Tolerance</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in suiteRules" :key="i">
-              <td>
-                <code class="small">{{ r.rule_id }}</code>
-                <div v-if="r.description" class="text-muted small">{{ r.description }}</div>
-                <span v-if="!r.found" class="badge badge-danger mt-1">not found</span>
-              </td>
-              <td class="small">
-                <span v-for="(col, ph) in r.inputs" :key="ph" class="d-block">
-                  <code>{{ ph }}</code> → <span class="text-muted">{{ col }}</span>
-                </span>
-              </td>
-              <td class="small">
-                <span v-for="(val, name) in r.params" :key="name" class="d-block">
-                  <code>{{ name }}</code>: <span class="text-muted">{{ val }}</span>
-                </span>
-                <span v-if="!Object.keys(r.params).length" class="text-muted">—</span>
-              </td>
-              <td class="small text-center">{{ r.tolerance === 1 ? '100%' : (r.tolerance * 100).toFixed(0) + '%' }}</td>
-              <td class="text-right pr-2">
-                <a :href="'/dq/rules'" class="btn btn-xs btn-outline-secondary" title="View rule">
-                  <i class="fas fa-external-link-alt"></i>
-                </a>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <base-panel v-if="suiteRules.length" title="Suite Rules" icon="fa-list-ul" :no-padding="true">
+        <base-table :columns="SUITE_COLUMNS" :items="suiteRules">
+
+          <template #cell(rule_id)="{ item }">
+            <code class="small">{{ item.rule_id }}</code>
+            <div v-if="item.description" class="text-muted small">{{ item.description }}</div>
+            <span v-if="!item.found" class="badge badge-danger mt-1">not found in catalogue</span>
+          </template>
+
+          <template #cell(inputs)="{ item }">
+            <span v-for="(col, ph) in item.inputs" :key="ph" class="d-block small">
+              <code>{{ ph }}</code>
+              <span class="text-muted mx-1">→</span>
+              <span class="text-muted">{{ col }}</span>
+            </span>
+          </template>
+
+          <template #cell(params)="{ item }">
+            <span v-for="(val, name) in item.params" :key="name" class="d-block small">
+              <code>{{ name }}</code><span class="text-muted">: {{ val }}</span>
+            </span>
+            <span v-if="!Object.keys(item.params).length" class="text-muted small">—</span>
+          </template>
+
+          <template #cell(tolerance)="{ item }">
+            <span class="badge badge-secondary">
+              {{ item.tolerance === 1 ? '100%' : (item.tolerance * 100).toFixed(0) + '%' }}
+            </span>
+          </template>
+
+          <template #cell(actions)="{ item }">
+            <base-button
+              icon="fas fa-external-link-alt"
+              color="outline-secondary"
+              title="Browse all rules"
+              @click="goToRules"
+            />
+          </template>
+
+        </base-table>
       </base-panel>
 
-      <!-- schema table -->
-      <base-panel v-if="schemaData" title="Columns" :no-padding="true">
+      <!-- schema columns -->
+      <base-panel v-if="schemaData" title="Columns" icon="fa-table" :no-padding="true">
         <base-table :columns="SCHEMA_COLUMNS" :items="schemaData.columns">
 
           <template #cell(nullable)="{ item }">
@@ -425,7 +422,7 @@ export default {
         </base-table>
       </base-panel>
 
-      <!-- edit modal -->
+      <!-- edit column modal -->
       <base-modal ref="modalRef" size="md" icon="fas fa-pencil-alt"
                   :title="'Edit — ' + editCol" :scrollable="true">
 
@@ -452,14 +449,14 @@ export default {
           <label class="form-check-label small" for="ck-pii">PII flag</label>
         </div>
 
-        <div class="form-group" v-if="form.pii">
+        <div v-if="form.pii" class="form-group">
           <label class="small text-muted">PII type</label>
           <select class="form-control form-control-sm" v-model="form.pii_type">
             <option v-for="t in PII_TYPES" :key="t" :value="t">{{ t }}</option>
           </select>
         </div>
 
-        <div class="form-group" v-if="form.pii">
+        <div v-if="form.pii" class="form-group">
           <label class="small text-muted">PII notes</label>
           <base-input v-model="form.pii_notes" placeholder="e.g. masked in production" />
         </div>
@@ -470,6 +467,7 @@ export default {
             icon="fas fa-save"
             color="primary"
             :disabled="saving"
+            :loading="saving"
             @click="submitEdit"
           />
           <base-button
