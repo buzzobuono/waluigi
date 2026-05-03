@@ -25,6 +25,7 @@ def _dataset(row) -> dict | None:
             "description":     d.get("description"),
             "status":          d.get("status"),
             "source_id":       d.get("source_id"),
+            "dq_suite":        d.get("dq_suite"),
             "username":        d.get("username"),
             "createdate":      d.get("createdate"),
             "updatedate":      d.get("updatedate"),

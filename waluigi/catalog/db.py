@@ -56,6 +56,7 @@ class CatalogDB:
                     description  TEXT,
                     status       TEXT NOT NULL DEFAULT 'draft',
                     source_id    TEXT REFERENCES sources(id),
+                    dq_suite     TEXT,          -- path to DQ suite YAML on server (optional)
                     username     TEXT NOT NULL,
                     createdate   TEXT NOT NULL,
                     updatedate   TEXT NOT NULL
@@ -123,8 +124,13 @@ class CatalogDB:
                 );
 
             """)
-            
-            
+            # migrations for existing databases
+            try:
+                self.conn.execute("ALTER TABLE datasets ADD COLUMN dq_suite TEXT")
+            except Exception:
+                pass
+
+
     # Folders
     
     def list_folders(self, prefix: str) -> dict:
@@ -229,11 +235,13 @@ class CatalogDB:
         return [_dataset(r) for r in cur.fetchall()]
 
     def create_dataset(self, id: str, format: str, description: str = None,
-                       source_id: str = "local") -> bool:
+                       source_id: str = "local", dq_suite: str = None) -> bool:
         now = _now()
         with self.conn:
-            cur = self.conn.execute("INSERT INTO datasets (id, format, description, status, source_id, username, createdate, updatedate) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING",
-                                     (id, format, description, 'draft', source_id, _user(), now, now))
+            cur = self.conn.execute(
+                "INSERT INTO datasets (id, format, description, status, source_id, dq_suite, username, createdate, updatedate) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING",
+                (id, format, description, 'draft', source_id, dq_suite, _user(), now, now))
             return cur.rowcount > 0
   
     def exists_dataset(self, id: str) -> bool:
@@ -245,7 +253,7 @@ class CatalogDB:
         return _dataset(cur.fetchone())
         
     def update_dataset(self, id: str, **kwargs) -> bool:
-        allowed = {"description", "status"}
+        allowed = {"description", "status", "dq_suite"}
         updates = {k: v for k, v in kwargs.items() if k in allowed}
         if not updates:
             return False

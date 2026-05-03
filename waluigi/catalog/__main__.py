@@ -19,6 +19,7 @@ from waluigi.catalog.db import CatalogDB
 from waluigi.catalog.utils import _version_id, _infer_schema, _safe_json_value
 from waluigi.catalog.models import *
 from waluigi.sdk.connectors import ConnectorFactory
+from waluigi.sdk.dataquality import DQManager
     
 logger = logging.getLogger("waluigi")
 
@@ -38,11 +39,15 @@ p.add("--scan",         action="store_true", default=False)
 p.add("--scan-path",    default=None)
 p.add("--scan-prefix",  default=None,
       help="Dataset id prefix to assign scanned files")
+p.add("--rules-path",   default=os.path.join(os.getcwd(), "rules"),
+      help="Directory containing DQ rule YAML definitions")
 args = p.parse_args()
 
-DATA_PATH = args.data_path
+DATA_PATH  = args.data_path
+RULES_PATH = args.rules_path
 os.makedirs(DATA_PATH, exist_ok=True)
 os.makedirs(os.path.dirname(args.db_path), exist_ok=True)
+os.makedirs(RULES_PATH, exist_ok=True)
 
 SCANNABLE_EXTENSIONS = {
     ".parquet", ".csv", ".tsv", ".json", ".xls", ".xlsx",
@@ -55,11 +60,34 @@ try:
 except Exception as e:
     logger.error(f"❌ Critical DB error: {e}")
     sys.exit(1)
-    
+
+dq_manager = DQManager(RULES_PATH)
 
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
+
+
+def _run_dq_nonblocking(dataset_id: str, version: str,
+                        connector, location, fmt: str, dq_suite: str) -> dict | None:
+    """Run DQ suite against the committed dataset. Never raises — saves sys.dq.* metadata."""
+    try:
+        df = connector.read(location, fmt)
+        result = dq_manager.run_suite(dq_suite, {"this": df})
+        summary = {
+            "sys.dq.score":   str(round(result.score, 4)),
+            "sys.dq.passed":  str(result.passed),
+            "sys.dq.total":   str(result.total),
+            "sys.dq.success": str(result.success),
+        }
+        for k, v in summary.items():
+            db.set_metadata(dataset_id, version, k, v)
+        logger.info(f"DQ {dataset_id}@{version}: score={result.score:.2%} ({result.passed}/{result.total})")
+        return {"score": result.score, "passed": result.passed, "total": result.total, "success": result.success}
+    except Exception as e:
+        logger.warning(f"DQ run skipped for {dataset_id}@{version}: {e}")
+        db.set_metadata(dataset_id, version, "sys.dq.error", str(e))
+        return None
 
 
 def _extract_items(body) -> list:
@@ -452,7 +480,7 @@ async def create_dataset(body: DatasetCreateRequest):
     existing = db.get_dataset(body.id)
     if existing and existing["format"] != body.format:
         return ko(f"Cannot change format from '{existing['format']}' to '{body.format.value}' — create a new dataset instead", 409)
-    created = db.create_dataset(body.id, body.format, body.description, body.source_id)
+    created = db.create_dataset(body.id, body.format, body.description, body.source_id, body.dq_suite)
     # FIX ME gestire upsert in db.py analogogamemte a come fatto in source
     #if not created:
     #    return ko(f"Dataset '{body.id}' already exists", 409)
@@ -622,21 +650,29 @@ async def dataset_commit(dataset_id: str, version: str, body: CommitRequest):
             db.insert_lineage(dataset_id, version,
                               [_model_dump(i) for i in body.inputs])
 
+        dq_result = None
+        if dataset.get("dq_suite"):
+            dq_result = _run_dq_nonblocking(
+                dataset_id, version, connector, location,
+                dataset["format"], dataset["dq_suite"]
+            )
+
         logger.info(f"Committed {dataset_id}@{version}")
 
         all_warnings = diff["breaking"] + diff["warnings"]
         data = {
             "dataset_id": dataset_id,
             "version":    version,
-            "location":   location
+            "location":   location,
+            "dq":         dq_result,
         }
-        
+
         if diff["breaking"]:
             msgs.append(["Schema breaking changes"] + all_warnings)
             raise Exception
         if all_warnings:
             return warn(data, all_warnings)
-            
+
         return ok(data)
 
     except Exception as e:
