@@ -61,8 +61,8 @@ _SAFE_AST_NODES = {
     ast.BitAnd, ast.BitOr, ast.BitXor, ast.Invert,
     # Literals e nomi
     ast.Constant, ast.Name, ast.Load,
-    # Accesso attributi e chiamate
-    ast.Attribute, ast.Call,
+    # Accesso attributi e chiamate (ast.keyword copre i named args es. regex=True)
+    ast.Attribute, ast.Call, ast.keyword,
     # Strutture dati
     ast.List, ast.Tuple, ast.Dict,
     # Subscript e slicing
