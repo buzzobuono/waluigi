@@ -225,12 +225,18 @@ export default {
 
     loadFolders(null);
 
+    const dqDetails = Vue.computed(() => {
+      const raw = metadata.value?.['sys.dq.details'];
+      if (!raw) return [];
+      try { return JSON.parse(raw); } catch { return []; }
+    });
+
     return {
       columns, items, folderStack, children, datasets, loading,
       selFolder, selDataset, columns_history, history, metadata, detailOpen,
       selectedVersion, currentFolder,
       navigateTo, navigateBreadcrumb, openDataset, closeDetail, goBack,
-      selectVersion, materializeRef,
+      selectVersion, materializeRef, dqDetails,
     };
   },
 
@@ -389,20 +395,48 @@ export default {
             <small class="ml-2 font-weight-normal text-secondary">{{ selectedVersion.slice(0,19) }}</small>
           </h6>
 
-          <!-- DQ summary block (sys.dq.*) -->
-          <div v-if="metadata['sys.dq.score'] !== undefined" class="mb-3 p-2 rounded"
-               :style="{ background: metadata['sys.dq.success'] === 'True' ? '#d4edda' : '#f8d7da' }">
-            <div class="d-flex align-items-center mb-1">
-              <i :class="['fas mr-2', metadata['sys.dq.success'] === 'True' ? 'fa-check-circle text-success' : 'fa-times-circle text-danger']"></i>
-              <strong class="small">Data Quality</strong>
-              <span class="ml-auto badge"
-                    :class="metadata['sys.dq.success'] === 'True' ? 'badge-success' : 'badge-danger'">
-                {{ (parseFloat(metadata['sys.dq.score']) * 100).toFixed(1) }}%
-              </span>
+          <!-- DQ summary + per-rule detail -->
+          <div v-if="metadata['sys.dq.score'] !== undefined" class="mb-3">
+            <div class="p-2 rounded mb-2"
+                 :style="{ background: metadata['sys.dq.success'] === 'True' ? '#d4edda' : '#f8d7da' }">
+              <div class="d-flex align-items-center">
+                <i :class="['fas mr-2', metadata['sys.dq.success'] === 'True' ? 'fa-check-circle text-success' : 'fa-times-circle text-danger']"></i>
+                <strong class="small">Data Quality</strong>
+                <span class="ml-auto badge"
+                      :class="metadata['sys.dq.success'] === 'True' ? 'badge-success' : 'badge-danger'">
+                  {{ (parseFloat(metadata['sys.dq.score']) * 100).toFixed(1) }}%
+                </span>
+              </div>
+              <div class="small text-muted mt-1">
+                {{ metadata['sys.dq.passed'] }} / {{ metadata['sys.dq.total'] }} rules passed
+              </div>
             </div>
-            <div class="small text-muted">
-              {{ metadata['sys.dq.passed'] }} / {{ metadata['sys.dq.total'] }} rules passed
-            </div>
+
+            <!-- per-rule breakdown -->
+            <table v-if="dqDetails.length" class="table table-sm table-bordered mb-0 small">
+              <thead class="thead-light">
+                <tr>
+                  <th>Rule</th>
+                  <th style="width:60px" class="text-center">Status</th>
+                  <th style="width:60px" class="text-center">Score</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in dqDetails" :key="r.rule_id">
+                  <td>
+                    <code>{{ r.rule_id }}</code>
+                    <div v-if="r.error" class="text-danger small mt-1">{{ r.error }}</div>
+                  </td>
+                  <td class="text-center">
+                    <i v-if="r.success" class="fas fa-check-circle text-success"></i>
+                    <i v-else class="fas fa-times-circle text-danger"></i>
+                  </td>
+                  <td class="text-center">
+                    {{ r.score !== null ? (r.score * 100).toFixed(1) + '%' : '—' }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
           <div v-if="metadata['sys.dq.error']" class="mb-3 alert alert-warning py-1 px-2 small">
             <i class="fas fa-exclamation-triangle mr-1"></i>DQ error: {{ metadata['sys.dq.error'] }}

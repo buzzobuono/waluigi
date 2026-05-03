@@ -9,6 +9,7 @@ import Lineage       from './components/Lineage.js';
 import JobDag        from './components/JobDag.js';
 import DatasetPreview  from './components/DatasetPreview.js';
 import DatasetSchema   from './components/DatasetSchema.js';
+import DQRules         from './components/DQRules.js';
 
 const routes = [
   { path: '/',          redirect: '/jobs' },
@@ -22,6 +23,7 @@ const routes = [
   { path: '/sources',   component: Sources,   meta: { title: 'Sources' } },
   { path: '/datasets/:id+/:version', component: DatasetPreview, meta: { title: 'Dataset Preview'} },
   { path: '/schema/:id+',            component: DatasetSchema,  meta: { title: 'Schema' } },
+  { path: '/dq/rules',  component: DQRules,   meta: { title: 'DQ Rules' } },
   { path: '/lineage',   component: Lineage,   meta: { title: 'Lineage' } },
   { path: '/jobs/:jobId', component: JobDag,  meta: { title: 'Job DAG' } }
 ];
