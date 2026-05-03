@@ -388,10 +388,32 @@ export default {
             Metadata
             <small class="ml-2 font-weight-normal text-secondary">{{ selectedVersion.slice(0,19) }}</small>
           </h6>
-          <div v-if="!Object.keys(metadata).length" class="text-muted small">
+
+          <!-- DQ summary block (sys.dq.*) -->
+          <div v-if="metadata['sys.dq.score'] !== undefined" class="mb-3 p-2 rounded"
+               :style="{ background: metadata['sys.dq.success'] === 'True' ? '#d4edda' : '#f8d7da' }">
+            <div class="d-flex align-items-center mb-1">
+              <i :class="['fas mr-2', metadata['sys.dq.success'] === 'True' ? 'fa-check-circle text-success' : 'fa-times-circle text-danger']"></i>
+              <strong class="small">Data Quality</strong>
+              <span class="ml-auto badge"
+                    :class="metadata['sys.dq.success'] === 'True' ? 'badge-success' : 'badge-danger'">
+                {{ (parseFloat(metadata['sys.dq.score']) * 100).toFixed(1) }}%
+              </span>
+            </div>
+            <div class="small text-muted">
+              {{ metadata['sys.dq.passed'] }} / {{ metadata['sys.dq.total'] }} rules passed
+            </div>
+          </div>
+          <div v-if="metadata['sys.dq.error']" class="mb-3 alert alert-warning py-1 px-2 small">
+            <i class="fas fa-exclamation-triangle mr-1"></i>DQ error: {{ metadata['sys.dq.error'] }}
+          </div>
+
+          <div v-if="!Object.keys(metadata).filter(k => !k.startsWith('sys.dq.')).length && !metadata['sys.dq.score']"
+               class="text-muted small">
             No metadata for this version.
           </div>
-          <div v-for="(val, key) in metadata" :key="key" class="small mb-1">
+          <div v-for="(val, key) in metadata" :key="key" class="small mb-1"
+               v-if="!key.startsWith('sys.dq.')">
             <span class="text-muted">{{ key }}:</span>
             <span class="ml-2">{{ val }}</span>
           </div>

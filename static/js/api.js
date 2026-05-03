@@ -64,6 +64,8 @@ export const api = {
   catalogDeleteSource:  (id)    => _delete(`/catalog/sources/${_enc(id)}`),
 
   catalogFolders:  (prefix) => _get(`/catalog/folders/${_enc(prefix)}/`),
+  catalogDataset:          (id) => _get(`/catalog/datasets/${_enc(id)}`),
+  catalogDatasetUpdate:    (id, body) => _patchJson(`/catalog/datasets/${_enc(id)}`, body),
   catalogDatasetVersions:  (id) => _get(`/catalog/datasets/${_enc(id)}/versions`),
   catalogDatasetMetadata: (id, ver) => _get(`/catalog/datasets/${_enc(id)}/versions/${_enc(ver)}/metadata`),
   catalogDatasetPreview: (id, ver, limit = 10, offset = 0) => _get(`/catalog/datasets/${_enc(id)}/_preview/${_enc(ver)}`, { limit, offset }),

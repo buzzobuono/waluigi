@@ -39,10 +39,12 @@ class DatasetCreateRequest(BaseModel):
     description:  str            = Field(...,  example="Dataset description")
     status:       DatasetStatus  = Field(DatasetStatus.DRAFT, example=DatasetStatus.DRAFT)
     source_id:    Optional[str]  = Field(None,  example="pg-dwh")
-        
+    dq_suite:     Optional[str]  = Field(None,  example="/rules/suites/sales_suite.yaml")
+
 class DatasetUpdateRequest(BaseModel):
-    description:  Optional[str]  = None
-    status:       Optional[DatasetStatus]  = DatasetStatus.IN_REVIEW
+    description:  Optional[str]         = None
+    status:       Optional[DatasetStatus] = None
+    dq_suite:     Optional[str]         = None
         
 class ReserveRequest(BaseModel):
     metadata:      Dict[str, str]  = Field(default_factory=dict)

@@ -42,10 +42,13 @@ export default {
     });
 
     const schemaData       = Vue.ref(null);
+    const dataset          = Vue.ref(null);
     const loading          = Vue.ref(false);
     const saving           = Vue.ref(false);
+    const dqSaving         = Vue.ref(false);
     const pageError        = Vue.ref(null);
     const formError        = Vue.ref(null);
+    const dqSuitePath      = Vue.ref('');
 
     const modalRef          = Vue.ref(null);
     const confirmPublishRef = Vue.ref(null);
@@ -63,18 +66,47 @@ export default {
       pii_notes:    '',
     });
 
-    async function loadSchema() {
+    async function loadAll() {
       if (!datasetId.value) return;
       loading.value   = true;
       pageError.value = null;
       try {
-        const res = await api.catalogDatasetSchema(datasetId.value);
-        schemaData.value = res.data || null;
+        const [schemaRes, datasetRes] = await Promise.all([
+          api.catalogDatasetSchema(datasetId.value),
+          api.catalogDataset(datasetId.value),
+        ]);
+        schemaData.value = schemaRes.data || null;
+        dataset.value    = datasetRes.data || null;
+        dqSuitePath.value = dataset.value?.dq_suite || '';
       } catch (e) {
         pageError.value = e.message;
       } finally {
         loading.value = false;
       }
+    }
+
+    async function saveDqSuite() {
+      dqSaving.value  = true;
+      pageError.value = null;
+      try {
+        const res = await api.catalogDatasetUpdate(datasetId.value, {
+          dq_suite: dqSuitePath.value.trim() || null,
+        });
+        if (res.diagnostic?.result === 'KO') {
+          pageError.value = res.diagnostic?.messages?.[0] || 'Error saving DQ suite';
+          return;
+        }
+        dataset.value = res.data;
+        dqSuitePath.value = res.data?.dq_suite || '';
+      } catch (e) {
+        pageError.value = e.message;
+      } finally {
+        dqSaving.value = false;
+      }
+    }
+
+    async function loadSchema() {
+      await loadAll();
     }
 
     function openEdit(col) {
@@ -187,15 +219,17 @@ export default {
       }
     }
 
-    Vue.onMounted(loadSchema);
+    Vue.onMounted(loadAll);
 
     return {
-      datasetId, schemaData, loading, saving, pageError, formError,
+      datasetId, schemaData, dataset, loading, saving, dqSaving, pageError, formError,
+      dqSuitePath,
       SCHEMA_COLUMNS, STATUS_BADGE, PII_TYPES,
       modalRef, confirmPublishRef, confirmDeleteRef,
       editCol, pendingDelete, form,
       openEdit, submitEdit,
       askApproveColumn, askDeleteColumn, askPublishAll,
+      saveDqSuite,
       goBack: () => router.go(-1),
     };
   },
@@ -249,6 +283,39 @@ export default {
             <div class="display-4 font-weight-bold text-danger">{{ schemaData.summary.pii }}</div>
             <small class="text-muted">PII</small>
           </div>
+        </div>
+      </base-panel>
+
+      <!-- DQ suite config -->
+      <base-panel title="Data Quality Suite">
+        <div class="p-3">
+          <p class="text-muted small mb-2">
+            Specify a suite YAML path on the server. The suite runs automatically at each commit
+            and saves the score as version metadata (<code>sys.dq.*</code>). Non-blocking.
+          </p>
+          <div class="input-group input-group-sm">
+            <input
+              class="form-control"
+              placeholder="/rules/suites/my_suite.yaml (leave empty to disable)"
+              v-model="dqSuitePath"
+            />
+            <div class="input-group-append">
+              <base-button
+                label="Save"
+                icon="fas fa-save"
+                color="primary"
+                :disabled="dqSaving"
+                @click="saveDqSuite"
+              />
+            </div>
+          </div>
+          <div v-if="dataset && dataset.dq_suite" class="mt-2">
+            <span class="badge badge-success">
+              <i class="fas fa-check-circle mr-1"></i>DQ active
+            </span>
+            <code class="ml-2 small">{{ dataset.dq_suite }}</code>
+          </div>
+          <div v-else class="mt-2 text-muted small">No DQ suite configured.</div>
         </div>
       </base-panel>
 
