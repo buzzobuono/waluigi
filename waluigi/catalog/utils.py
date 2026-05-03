@@ -1,44 +1,52 @@
 from datetime import datetime, timezone
-from sqlalchemy import inspect
 import os
 import hashlib
 import numpy as np
 import pandas as pd
 
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
 
 def _version_id() -> str:
     return _now()
 
+
+_TYPE_MAP = {
+    "int64":          "integer",
+    "int32":          "integer",
+    "float64":        "decimal",
+    "float32":        "decimal",
+    "bool":           "boolean",
+    "datetime64[ns]": "datetime",
+    "object":         "string",
+}
+
+
+def _infer_schema_from_df(df: pd.DataFrame) -> list[dict]:
+    return [
+        {
+            "name":          col,
+            "physical_type": str(df[col].dtype),
+            "logical_type":  _TYPE_MAP.get(str(df[col].dtype), "string"),
+        }
+        for col in df.columns
+    ]
+
+
 def _infer_schema(path: str, fmt: str) -> list[dict]:
+    """File-based schema inference used by the scanner."""
     try:
         if fmt in ("csv", "tsv"):
             df = pd.read_csv(path, sep="\t" if fmt == "tsv" else ",", nrows=1000)
         elif fmt == "parquet":
             df = pd.read_parquet(path)
-        elif fmt in ("xls", "xlsx"):
-            df = pd.read_excel(path, nrows=1000)
+        elif fmt == "json":
+            df = pd.read_json(path)
         else:
             return []
-
-        type_map = {
-            "int64": "integer", 
-                "int32": "integer",
-            "float64": "decimal", 
-                "float32": "decimal",
-            "bool": "boolean", 
-                "datetime64[ns]": "datetime",
-            "object": "string",
-        }
-        return [
-            {
-                "name": col,
-                "physical_type": str(df[col].dtype),
-                "logical_type":  type_map.get(str(df[col].dtype), "string")
-            }
-            for col in df.columns
-        ]
+        return _infer_schema_from_df(df)
     except Exception:
         return []
 
@@ -56,4 +64,3 @@ def _safe_json_value(v):
             return None
         return v
     return v
-

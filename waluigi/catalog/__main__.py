@@ -614,7 +614,7 @@ async def dataset_commit(dataset_id: str, version: str, body: CommitRequest):
         for k, v in (body.metadata or {}).items():
             db.set_metadata(dataset_id, version, k, v)
 
-        inferred = _infer_schema(location, dataset.get("format", ""))
+        inferred = connector.infer_schema(location)
         db.upsert_schema_columns(dataset_id, inferred)
         diff = db.diff_schema_against_inferred(dataset_id, inferred)
         
