@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any, Dict
 from waluigi.catalog.models import DatasetFormat
 
 
@@ -10,28 +10,40 @@ class BaseConnector(ABC):
 
     @abstractmethod
     def exists(self, location: str) -> bool:
-        """Verify whether dataset version actually exists in the location provided"""
+        """Return True if the dataset version exists at location."""
 
     @abstractmethod
     def checksum(self, location: str) -> str:
-        """Calculate dataset version checksum"""
+        """Return a content hash for the data at location."""
 
     @abstractmethod
     def resolve_location(self, dataset_id: str, version: str, format: str, data_path: str) -> str:
-        """Resolve location of the dataset version """
-        
+        """Compute the write location for a new version."""
+
     @abstractmethod
-    def write(self, location: str, format: DatasetFormat, data: Any) -> None:
-        """Scrive data in location nel formato specificato."""
+    def write(self, location: str, format: DatasetFormat, data: Any) -> int:
+        """Write data to location.
+
+        data may be a DataFrame, list[dict], dict[str,list], pa.Table,
+        or any Iterator/Generator of the above (streaming path).
+        Returns the number of rows written.
+        """
 
     @abstractmethod
     def delete(self, location: str) -> None:
-        """Rimuove il dato scritto in location (rollback)."""
+        """Remove the data at location (used on rollback)."""
 
     @abstractmethod
     def read(self, location: str, format: DatasetFormat,
              limit: int = None, offset: int = 0) -> Any:
-        """Legge e restituisce i dati da location.
+        """Read and return data from location.
 
-        limit/offset abilitano la paginazione: None = leggi tutto.
+        limit/offset enable pagination; None = read all.
+        """
+
+    @abstractmethod
+    def infer_schema(self, location: str) -> list[dict]:
+        """Infer column schema from the data at location.
+
+        Returns list[dict] with keys: name, physical_type, logical_type.
         """

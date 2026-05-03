@@ -22,18 +22,10 @@ class SourceUpdateRequest(BaseModel):
 
 class DatasetFormat(str, Enum):
     PARQUET = "parquet"
-    CSV = "csv"
-    TSV = "tsv"
-    JSON = "json"
-    XLS = "xls"
-    XLSX = "xlsx"
-    SAS7BDAT = "sas7bdat"
-    PKL = "pkl"
-    PICKLE = "pickle"
-    FEATHER = "feather"
-    ORC = "orc"
-    TXT = "txt"
-    SQL = "SQL"
+    CSV     = "csv"
+    TSV     = "tsv"
+    JSON    = "json"
+    SQL     = "sql"
     
 class DatasetStatus(str, Enum):
     DRAFT = "draft"

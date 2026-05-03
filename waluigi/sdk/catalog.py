@@ -15,6 +15,7 @@ logger = logging.getLogger("waluigi")
 
 Tabular = Union[
     list[dict],
+    dict[str, list],
     pd.DataFrame,
     pa.Table,
     Iterator[list[dict]],
