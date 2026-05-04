@@ -9,7 +9,7 @@ import BaseInput     from './BaseInput.js';
 import BaseInfoBox   from './BaseInfoBox.js';
 import ConfirmDialog from './ConfirmDialog.js';
 
-const { ref, computed, onMounted } = Vue;
+const { ref, computed, onMounted, watch } = Vue;
 
 const PII_TYPES = ['none', 'direct', 'indirect', 'sensitive'];
 
@@ -30,7 +30,7 @@ const SCHEMA_COLUMNS = [
   { key: 'actions',       label: '', class: 'text-right pr-3' },
 ];
 
-const SUITE_COLUMNS = [
+const EXP_COLUMNS = [
   { key: 'rule_id',   label: 'Rule' },
   { key: 'inputs',    label: 'Inputs' },
   { key: 'params',    label: 'Params' },
@@ -55,16 +55,17 @@ export default {
       return joined.replace(/^\/|\/$/g, '');
     });
 
-    const schemaData    = ref(null);
-    const dataset       = ref(null);
-    const suiteRules    = ref([]);
-    const loading       = ref(false);
-    const saving        = ref(false);
-    const dqSaving      = ref(false);
-    const pageError     = ref(null);
-    const formError     = ref(null);
-    const dqSuitePath   = ref('');
+    const schemaData     = ref(null);
+    const expectations   = ref([]);
+    const availableRules = ref([]);
+    const loading        = ref(false);
+    const saving         = ref(false);
+    const expSaving      = ref(false);
+    const pageError      = ref(null);
+    const formError      = ref(null);
+    const expError       = ref(null);
 
+    // schema edit modal
     const modalRef          = ref(null);
     const confirmPublishRef = ref(null);
     const confirmDeleteRef  = ref(null);
@@ -80,53 +81,44 @@ export default {
       pii_notes:    '',
     });
 
-    async function loadSuiteRules(path) {
-      suiteRules.value = [];
-      if (!path) return;
-      try {
-        const res = await api.dqSuite(path);
-        suiteRules.value = res.data || [];
-      } catch { /* best-effort */ }
-    }
+    // expectation modal
+    const expModalRef  = ref(null);
+    const expEditId    = ref(null);
+    const expForm      = ref({ rule_id: '', inputs: {}, params: {}, tolerance: 1.0, position: 0 });
+    const confirmExpDeleteRef = ref(null);
+
+    const selectedRule = computed(() =>
+      availableRules.value.find(r => r.id === expForm.value.rule_id) || null
+    );
+
+    watch(() => expForm.value.rule_id, (newId) => {
+      const rule = availableRules.value.find(r => r.id === newId);
+      if (!rule) return;
+      const inputs = {};
+      for (const key of Object.keys(rule.inputs_schema || {})) inputs[key] = '';
+      const params = {};
+      for (const key of Object.keys(rule.params_schema || {})) params[key] = '';
+      expForm.value.inputs = inputs;
+      expForm.value.params = params;
+    });
 
     async function loadAll() {
       if (!datasetId.value) return;
       loading.value   = true;
       pageError.value = null;
       try {
-        const [schemaRes, datasetRes] = await Promise.all([
+        const [schemaRes, expRes, rulesRes] = await Promise.all([
           api.catalogDatasetSchema(datasetId.value),
-          api.catalogDataset(datasetId.value),
+          api.datasetExpectations(datasetId.value),
+          api.dqRules(),
         ]);
-        schemaData.value  = schemaRes.data || null;
-        dataset.value     = datasetRes.data || null;
-        dqSuitePath.value = dataset.value?.dq_suite || '';
-        await loadSuiteRules(dataset.value?.dq_suite);
+        schemaData.value   = schemaRes.data || null;
+        expectations.value = expRes.data || [];
+        availableRules.value = rulesRes.data || [];
       } catch (e) {
         pageError.value = e.message;
       } finally {
         loading.value = false;
-      }
-    }
-
-    async function saveDqSuite() {
-      dqSaving.value  = true;
-      pageError.value = null;
-      try {
-        const res = await api.catalogDatasetUpdate(datasetId.value, {
-          dq_suite: dqSuitePath.value.trim() || null,
-        });
-        if (res.diagnostic?.result === 'KO') {
-          pageError.value = res.diagnostic?.messages?.[0] || 'Error saving DQ suite';
-          return;
-        }
-        dataset.value     = res.data;
-        dqSuitePath.value = res.data?.dq_suite || '';
-        await loadSuiteRules(res.data?.dq_suite);
-      } catch (e) {
-        pageError.value = e.message;
-      } finally {
-        dqSaving.value = false;
       }
     }
 
@@ -237,17 +229,85 @@ export default {
       }
     }
 
+    function openAddExpectation() {
+      expEditId.value = null;
+      expError.value  = null;
+      expForm.value   = { rule_id: '', inputs: {}, params: {}, tolerance: 1.0, position: expectations.value.length };
+      expModalRef.value?.open();
+    }
+
+    function openEditExpectation(exp) {
+      expEditId.value = exp.id;
+      expError.value  = null;
+      expForm.value = {
+        rule_id:   exp.rule_id,
+        inputs:    { ...exp.inputs },
+        params:    { ...exp.params },
+        tolerance: exp.tolerance,
+        position:  exp.position,
+      };
+      expModalRef.value?.open();
+    }
+
+    async function submitExpectation() {
+      expError.value  = null;
+      expSaving.value = true;
+      try {
+        const body = {
+          rule_id:   expForm.value.rule_id,
+          inputs:    expForm.value.inputs,
+          params:    expForm.value.params,
+          tolerance: parseFloat(expForm.value.tolerance) || 1.0,
+          position:  parseInt(expForm.value.position)    || 0,
+        };
+        let res;
+        if (expEditId.value !== null) {
+          res = await api.updateExpectation(datasetId.value, expEditId.value, body);
+        } else {
+          res = await api.addExpectation(datasetId.value, body);
+        }
+        if (res.diagnostic?.result === 'KO') {
+          expError.value = res.diagnostic?.messages?.[0] || 'Error saving expectation';
+          return;
+        }
+        expModalRef.value?.close();
+        await loadAll();
+      } catch (e) {
+        expError.value = e.message;
+      } finally {
+        expSaving.value = false;
+      }
+    }
+
+    function askDeleteExpectation(exp) {
+      confirmExpDeleteRef.value?.ask(
+        `Delete expectation "${exp.rule_id}"?`,
+        async (ok) => { if (ok) await deleteExpectation(exp.id); }
+      );
+    }
+
+    async function deleteExpectation(expId) {
+      try {
+        await api.deleteExpectation(datasetId.value, expId);
+        await loadAll();
+      } catch (e) {
+        pageError.value = e.message;
+      }
+    }
+
     onMounted(loadAll);
 
     return {
-      datasetId, schemaData, dataset, suiteRules, loading, saving, dqSaving,
-      pageError, formError, dqSuitePath,
-      SCHEMA_COLUMNS, SUITE_COLUMNS, STATUS_BADGE, PII_TYPES,
+      datasetId, schemaData, expectations, availableRules,
+      loading, saving, expSaving,
+      pageError, formError, expError,
+      SCHEMA_COLUMNS, EXP_COLUMNS, STATUS_BADGE, PII_TYPES,
       modalRef, confirmPublishRef, confirmDeleteRef,
       editCol, pendingDelete, form,
+      expModalRef, expEditId, expForm, selectedRule, confirmExpDeleteRef,
       openEdit, submitEdit,
       askApproveColumn, askDeleteColumn, askPublishAll,
-      saveDqSuite,
+      openAddExpectation, openEditExpectation, submitExpectation, askDeleteExpectation,
       goBack: () => router.go(-1),
       goToRules: () => router.push('/dq/rules'),
     };
@@ -297,52 +357,36 @@ export default {
 
       <div v-if="pageError" class="alert alert-danger">{{ pageError }}</div>
 
-      <!-- DQ suite config -->
-      <base-panel title="Data Quality Suite" icon="fa-shield-alt">
-        <div class="form-group mb-2">
-          <label class="small text-muted">Suite path (YAML file on the server)</label>
-          <div class="input-group input-group-sm">
-            <base-input
-              v-model="dqSuitePath"
-              placeholder="/rules/suites/my_suite.yaml — leave empty to disable"
-            />
-            <div class="input-group-append">
-              <base-button
-                label="Save"
-                icon="fas fa-save"
-                color="primary"
-                :disabled="dqSaving"
-                :loading="dqSaving"
-                @click="saveDqSuite"
-              />
-            </div>
-          </div>
-        </div>
-        <div v-if="dataset && dataset.dq_suite">
-          <span class="badge badge-success mr-2">
-            <i class="fas fa-check-circle mr-1"></i>DQ active
-          </span>
-          <code class="small">{{ dataset.dq_suite }}</code>
-        </div>
-        <div v-else class="text-muted small">No DQ suite configured — quality checks will be skipped at commit.</div>
-      </base-panel>
+      <!-- DQ Expectations -->
+      <base-panel title="DQ Expectations" icon="fa-shield-alt" :no-padding="true">
 
-      <!-- suite rules -->
-      <base-panel v-if="suiteRules.length" title="Suite Rules" icon="fa-list-ul" :no-padding="true">
-        <base-table :columns="SUITE_COLUMNS" :items="suiteRules">
+        <template #tools>
+          <base-button
+            icon="fas fa-external-link-alt"
+            color="outline-secondary"
+            title="Browse available rules"
+            @click="goToRules"
+          />
+          <base-button
+            icon="fas fa-plus"
+            label="Add"
+            color="outline-primary"
+            class="ml-1"
+            @click="openAddExpectation"
+          />
+        </template>
+
+        <base-table :columns="EXP_COLUMNS" :items="expectations">
 
           <template #cell(rule_id)="{ item }">
             <code class="small">{{ item.rule_id }}</code>
-            <div v-if="item.description" class="text-muted small">{{ item.description }}</div>
-            <span v-if="!item.found" class="badge badge-danger mt-1">not found in catalogue</span>
           </template>
 
           <template #cell(inputs)="{ item }">
             <span v-for="(col, ph) in item.inputs" :key="ph" class="d-block small">
-              <code>{{ ph }}</code>
-              <span class="text-muted mx-1">→</span>
-              <span class="text-muted">{{ col }}</span>
+              <code>{{ ph }}</code><span class="text-muted mx-1">→</span>{{ col }}
             </span>
+            <span v-if="!Object.keys(item.inputs).length" class="text-muted small">—</span>
           </template>
 
           <template #cell(params)="{ item }">
@@ -359,15 +403,28 @@ export default {
           </template>
 
           <template #cell(actions)="{ item }">
-            <base-button
-              icon="fas fa-external-link-alt"
-              color="outline-secondary"
-              title="Browse all rules"
-              @click="goToRules"
-            />
+            <base-button-group>
+              <base-button
+                icon="fas fa-pencil-alt"
+                color="outline-primary"
+                title="Edit"
+                @click="openEditExpectation(item)"
+              />
+              <base-button
+                icon="fas fa-trash"
+                color="outline-danger"
+                title="Delete"
+                @click="askDeleteExpectation(item)"
+              />
+            </base-button-group>
           </template>
 
         </base-table>
+
+        <div v-if="!expectations.length" class="p-3 text-muted small text-center">
+          No expectations configured — quality checks will be skipped at commit.
+        </div>
+
       </base-panel>
 
       <!-- schema columns -->
@@ -479,8 +536,79 @@ export default {
         </template>
       </base-modal>
 
+      <!-- add/edit expectation modal -->
+      <base-modal ref="expModalRef" size="md" icon="fas fa-shield-alt"
+                  :title="expEditId !== null ? 'Edit Expectation' : 'Add Expectation'"
+                  :scrollable="true">
+
+        <div v-if="expError" class="alert alert-danger mb-3">{{ expError }}</div>
+
+        <div class="form-group">
+          <label class="small text-muted">Rule</label>
+          <select class="form-control form-control-sm" v-model="expForm.rule_id">
+            <option value="" disabled>Select a rule…</option>
+            <option v-for="r in availableRules" :key="r.id" :value="r.id">
+              {{ r.id }}
+            </option>
+          </select>
+          <small v-if="selectedRule" class="text-muted">{{ selectedRule.description }}</small>
+        </div>
+
+        <template v-if="selectedRule">
+          <div v-if="Object.keys(selectedRule.inputs_schema).length" class="mb-3">
+            <label class="small text-muted d-block mb-1">Inputs
+              <span class="text-secondary">(format: dataset.column — use "this" for the current dataset)</span>
+            </label>
+            <div v-for="(desc, name) in selectedRule.inputs_schema" :key="name" class="form-group mb-2">
+              <label class="small"><code>{{ name }}</code> <span class="text-muted">— {{ desc }}</span></label>
+              <base-input v-model="expForm.inputs[name]" :placeholder="'e.g. this.' + name" />
+            </div>
+          </div>
+
+          <div v-if="Object.keys(selectedRule.params_schema).length" class="mb-3">
+            <label class="small text-muted d-block mb-1">Parameters</label>
+            <div v-for="(desc, name) in selectedRule.params_schema" :key="name" class="form-group mb-2">
+              <label class="small"><code>{{ name }}</code> <span class="text-muted">— {{ desc }}</span></label>
+              <base-input v-model="expForm.params[name]" :placeholder="desc" />
+            </div>
+          </div>
+        </template>
+
+        <div class="form-row">
+          <div class="form-group col-6">
+            <label class="small text-muted">Tolerance (0–1)</label>
+            <input type="number" class="form-control form-control-sm"
+                   v-model="expForm.tolerance" min="0" max="1" step="0.01" />
+          </div>
+          <div class="form-group col-6">
+            <label class="small text-muted">Position</label>
+            <input type="number" class="form-control form-control-sm"
+                   v-model="expForm.position" min="0" step="1" />
+          </div>
+        </div>
+
+        <template #footer>
+          <base-button
+            label="Save"
+            icon="fas fa-save"
+            color="primary"
+            :disabled="expSaving || !expForm.rule_id"
+            :loading="expSaving"
+            @click="submitExpectation"
+          />
+          <base-button
+            label="Close"
+            icon="fas fa-times"
+            color="outline-secondary"
+            class="ml-auto"
+            @click="expModalRef && expModalRef.close()"
+          />
+        </template>
+      </base-modal>
+
       <confirm-dialog ref="confirmPublishRef" />
       <confirm-dialog ref="confirmDeleteRef" />
+      <confirm-dialog ref="confirmExpDeleteRef" />
 
     </base-page>
   `

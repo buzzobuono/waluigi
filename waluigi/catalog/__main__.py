@@ -70,11 +70,14 @@ dq_manager = DQManager(RULES_PATH)
 
 
 def _run_dq_nonblocking(dataset_id: str, version: str,
-                        connector, location, fmt: str, dq_suite: str) -> dict | None:
-    """Run DQ suite against the committed dataset. Never raises — saves sys.dq.* metadata."""
+                        connector, location, fmt: str,
+                        expectations: list = None) -> dict | None:
+    """Run DQ expectations against the committed dataset. Never raises — saves sys.dq.* metadata."""
     try:
+        if not expectations:
+            return None
         df = connector.read(location, fmt)
-        result = dq_manager.run_suite(dq_suite, {"this": df})
+        result = dq_manager.run_from_db(expectations, {"this": df})
         details = json.dumps([
             {"rule_id": r.rule_id, "success": r.success,
              "score": r.score, "error": r.error}
@@ -463,6 +466,55 @@ async def publish_schema(dataset_id: str, body: SchemaPublishRequest):
     db.publish_schema(dataset_id, body.published_by)
     return ok({"dataset_id" : dataset_id})
 
+# Routes - Expectations
+
+@app.get("/datasets/{dataset_id:path}/expectations", tags=["Expectations"],
+         summary="List all DQ expectations for a dataset")
+async def list_expectations(dataset_id: str):
+    if not db.exists_dataset(dataset_id):
+        return ko("Dataset not found", 404)
+    return ok(db.list_expectations(dataset_id))
+
+
+@app.post("/datasets/{dataset_id:path}/expectations", tags=["Expectations"],
+          summary="Add a DQ expectation to a dataset")
+async def add_expectation(dataset_id: str, body: ExpectationCreateRequest):
+    if not db.exists_dataset(dataset_id):
+        return ko("Dataset not found", 404)
+    exp = db.add_expectation(
+        dataset_id,
+        body.rule_id,
+        body.inputs,
+        body.params,
+        body.tolerance,
+        body.position,
+    )
+    return ok(exp)
+
+
+@app.patch("/datasets/{dataset_id:path}/expectations/{exp_id}", tags=["Expectations"],
+           summary="Update a DQ expectation")
+async def update_expectation(dataset_id: str, exp_id: int, body: ExpectationUpdateRequest):
+    if not db.exists_dataset(dataset_id):
+        return ko("Dataset not found", 404)
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    updated = db.update_expectation(dataset_id, exp_id, **updates)
+    if not updated:
+        return ko("Expectation not found", 404)
+    return ok(db.get_expectation(dataset_id, exp_id))
+
+
+@app.delete("/datasets/{dataset_id:path}/expectations/{exp_id}", tags=["Expectations"],
+            summary="Delete a DQ expectation")
+async def delete_expectation(dataset_id: str, exp_id: int):
+    if not db.exists_dataset(dataset_id):
+        return ko("Dataset not found", 404)
+    deleted = db.delete_expectation(dataset_id, exp_id)
+    if not deleted:
+        return ko("Expectation not found", 404)
+    return ok({"deleted": exp_id})
+
+
 # Routes - Data Quality
 
 @app.get("/dq/rules", tags=["Data Quality"],
@@ -703,10 +755,11 @@ async def dataset_commit(dataset_id: str, version: str, body: CommitRequest):
                               [_model_dump(i) for i in body.inputs])
 
         dq_result = None
-        if dataset.get("dq_suite"):
+        expectations = db.list_expectations(dataset_id)
+        if expectations:
             dq_result = _run_dq_nonblocking(
                 dataset_id, version, connector, location,
-                dataset["format"], dataset["dq_suite"]
+                dataset["format"], expectations
             )
 
         logger.info(f"Committed {dataset_id}@{version}")
