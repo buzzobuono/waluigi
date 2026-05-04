@@ -47,7 +47,8 @@ class DatasetUpdateRequest(BaseModel):
     dq_suite:     Optional[str]         = None
         
 class ReserveRequest(BaseModel):
-    metadata:      Dict[str, str]  = Field(default_factory=dict)
+    metadata: Dict[str, str] = Field(default_factory=dict)
+    force:    bool           = Field(False, description="Skip metadata-based dedup and always create a new version")
         
 class LineageRef(BaseModel):
     dataset_id: str = Field(..., example="finance/erp/fatture")
