@@ -45,6 +45,7 @@ export default {
     const selDataset      = Vue.ref(null); // selected dataset id
     const history    = Vue.ref([]);
     const metadata         = Vue.ref({});
+    const dqResult         = Vue.ref(null);
     const selectedVersion  = Vue.ref(null);
     const detailOpen = Vue.ref(false);
 
@@ -124,6 +125,7 @@ export default {
       history.value         = [];
       selectedVersion.value = null;
       metadata.value        = {};
+      dqResult.value        = null;
 
       try {
         const res = await api.catalogDatasetVersions(dataset);
@@ -136,12 +138,16 @@ export default {
     async function selectVersion(ver) {
       selectedVersion.value = ver.version;
       metadata.value = {};
+      dqResult.value = null;
       try {
-        const res = await api.catalogDatasetMetadata(selDataset.value, ver.version);
-        metadata.value = res.data || {};
+        const [metaRes, dqRes] = await Promise.allSettled([
+          api.catalogDatasetMetadata(selDataset.value, ver.version),
+          api.datasetDQResult(selDataset.value, ver.version),
+        ]);
+        metadata.value = metaRes.status === 'fulfilled' ? (metaRes.value?.data || {}) : {};
+        dqResult.value = dqRes.status  === 'fulfilled' ? (dqRes.value?.data  || null) : null;
       } catch(e) {
-        alert(e)
-        console.error('Metadata load error', e);
+        console.error('Version detail load error', e);
       }
     }
 
@@ -225,18 +231,12 @@ export default {
 
     loadFolders(null);
 
-    const dqDetails = Vue.computed(() => {
-      const raw = metadata.value?.['sys.dq.details'];
-      if (!raw) return [];
-      try { return JSON.parse(raw); } catch { return []; }
-    });
-
     return {
       columns, items, folderStack, children, datasets, loading,
-      selFolder, selDataset, columns_history, history, metadata, detailOpen,
+      selFolder, selDataset, columns_history, history, metadata, dqResult, detailOpen,
       selectedVersion, currentFolder,
       navigateTo, navigateBreadcrumb, openDataset, closeDetail, goBack,
-      selectVersion, materializeRef, dqDetails,
+      selectVersion, materializeRef,
     };
   },
 
@@ -390,30 +390,34 @@ export default {
         </base-table>
   
         <div v-if="selectedVersion" class="p-3 border-top">
-          <h6 class="text-muted mb-2">
-            Metadata
-            <small class="ml-2 font-weight-normal text-secondary">{{ selectedVersion.slice(0,19) }}</small>
-          </h6>
 
-          <!-- DQ summary + per-rule detail -->
-          <div v-if="metadata['sys.dq.score'] !== undefined" class="mb-3">
-            <div class="p-2 rounded mb-2"
-                 :style="{ background: metadata['sys.dq.success'] === 'True' ? '#d4edda' : '#f8d7da' }">
+          <!-- DQ result from dq_results table -->
+          <div v-if="dqResult" class="mb-3">
+            <h6 class="text-muted mb-2">
+              <i class="fas fa-shield-alt mr-1"></i>Data Quality
+              <small class="ml-2 font-weight-normal text-secondary">{{ selectedVersion.slice(0,19) }}</small>
+            </h6>
+
+            <div v-if="dqResult.error" class="alert alert-warning py-1 px-2 small mb-2">
+              <i class="fas fa-exclamation-triangle mr-1"></i>{{ dqResult.error }}
+            </div>
+
+            <div v-else class="p-2 rounded mb-2"
+                 :style="{ background: dqResult.success ? '#d4edda' : '#f8d7da' }">
               <div class="d-flex align-items-center">
-                <i :class="['fas mr-2', metadata['sys.dq.success'] === 'True' ? 'fa-check-circle text-success' : 'fa-times-circle text-danger']"></i>
-                <strong class="small">Data Quality</strong>
-                <span class="ml-auto badge"
-                      :class="metadata['sys.dq.success'] === 'True' ? 'badge-success' : 'badge-danger'">
-                  {{ (parseFloat(metadata['sys.dq.score']) * 100).toFixed(1) }}%
+                <i :class="['fas mr-2', dqResult.success ? 'fa-check-circle text-success' : 'fa-times-circle text-danger']"></i>
+                <strong class="small">{{ dqResult.success ? 'All checks passed' : 'Some checks failed' }}</strong>
+                <span class="ml-auto badge" :class="dqResult.success ? 'badge-success' : 'badge-danger'">
+                  {{ (dqResult.score * 100).toFixed(1) }}%
                 </span>
               </div>
               <div class="small text-muted mt-1">
-                {{ metadata['sys.dq.passed'] }} / {{ metadata['sys.dq.total'] }} rules passed
+                {{ dqResult.passed }} / {{ dqResult.total }} rules passed
               </div>
             </div>
 
-            <!-- per-rule breakdown -->
-            <table v-if="dqDetails.length" class="table table-sm table-bordered mb-0 small">
+            <table v-if="dqResult.details && dqResult.details.length"
+                   class="table table-sm table-bordered mb-0 small">
               <thead class="thead-light">
                 <tr>
                   <th>Rule</th>
@@ -422,7 +426,7 @@ export default {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="r in dqDetails" :key="r.rule_id">
+                <tr v-for="r in dqResult.details" :key="r.rule_id">
                   <td>
                     <code>{{ r.rule_id }}</code>
                     <div v-if="r.error" class="text-danger small mt-1">{{ r.error }}</div>
@@ -438,18 +442,21 @@ export default {
               </tbody>
             </table>
           </div>
-          <div v-if="metadata['sys.dq.error']" class="mb-3 alert alert-warning py-1 px-2 small">
-            <i class="fas fa-exclamation-triangle mr-1"></i>DQ error: {{ metadata['sys.dq.error'] }}
+
+          <!-- User metadata -->
+          <div v-if="Object.keys(metadata).length">
+            <h6 class="text-muted mb-2">
+              Metadata
+              <small class="ml-2 font-weight-normal text-secondary">{{ selectedVersion.slice(0,19) }}</small>
+            </h6>
+            <div v-for="(val, key) in metadata" :key="key" class="small mb-1">
+              <span class="text-muted">{{ key }}:</span>
+              <span class="ml-2">{{ val }}</span>
+            </div>
           </div>
 
-          <div v-if="!Object.keys(metadata).filter(k => !k.startsWith('sys.dq.')).length && !metadata['sys.dq.score']"
-               class="text-muted small">
-            No metadata for this version.
-          </div>
-          <div v-for="(val, key) in metadata" :key="key" class="small mb-1"
-               v-if="!key.startsWith('sys.dq.')">
-            <span class="text-muted">{{ key }}:</span>
-            <span class="ml-2">{{ val }}</span>
+          <div v-if="!dqResult && !Object.keys(metadata).length" class="text-muted small">
+            No data for this version.
           </div>
         </div>
   

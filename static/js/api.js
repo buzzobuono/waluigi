@@ -79,6 +79,9 @@ export const api = {
   dqRules: ()       => _get('/catalog/dq/rules'),
   dqSuite: (path)   => _get('/catalog/dq/suite', { path }),
 
+  datasetDQResults:    (id)              => _get(`/catalog/datasets/${_enc(id)}/dq`),
+  datasetDQResult:     (id, ver)         => _get(`/catalog/datasets/${_enc(id)}/dq/${_enc(ver)}`),
+
   datasetExpectations: (id)              => _get(`/catalog/datasets/${_enc(id)}/expectations`),
   addExpectation:      (id, body)        => _postJson(`/catalog/datasets/${_enc(id)}/expectations`, body),
   updateExpectation:   (id, expId, body) => _patchJson(`/catalog/datasets/${_enc(id)}/expectations/${expId}`, body),
