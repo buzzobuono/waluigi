@@ -261,10 +261,28 @@ export default {
       :loading="loading">
 
       <template #actions>
+        <div v-if="schemaData" class="row w-100 m-0">
+          <div class="col-6 col-md-3 col-xl-2 px-1">
+            <base-info-box label="Total"     :value="schemaData.summary.total"     icon="fas fa-list"      color="primary"   />
+          </div>
+          <div class="col-6 col-md-3 col-xl-2 px-1">
+            <base-info-box label="Inferred"  :value="schemaData.summary.inferred"  icon="fas fa-robot"     color="secondary" />
+          </div>
+          <div class="col-6 col-md-3 col-xl-2 px-1">
+            <base-info-box label="Draft"     :value="schemaData.summary.draft"     icon="fas fa-pen"       color="warning"   />
+          </div>
+          <div class="col-6 col-md-3 col-xl-2 px-1">
+            <base-info-box label="Published" :value="schemaData.summary.published" icon="fas fa-check"     color="success"   />
+          </div>
+          <div class="col-6 col-md-3 col-xl-2 px-1">
+            <base-info-box label="PII"       :value="schemaData.summary.pii"       icon="fas fa-user-lock" color="danger"    />
+          </div>
+        </div>
         <base-button
           label="Back"
           icon="fas fa-arrow-left"
           color="outline-secondary"
+          class="ml-auto"
           @click="goBack"
         />
         <base-button
@@ -278,25 +296,6 @@ export default {
       </template>
 
       <div v-if="pageError" class="alert alert-danger">{{ pageError }}</div>
-
-      <!-- summary -->
-      <div v-if="schemaData" class="row mb-3">
-        <div class="col-sm-6 col-md-4 col-lg-2">
-          <base-info-box label="Total"     :value="schemaData.summary.total"     icon="fas fa-list"       color="primary"   />
-        </div>
-        <div class="col-sm-6 col-md-4 col-lg-2">
-          <base-info-box label="Inferred"  :value="schemaData.summary.inferred"  icon="fas fa-robot"      color="secondary" />
-        </div>
-        <div class="col-sm-6 col-md-4 col-lg-2">
-          <base-info-box label="Draft"     :value="schemaData.summary.draft"     icon="fas fa-pen"        color="warning"   />
-        </div>
-        <div class="col-sm-6 col-md-4 col-lg-2">
-          <base-info-box label="Published" :value="schemaData.summary.published" icon="fas fa-check"      color="success"   />
-        </div>
-        <div class="col-sm-6 col-md-4 col-lg-2">
-          <base-info-box label="PII"       :value="schemaData.summary.pii"       icon="fas fa-user-lock"  color="danger"    />
-        </div>
-      </div>
 
       <!-- DQ suite config -->
       <base-panel title="Data Quality Suite" icon="fa-shield-alt">
