@@ -378,10 +378,11 @@ class CatalogDB:
         version_id = row["version"]
 
         existing_meta = self.get_metadata(dataset_id, version_id)
+        existing_meta_user = {k: v for k, v in existing_meta.items() if not k.startswith("sys.")}
 
         target_meta = {k: str(v) for k, v in metadata.items()}
 
-        if existing_meta == target_meta:
+        if existing_meta_user == target_meta:
             return _version(row)
             
         return None
