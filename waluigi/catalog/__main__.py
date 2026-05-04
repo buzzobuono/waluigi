@@ -712,7 +712,7 @@ async def dataset_reserve(dataset_id: str, body: ReserveRequest):
             return ko("Dataset not found", 404)
         source = db.get_source(dataset["source_id"])
         
-        if body and body.metadata:
+        if not body.force and body.metadata:
             existing = db.find_version_by_metadata(dataset_id, body.metadata)
             if existing:
                 msg = f"Skipped {dataset_id} new version creation because of identical metadata to {existing['version']} version"

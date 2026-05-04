@@ -136,9 +136,11 @@ class CatalogClient:
             connector=connector,
         )
 
-    def produce(self, dataset: DatasetCreateRequest, metadata: Dict[str, Any] = {}, inputs: List[dict] = []) -> DatasetWriter:
+    def produce(self, dataset: DatasetCreateRequest, metadata: Dict[str, Any] = {},
+                inputs: List[dict] = [], force: bool = False) -> DatasetWriter:
         self.create_dataset(dataset)
-        result = self._post(f"/datasets/{dataset.id}/_reserve", json = { "metadata": metadata})
+        result = self._post(f"/datasets/{dataset.id}/_reserve",
+                            json={"metadata": metadata, "force": force})
         source = self.get_source(result["source_id"])
         connector = ConnectorFactory.get(source["type"], source["config"])
         return DatasetWriter(
