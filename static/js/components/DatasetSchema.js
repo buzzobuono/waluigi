@@ -94,12 +94,21 @@ export default {
     watch(() => expForm.value.rule_id, (newId) => {
       const rule = availableRules.value.find(r => r.id === newId);
       if (!rule) return;
-      const inputs = {};
-      for (const key of Object.keys(rule.inputs_schema || {})) inputs[key] = '';
-      const params = {};
-      for (const key of Object.keys(rule.params_schema || {})) params[key] = '';
-      expForm.value.inputs = inputs;
-      expForm.value.params = params;
+      // Preserve current values where keys match the new rule's schema.
+      // This keeps saved values intact when opening edit, and resets to ''
+      // only for keys the current form doesn't already have.
+      const curInputs = expForm.value.inputs || {};
+      const newInputs = {};
+      for (const key of Object.keys(rule.inputs_schema || {})) {
+        newInputs[key] = curInputs[key] ?? '';
+      }
+      const curParams = expForm.value.params || {};
+      const newParams = {};
+      for (const key of Object.keys(rule.params_schema || {})) {
+        newParams[key] = curParams[key] ?? '';
+      }
+      expForm.value.inputs = newInputs;
+      expForm.value.params = newParams;
     });
 
     async function loadAll() {
