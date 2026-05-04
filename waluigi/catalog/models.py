@@ -91,6 +91,21 @@ class SchemaPublishRequest(BaseModel):
     published_by: str = Field("anonymous", example="mario.rossi")
 
 
+class ExpectationCreateRequest(BaseModel):
+    rule_id:   str            = Field(..., example="expect_column_values_to_not_be_null")
+    inputs:    Dict[str, Any] = Field(default_factory=dict)
+    params:    Dict[str, Any] = Field(default_factory=dict)
+    tolerance: float          = Field(1.0, example=1.0)
+    position:  int            = Field(0,   example=0)
+
+class ExpectationUpdateRequest(BaseModel):
+    rule_id:   Optional[str]            = None
+    inputs:    Optional[Dict[str, Any]] = None
+    params:    Optional[Dict[str, Any]] = None
+    tolerance: Optional[float]          = None
+    position:  Optional[int]            = None
+
+
 class ApproveRequest(BaseModel):
     approved_by: str  = Field(...,  example="mario.rossi")
     notes:       str  = Field("",   example="PII verified, schema confirmed")

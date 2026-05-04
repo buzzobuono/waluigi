@@ -45,3 +45,20 @@ def _version(row) -> dict | None:
             "createdate":     d.get("createdate"),
             "updatedate":     d.get("updatedate"),
         }
+
+def _expectation(row) -> dict | None:
+    if row is None:
+        return None
+    d = dict(row) if not isinstance(row, dict) else row
+    return {
+        "id":         d.get("id"),
+        "dataset_id": d.get("dataset_id"),
+        "rule_id":    d.get("rule_id"),
+        "inputs":     d.get("inputs") if isinstance(d.get("inputs"), dict) else json.loads(d.get("inputs") or "{}"),
+        "params":     d.get("params") if isinstance(d.get("params"), dict) else json.loads(d.get("params") or "{}"),
+        "tolerance":  d.get("tolerance", 1.0),
+        "position":   d.get("position", 0),
+        "username":   d.get("username"),
+        "createdate": d.get("createdate"),
+        "updatedate": d.get("updatedate"),
+    }

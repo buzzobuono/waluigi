@@ -139,6 +139,38 @@ class DQManager:
             results=results,
         )
 
+    def run_from_db(
+        self,
+        expectations: list,
+        datasets: Dict[str, pd.DataFrame],
+    ) -> SuiteResult:
+        """Run DQ from a list of expectation dicts (from the DB, not a YAML file)."""
+        results = []
+        for item in expectations:
+            try:
+                exec_r = RuleExecution(
+                    rule_id=item["rule_id"],
+                    inputs=item.get("inputs") or {},
+                    params=item.get("params") or {},
+                    tolerance=item.get("tolerance", 1.0),
+                )
+            except Exception as e:
+                results.append(
+                    RuleResult(rule_id=item.get("rule_id", "?"), success=False, error=str(e))
+                )
+                continue
+            results.append(self._execute(exec_r, datasets))
+
+        passed = sum(1 for r in results if r.success)
+        return SuiteResult(
+            suite_path="<db>",
+            total=len(results),
+            passed=passed,
+            failed=len(results) - passed,
+            success=passed == len(results),
+            results=results,
+        )
+
     def get_rule(self, rule_id: str) -> RuleDefinition:
         """Recupera la definizione completa di una regola dal catalogo."""
         rule = self.catalogue.get(rule_id)

@@ -81,7 +81,44 @@ class CatalogClient:
     
     def delete_dataset(self, id: str) -> dict:
         return self._delete(f"/datasets/{id}")
-        
+
+    def get_expectations(self, dataset_id: str) -> list:
+        return self._get(f"/datasets/{dataset_id}/expectations")
+
+    def add_expectation(self, dataset_id: str, rule_id: str,
+                        inputs: dict = None, params: dict = None,
+                        tolerance: float = 1.0, position: int = 0) -> dict:
+        return self._post(f"/datasets/{dataset_id}/expectations", json={
+            "rule_id":   rule_id,
+            "inputs":    inputs or {},
+            "params":    params or {},
+            "tolerance": tolerance,
+            "position":  position,
+        })
+
+    def update_expectation(self, dataset_id: str, exp_id: int, **kwargs) -> dict:
+        return self._patch(f"/datasets/{dataset_id}/expectations/{exp_id}", json=kwargs)
+
+    def delete_expectation(self, dataset_id: str, exp_id: int) -> dict:
+        return self._delete(f"/datasets/{dataset_id}/expectations/{exp_id}")
+
+    def set_expectations(self, dataset_id: str, expectations: list) -> list:
+        """Replace all expectations for a dataset. Each item: {rule_id, inputs, params, tolerance}."""
+        existing = self.get_expectations(dataset_id)
+        for exp in existing:
+            self.delete_expectation(dataset_id, exp["id"])
+        result = []
+        for i, exp in enumerate(expectations):
+            result.append(self.add_expectation(
+                dataset_id,
+                rule_id=exp["rule_id"],
+                inputs=exp.get("inputs", {}),
+                params=exp.get("params", {}),
+                tolerance=exp.get("tolerance", 1.0),
+                position=i,
+            ))
+        return result
+
     def resolve(self, dataset_id: str) -> "DatasetReader":
         # FIX aggiungere gestione per prendere specifica versione
         dataset  = self.get_dataset(dataset_id)

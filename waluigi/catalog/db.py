@@ -98,6 +98,21 @@ class CatalogDB:
                     PRIMARY KEY (dataset_id, column_name)
                 );
 
+                -- DQ expectations: one row per rule applied to a dataset.
+                -- Replaces file-based dq_suite. Rules catalogue stays on FS.
+                CREATE TABLE IF NOT EXISTS expectations (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    dataset_id  TEXT NOT NULL REFERENCES datasets(id),
+                    rule_id     TEXT NOT NULL,
+                    inputs      TEXT NOT NULL DEFAULT '{}',  -- JSON {placeholder: "this.column"}
+                    params      TEXT NOT NULL DEFAULT '{}',  -- JSON {param_name: value}
+                    tolerance   REAL NOT NULL DEFAULT 1.0,
+                    position    INTEGER NOT NULL DEFAULT 0,
+                    username    TEXT NOT NULL,
+                    createdate  TEXT NOT NULL,
+                    updatedate  TEXT NOT NULL
+                );
+
                 CREATE TABLE IF NOT EXISTS lineage (
                     output_dataset  TEXT NOT NULL,
                     output_version  TEXT NOT NULL,
@@ -125,10 +140,25 @@ class CatalogDB:
 
             """)
             # migrations for existing databases
-            try:
-                self.conn.execute("ALTER TABLE datasets ADD COLUMN dq_suite TEXT")
-            except Exception:
-                pass
+            for stmt in [
+                "ALTER TABLE datasets ADD COLUMN dq_suite TEXT",
+                """CREATE TABLE IF NOT EXISTS expectations (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    dataset_id  TEXT NOT NULL REFERENCES datasets(id),
+                    rule_id     TEXT NOT NULL,
+                    inputs      TEXT NOT NULL DEFAULT '{}',
+                    params      TEXT NOT NULL DEFAULT '{}',
+                    tolerance   REAL NOT NULL DEFAULT 1.0,
+                    position    INTEGER NOT NULL DEFAULT 0,
+                    username    TEXT NOT NULL,
+                    createdate  TEXT NOT NULL,
+                    updatedate  TEXT NOT NULL
+                )""",
+            ]:
+                try:
+                    self.conn.execute(stmt)
+                except Exception:
+                    pass
 
 
     # Folders
@@ -490,6 +520,70 @@ class CatalogDB:
             """, (dataset_id, column_name))
             return cur.rowcount > 0
             
+    # Dataset Expectations
+
+    def list_expectations(self, dataset_id: str) -> list[dict]:
+        cur = self.conn.execute("""
+            SELECT * FROM expectations
+            WHERE dataset_id = ?
+            ORDER BY position, id
+        """, (dataset_id,))
+        rows = self._rows(cur)
+        for r in rows:
+            r["inputs"] = json.loads(r.get("inputs") or "{}")
+            r["params"] = json.loads(r.get("params") or "{}")
+        return rows
+
+    def add_expectation(self, dataset_id: str, rule_id: str,
+                        inputs: dict, params: dict,
+                        tolerance: float = 1.0, position: int = 0) -> dict:
+        now = _now()
+        with self.conn:
+            cur = self.conn.execute("""
+                INSERT INTO expectations
+                    (dataset_id, rule_id, inputs, params, tolerance, position,
+                     username, createdate, updatedate)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (dataset_id, rule_id, json.dumps(inputs), json.dumps(params),
+                  tolerance, position, _user(), now, now))
+            row_id = cur.lastrowid
+        return self.get_expectation(dataset_id, row_id)
+
+    def get_expectation(self, dataset_id: str, exp_id: int) -> dict | None:
+        cur = self.conn.execute("""
+            SELECT * FROM expectations WHERE dataset_id = ? AND id = ?
+        """, (dataset_id, exp_id))
+        row = self._row(cur.fetchone())
+        if row:
+            row["inputs"] = json.loads(row.get("inputs") or "{}")
+            row["params"] = json.loads(row.get("params") or "{}")
+        return row
+
+    def update_expectation(self, dataset_id: str, exp_id: int, **kwargs) -> bool:
+        allowed = {"rule_id", "inputs", "params", "tolerance", "position"}
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return False
+        if "inputs" in updates:
+            updates["inputs"] = json.dumps(updates["inputs"])
+        if "params" in updates:
+            updates["params"] = json.dumps(updates["params"])
+        updates["updatedate"] = _now()
+        updates["username"] = _user()
+        cols = ", ".join(f"{k} = ?" for k in updates)
+        vals = list(updates.values()) + [dataset_id, exp_id]
+        with self.conn:
+            cur = self.conn.execute(
+                f"UPDATE expectations SET {cols} WHERE dataset_id = ? AND id = ?", vals)
+            return cur.rowcount > 0
+
+    def delete_expectation(self, dataset_id: str, exp_id: int) -> bool:
+        with self.conn:
+            cur = self.conn.execute(
+                "DELETE FROM expectations WHERE dataset_id = ? AND id = ?",
+                (dataset_id, exp_id))
+            return cur.rowcount > 0
+
     def diff_schema_against_inferred(self, dataset_id: str,
                                       inferred: list[dict]) -> dict:
         """Compare freshly inferred columns against published schema."""

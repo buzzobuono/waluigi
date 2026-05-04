@@ -1,18 +1,11 @@
-import os
-import yaml
 from waluigi.sdk.catalog import catalog, CatalogError
 from waluigi.catalog.models import *
 
 # ---------------------------------------------------------------------------
-# Suite YAML — written to rules/suites/ so the server can open it at commit
+# Expectations — stored in the DB, no file needed
 # ---------------------------------------------------------------------------
 
-SUITE_DIR  = os.path.join(os.getcwd(), "rules", "suites")
-SUITE_PATH = os.path.join(SUITE_DIR, "sales_dq_suite.yaml")
-
-os.makedirs(SUITE_DIR, exist_ok=True)
-
-suite = [
+EXPECTATIONS = [
     # completeness
     {"rule_id": "expect_column_values_to_not_be_null",
      "inputs": {"x": "this.product"}},
@@ -40,12 +33,6 @@ suite = [
      "params": {"allowed_values": ["A", "B", "C", "D", "E"]}},
 ]
 
-with open(SUITE_PATH, "w") as f:
-    yaml.dump(suite, f, allow_unicode=True)
-
-print(f"Suite written to : {SUITE_PATH}")
-print(f"Rules            : {len(suite)}")
-
 # ---------------------------------------------------------------------------
 # Source / Dataset
 # ---------------------------------------------------------------------------
@@ -64,8 +51,12 @@ dataset_req = DatasetCreateRequest(
     format=DatasetFormat.CSV,
     description="Sales dataset with DQ monitoring",
     source_id=SOURCE_ID,
-    dq_suite=SUITE_PATH,
 )
+catalog.create_dataset(dataset_req)
+
+# Set expectations in DB (replaces file-based dq_suite)
+saved = catalog.set_expectations(DATASET_ID, EXPECTATIONS)
+print(f"Expectations set : {len(saved)} rules registered in DB")
 
 # ---------------------------------------------------------------------------
 # Helper: print DQ summary from version metadata
@@ -79,7 +70,7 @@ def print_dq(label: str, meta: dict):
         print(f"  ⚠️  DQ error : {meta['sys.dq.error']}")
         return
     if "sys.dq.score" not in meta:
-        print("  ℹ️  No DQ results (suite not configured or run skipped)")
+        print("  ℹ️  No DQ results (no expectations configured or run skipped)")
         return
     score   = float(meta["sys.dq.score"])
     passed  = meta["sys.dq.passed"]
@@ -89,7 +80,6 @@ def print_dq(label: str, meta: dict):
     print(f"  Status  : {status}")
     print(f"  Score   : {score*100:.1f}%  ({passed}/{total} rules passed)")
     print()
-    # business metadata (non sys.dq.*)
     biz = {k: v for k, v in sorted(meta.items()) if not k.startswith("sys.")}
     for k, v in biz.items():
         print(f"  {k}: {v}")
