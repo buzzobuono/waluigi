@@ -72,31 +72,32 @@ dq_manager = DQManager(RULES_PATH)
 def _run_dq_nonblocking(dataset_id: str, version: str,
                         connector, location, fmt: str,
                         expectations: list = None) -> dict | None:
-    """Run DQ expectations against the committed dataset. Never raises — saves sys.dq.* metadata."""
+    """Run DQ expectations against the committed dataset. Never raises — writes to dq_results table."""
     try:
         if not expectations:
             return None
         df = connector.read(location, fmt)
         result = dq_manager.run_from_db(expectations, {"this": df})
-        details = json.dumps([
+        details = [
             {"rule_id": r.rule_id, "success": r.success,
              "score": r.score, "error": r.error}
             for r in result.results
-        ])
-        summary = {
-            "sys.dq.score":   str(round(result.score, 4)),
-            "sys.dq.passed":  str(result.passed),
-            "sys.dq.total":   str(result.total),
-            "sys.dq.success": str(result.success),
-            "sys.dq.details": details,
-        }
-        for k, v in summary.items():
-            db.set_metadata(dataset_id, version, k, v)
+        ]
+        row = db.save_dq_result(
+            dataset_id, version,
+            score=result.score, passed=result.passed,
+            total=result.total, success=result.success,
+            details=details,
+        )
         logger.info(f"DQ {dataset_id}@{version}: score={result.score:.2%} ({result.passed}/{result.total})")
-        return {"score": result.score, "passed": result.passed, "total": result.total, "success": result.success}
+        return row
     except Exception as e:
         logger.warning(f"DQ run skipped for {dataset_id}@{version}: {e}")
-        db.set_metadata(dataset_id, version, "sys.dq.error", str(e))
+        db.save_dq_result(
+            dataset_id, version,
+            score=0.0, passed=0, total=0, success=False,
+            details=[], error=str(e),
+        )
         return None
 
 
@@ -513,6 +514,27 @@ async def delete_expectation(dataset_id: str, exp_id: int):
     if not deleted:
         return ko("Expectation not found", 404)
     return ok({"deleted": exp_id})
+
+
+# Routes - DQ Results
+
+@app.get("/datasets/{dataset_id:path}/dq", tags=["DQ Results"],
+         summary="List all DQ run results for a dataset (one per version)")
+async def list_dq_results(dataset_id: str):
+    if not db.exists_dataset(dataset_id):
+        return ko("Dataset not found", 404)
+    return ok(db.list_dq_results(dataset_id))
+
+
+@app.get("/datasets/{dataset_id:path}/dq/{version}", tags=["DQ Results"],
+         summary="Get the DQ result for a specific version")
+async def get_dq_result(dataset_id: str, version: str):
+    if not db.exists_dataset(dataset_id):
+        return ko("Dataset not found", 404)
+    row = db.get_dq_result(dataset_id, version)
+    if not row:
+        return ko("No DQ result for this version", 404)
+    return ok(row)
 
 
 # Routes - Data Quality

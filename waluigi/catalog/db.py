@@ -113,6 +113,22 @@ class CatalogDB:
                     updatedate  TEXT NOT NULL
                 );
 
+                -- DQ run results: one row per committed version.
+                -- Replaces sys.dq.* version_metadata keys.
+                CREATE TABLE IF NOT EXISTS dq_results (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    dataset_id  TEXT NOT NULL REFERENCES datasets(id),
+                    version     TEXT NOT NULL,
+                    score       REAL NOT NULL DEFAULT 0,
+                    passed      INTEGER NOT NULL DEFAULT 0,
+                    total       INTEGER NOT NULL DEFAULT 0,
+                    success     INTEGER NOT NULL DEFAULT 0,
+                    details     TEXT NOT NULL DEFAULT '[]',  -- JSON [{rule_id, success, score, error}]
+                    error       TEXT,
+                    createdate  TEXT NOT NULL,
+                    UNIQUE (dataset_id, version)
+                );
+
                 CREATE TABLE IF NOT EXISTS lineage (
                     output_dataset  TEXT NOT NULL,
                     output_version  TEXT NOT NULL,
@@ -153,6 +169,19 @@ class CatalogDB:
                     username    TEXT NOT NULL,
                     createdate  TEXT NOT NULL,
                     updatedate  TEXT NOT NULL
+                )""",
+                """CREATE TABLE IF NOT EXISTS dq_results (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    dataset_id  TEXT NOT NULL REFERENCES datasets(id),
+                    version     TEXT NOT NULL,
+                    score       REAL NOT NULL DEFAULT 0,
+                    passed      INTEGER NOT NULL DEFAULT 0,
+                    total       INTEGER NOT NULL DEFAULT 0,
+                    success     INTEGER NOT NULL DEFAULT 0,
+                    details     TEXT NOT NULL DEFAULT '[]',
+                    error       TEXT,
+                    createdate  TEXT NOT NULL,
+                    UNIQUE (dataset_id, version)
                 )""",
             ]:
                 try:
@@ -583,6 +612,51 @@ class CatalogDB:
                 "DELETE FROM expectations WHERE dataset_id = ? AND id = ?",
                 (dataset_id, exp_id))
             return cur.rowcount > 0
+
+    # DQ Results
+
+    def save_dq_result(self, dataset_id: str, version: str,
+                       score: float, passed: int, total: int,
+                       success: bool, details: list,
+                       error: str = None) -> dict:
+        now = _now()
+        with self.conn:
+            self.conn.execute("""
+                INSERT INTO dq_results
+                    (dataset_id, version, score, passed, total, success, details, error, createdate)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(dataset_id, version) DO UPDATE SET
+                    score    = excluded.score,
+                    passed   = excluded.passed,
+                    total    = excluded.total,
+                    success  = excluded.success,
+                    details  = excluded.details,
+                    error    = excluded.error,
+                    createdate = excluded.createdate
+            """, (dataset_id, version, score, passed, total,
+                  int(success), json.dumps(details), error, now))
+        return self.get_dq_result(dataset_id, version)
+
+    def get_dq_result(self, dataset_id: str, version: str) -> dict | None:
+        cur = self.conn.execute("""
+            SELECT * FROM dq_results WHERE dataset_id = ? AND version = ?
+        """, (dataset_id, version))
+        row = self._row(cur.fetchone())
+        if row:
+            row["details"] = json.loads(row.get("details") or "[]")
+            row["success"] = bool(row["success"])
+        return row
+
+    def list_dq_results(self, dataset_id: str) -> list[dict]:
+        cur = self.conn.execute("""
+            SELECT * FROM dq_results WHERE dataset_id = ?
+            ORDER BY createdate DESC
+        """, (dataset_id,))
+        rows = self._rows(cur)
+        for r in rows:
+            r["details"] = json.loads(r.get("details") or "[]")
+            r["success"] = bool(r["success"])
+        return rows
 
     def diff_schema_against_inferred(self, dataset_id: str,
                                       inferred: list[dict]) -> dict:
