@@ -498,7 +498,7 @@ async def add_expectation(dataset_id: str, body: ExpectationCreateRequest):
 async def update_expectation(dataset_id: str, exp_id: int, body: ExpectationUpdateRequest):
     if not db.exists_dataset(dataset_id):
         return ko("Dataset not found", 404)
-    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    updates = {k: v for k, v in _model_dump(body).items() if v is not None}
     updated = db.update_expectation(dataset_id, exp_id, **updates)
     if not updated:
         return ko("Expectation not found", 404)

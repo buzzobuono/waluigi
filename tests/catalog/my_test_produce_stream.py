@@ -2,16 +2,18 @@ from waluigi.sdk.catalog import catalog, CatalogError
 from waluigi.catalog.models import *
 import pandas as pd
 import time
-
+import os
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 
 SOURCE_ID  = "local_stream"
 DATASET_ID = "sales/raw/sales_stream"
+SUITE_DIR  = os.path.join(os.getcwd(), "rules", "suites")
+SUITE_PATH = os.path.join(SUITE_DIR, "sales_dq_suite.yaml")
 
-TOTAL_ROWS  = 1_000_000   # 1 milione di righe
-CHUNK_SIZE  =    10_000   # 10k righe per chunk → 100 chiamate al connettore
+TOTAL_ROWS  = 100_000   # 1 milione di righe
+CHUNK_SIZE  =    1_000   # 10k righe per chunk → 100 chiamate al connettore
 
 # ---------------------------------------------------------------------------
 # Source / Dataset (idempotente)
@@ -28,6 +30,7 @@ dataset = DatasetCreateRequest(
     format=DatasetFormat.PARQUET,
     description="Dataset grande scritto in streaming",
     source_id=SOURCE_ID,
+    dq_suite=SUITE_PATH
 )
 
 # ---------------------------------------------------------------------------

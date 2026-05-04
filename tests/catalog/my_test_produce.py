@@ -20,6 +20,7 @@ rows = [
     {"date": "2026", "product": "E", "quantity":  3, "revenue":  30.0},
     {"date": "2026", "product": "F", "quantity":  9, "revenue": 350.0},
 ]
+
 #catalog.delete_dataset("sales/raw/sales")
 dataset = DatasetCreateRequest(
     id=dataset_id,
@@ -29,7 +30,7 @@ dataset = DatasetCreateRequest(
 )
 
 
-metadata = { "source": "SAP_EXTRACT", "date_ref": "2026.6" }
+metadata = { "source": "SAP_EXTRACT", "date_ref": "2026.1" }
 
 with catalog.produce(dataset, metadata) as writer:
     writer.write(rows)

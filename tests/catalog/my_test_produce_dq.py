@@ -55,8 +55,8 @@ dataset_req = DatasetCreateRequest(
 catalog.create_dataset(dataset_req)
 
 # Set expectations in DB (replaces file-based dq_suite)
-saved = catalog.set_expectations(DATASET_ID, EXPECTATIONS)
-print(f"Expectations set : {len(saved)} rules registered in DB")
+#saved = catalog.set_expectations(DATASET_ID, EXPECTATIONS)
+#print(f"Expectations set : {len(saved)} rules registered in DB")
 
 # ---------------------------------------------------------------------------
 # Helper: print DQ summary from version metadata
