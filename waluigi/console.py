@@ -41,7 +41,10 @@ async def proxy_boss(request: Request, path: str):
             content=content,
             headers=headers
         )
-    return JSONResponse(content=response.json(), status_code=response.status_code)
+    return JSONResponse(
+        content=response.json() if response.content else None,
+        status_code=response.status_code,
+    )
     
 @app.api_route("/catalog/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_catalog(request: Request, path: str):
@@ -58,7 +61,10 @@ async def proxy_catalog(request: Request, path: str):
             content=content,
             headers=headers
         )
-    return JSONResponse(content=response.json(), status_code=response.status_code)
+    return JSONResponse(
+        content=response.json() if response.content else None,
+        status_code=response.status_code,
+    )
     
 app.mount("/js",  StaticFiles(directory=os.path.join(STATIC_DIR, "js")),  name="js")
 app.mount("/css", StaticFiles(directory=os.path.join(STATIC_DIR, "css")), name="css")
