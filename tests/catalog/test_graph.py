@@ -94,6 +94,18 @@ y:
   label: Revenue (€)
 limit: 100
 """),
+    "Category performance radar (radar)": yaml.safe_load("""
+type: radar
+group_by: category
+axes:
+  - field: revenue
+    label: Revenue (€)
+    max: 50000
+  - field: units
+    label: Units Sold
+    max: 3500
+agg: sum
+"""),
 }
 
 # ── Create charts via API, then render ───────────────────────────────────────
@@ -118,6 +130,9 @@ for title, spec in SPECS.items():
     if option.get("xAxis"):
         cats = option["xAxis"].get("data", [])
         print(f"       x cats   : {cats[:5]}{'…' if len(cats) > 5 else ''}")
+    if option.get("radar"):
+        axes = [i["name"] for i in option["radar"].get("indicator", [])]
+        print(f"       radar ax : {axes}")
 
 # ── Final list ────────────────────────────────────────────────────────────────
 
