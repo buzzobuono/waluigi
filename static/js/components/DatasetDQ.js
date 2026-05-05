@@ -3,6 +3,7 @@ import BasePage     from './BasePage.js';
 import BasePanel    from './BasePanel.js';
 import BaseButton   from './BaseButton.js';
 import BaseInfoBox  from './BaseInfoBox.js';
+import BaseTable    from './BaseTable.js';
 import ChartWidget  from './ChartWidget.js';
 
 const { ref, computed, onMounted } = Vue;
@@ -96,9 +97,16 @@ function trendOption(results) {
   };
 }
 
+const DQ_COLUMNS = [
+  { key: 'rule_id',   label: 'Rule' },
+  { key: 'status',    label: 'Status',    class: 'text-center', style: 'width:80px' },
+  { key: 'score',     label: 'Score',     class: 'text-center', style: 'width:80px' },
+  { key: 'tolerance', label: 'Tolerance', class: 'text-center', style: 'width:80px' },
+];
+
 export default {
   name: 'DatasetDQ',
-  components: { BasePage, BasePanel, BaseButton, BaseInfoBox, ChartWidget },
+  components: { BasePage, BasePanel, BaseButton, BaseInfoBox, BaseTable, ChartWidget },
 
   setup() {
     const route  = VueRouter.useRoute();
@@ -142,6 +150,7 @@ export default {
     return {
       datasetId, version, result, history,
       loading, error, gaugeOpt, barOpt, trendOpt,
+      DQ_COLUMNS,
       goBack: () => router.go(-1),
     };
   },
@@ -222,34 +231,29 @@ export default {
         <!-- Detail table -->
         <base-panel v-if="result.details && result.details.length"
                     title="Rule Details" icon="fa-list" :no-padding="true">
-          <table class="table table-sm table-hover mb-0 small">
-            <thead class="thead-light">
-              <tr>
-                <th>Rule</th>
-                <th class="text-center" style="width:80px;">Status</th>
-                <th class="text-center" style="width:80px;">Score</th>
-                <th class="text-center" style="width:80px;">Tolerance</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="r in result.details" :key="r.rule_id">
-                <td>
-                  <code>{{ r.rule_id }}</code>
-                  <div v-if="r.error" class="text-danger small mt-1">{{ r.error }}</div>
-                </td>
-                <td class="text-center">
-                  <i v-if="r.success" class="fas fa-check-circle text-success"></i>
-                  <i v-else           class="fas fa-times-circle text-danger"></i>
-                </td>
-                <td class="text-center">
-                  {{ r.score !== null ? (r.score * 100).toFixed(1) + '%' : '—' }}
-                </td>
-                <td class="text-center text-muted">
-                  {{ r.tolerance !== undefined ? (r.tolerance * 100).toFixed(0) + '%' : '—' }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <base-table :columns="DQ_COLUMNS" :items="result.details">
+
+            <template #cell(rule_id)="{ item }">
+              <code>{{ item.rule_id }}</code>
+              <div v-if="item.error" class="text-danger small mt-1">{{ item.error }}</div>
+            </template>
+
+            <template #cell(status)="{ item }">
+              <i v-if="item.success" class="fas fa-check-circle text-success"></i>
+              <i v-else              class="fas fa-times-circle text-danger"></i>
+            </template>
+
+            <template #cell(score)="{ item }">
+              {{ item.score !== null ? (item.score * 100).toFixed(1) + '%' : '—' }}
+            </template>
+
+            <template #cell(tolerance)="{ item }">
+              <span class="text-muted">
+                {{ item.tolerance !== undefined ? (item.tolerance * 100).toFixed(0) + '%' : '—' }}
+              </span>
+            </template>
+
+          </base-table>
         </base-panel>
 
       </template>
