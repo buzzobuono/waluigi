@@ -24,10 +24,11 @@ const App = {
     }));
 
     const navItems = [
-      { path: '/namespaces', label: 'Namespaces', icon: 'fa-layer-group', key: 'namespaces' },
+      { path: '/dashboard',  label: 'Dashboard',  icon: 'fa-th-large', key: null },
       { 
         label: 'Operations', icon: 'fa-cogs', 
         children: [
+          { path: '/namespaces', label: 'Namespaces', icon: 'fa-layer-group', key: 'namespaces' },
           { path: '/jobs',  label: 'Jobs',  icon: 'fa-briefcase', key: 'jobs' },
           { path: '/tasks', label: 'Tasks', icon: 'fa-tasks',     key: 'tasks' }
         ]
@@ -45,8 +46,7 @@ const App = {
           { path: '/catalog',    label: 'Catalog',    icon: 'fa-table',           key: null },
           { path: '/sources',    label: 'Sources',    icon: 'fa-plug',            key: null },
           { path: '/lineage',    label: 'Lineage',    icon: 'fa-project-diagram', key: null },
-          { path: '/dq/rules',   label: 'DQ Rules',   icon: 'fa-shield-alt',      key: null },
-          { path: '/dashboard',  label: 'Dashboard',  icon: 'fa-th-large',        key: null }
+          { path: '/dq/rules',   label: 'Expectations',   icon: 'fa-shield-alt',      key: null },
         ]
       }
     ];
