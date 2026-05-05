@@ -72,6 +72,12 @@ class CatalogDB:
                     dataset_id       TEXT NOT NULL REFERENCES datasets(id),
                     version          TEXT NOT NULL,
                     location         TEXT NOT NULL,
+                    format           TEXT,
+                    source_id        TEXT,
+                    rows             INTEGER,
+                    hash             TEXT,
+                    produced_by_task TEXT,
+                    produced_by_job  TEXT,
                     status           TEXT NOT NULL DEFAULT 'reserved',
                     username         TEXT NOT NULL,
                     createdate       TEXT NOT NULL,
@@ -169,6 +175,12 @@ class CatalogDB:
             """)
             # migrations for existing databases
             for stmt in [
+                "ALTER TABLE versions ADD COLUMN format TEXT",
+                "ALTER TABLE versions ADD COLUMN source_id TEXT",
+                "ALTER TABLE versions ADD COLUMN rows INTEGER",
+                "ALTER TABLE versions ADD COLUMN hash TEXT",
+                "ALTER TABLE versions ADD COLUMN produced_by_task TEXT",
+                "ALTER TABLE versions ADD COLUMN produced_by_job TEXT",
                 "ALTER TABLE datasets ADD COLUMN dq_suite TEXT",
                 """CREATE TABLE IF NOT EXISTS expectations (
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -409,18 +421,22 @@ class CatalogDB:
             
         return None
 
-    def reserve_version(self, dataset_id: str, version: str, location: str) -> bool:
+    def reserve_version(self, dataset_id: str, version: str, location: str,
+                        format: str = None, task_id: str = None,
+                        job_id: str = None) -> bool:
         now = _now()
         try:
             with self.conn:
                 self.conn.execute("""
                     INSERT INTO versions
-                        (dataset_id, version, location, status, 
-                        username, createdate, updatedate)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (dataset_id, version, location, 'reserved', _user(), now, now))
+                        (dataset_id, version, location, format,
+                         produced_by_task, produced_by_job,
+                         status, username, createdate, updatedate)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (dataset_id, version, location, format,
+                      task_id, job_id, 'reserved', _user(), now, now))
             return True
-        except sqlite3.IntegrityError as e:
+        except sqlite3.IntegrityError:
             return False
 
     def commit_version(self, dataset_id: str, version: str) -> dict | None:
@@ -428,13 +444,28 @@ class CatalogDB:
             now = _now()
             cur = self.conn.execute("""
                 UPDATE versions SET
-                    updatedate = ?, 
+                    updatedate = ?,
                     status = 'committed'
                 WHERE dataset_id = ? AND version = ? AND status = 'reserved'
             """, (now, dataset_id, version))
             if cur.rowcount == 0:
                 return False
             return True
+
+    def commit(self, dataset_id: str, version: str,
+               file_hash: str, rows: int = None,
+               schema_kv: dict = None) -> dict | None:
+        """Commit a reserved version, setting hash and rows."""
+        now = _now()
+        with self.conn:
+            cur = self.conn.execute("""
+                UPDATE versions SET
+                    hash = ?, rows = ?, status = 'committed', updatedate = ?
+                WHERE dataset_id = ? AND version = ? AND status = 'reserved'
+            """, (file_hash, rows, now, dataset_id, version))
+            if cur.rowcount == 0:
+                return None
+        return {"skipped": False, "version": version}
     
     def fail_version(self, dataset_id: str, version: str):
         now = _now()
@@ -792,10 +823,10 @@ class CatalogDB:
                 INSERT OR REPLACE INTO versions
                     (dataset_id, version, source_id, location, format,
                      produced_by_task, produced_by_job,
-                     status, created_at, committed_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'committed', ?, ?)
+                     status, username, createdate, updatedate)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'committed', ?, ?, ?)
             """, (dataset_id, version, source_id, location, fmt,
-                  task_id, job_id, now, now))
+                  task_id, job_id, _user(), now, now))
         return {"skipped": False, "version": version}
 
 
@@ -815,12 +846,15 @@ class CatalogDB:
     def insert_lineage(self, out_id: str, out_ver: str,
                        inputs: list[dict]):
         """inputs: [{"dataset_id": ..., "version": ...}]"""
+        now = _now()
         with self.conn:
             self.conn.executemany("""
                 INSERT OR IGNORE INTO lineage
-                    (output_dataset, output_version, input_dataset, input_version)
-                VALUES (?, ?, ?, ?)
-            """, [(out_id, out_ver, i["dataset_id"], i["version"])
+                    (output_dataset, output_version, input_dataset, input_version,
+                     username, createdate, updatedate)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, [(out_id, out_ver, i["dataset_id"], i["version"],
+                   _user(), now, now)
                   for i in inputs])
 
     def get_upstream(self, dataset_id: str, version: str) -> list[dict]:

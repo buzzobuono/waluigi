@@ -47,7 +47,7 @@ export default {
           current.value = res.data.versions[0];
           verInput.value = ver;
         } else {
-          current.value = { id: id, version: ver };
+          current.value = { dataset_id: id, version: ver };
         }
 
         
@@ -137,19 +137,15 @@ export default {
 
             <div
               v-for="u in upstream"
-              :key="u.id + '/' + u.version"
+              :key="u.dataset_id + '/' + u.version"
               class="p-3 border-bottom cursor-pointer"
-              @click="navigateTo(u.namespace, u.id)"
+              @click="navigateTo(u.dataset_id)"
             >
-              <div class="text-muted small">
-                {{ u.namespace }}
+              <div class="text-info">
+                {{ u.dataset_id }}
               </div>
 
-              <div class="text-info" >
-                {{ u.id }}
-              </div>
-
-              <div class="text-secondary small" >
+              <div class="text-secondary small">
                 {{ u.version ? u.version : 'live' }}
               </div>
 
@@ -176,15 +172,11 @@ export default {
 
             <div v-if="current" class="p-3">
 
-              <div class="text-muted small">
-                {{ current.namespace }}
+              <div class="text-info font-weight-bold">
+                {{ current.dataset_id }}
               </div>
 
-              <div class="text-info font-weight-bold mt-1" >
-                {{ current.id }}
-              </div>
-
-              <div class="text-secondary small mt-1" >
+              <div class="text-secondary small mt-1">
                 {{ current.version }}
               </div>
 
@@ -202,7 +194,7 @@ export default {
                 Task: <code>{{ current.produced_by_task }}</code>
               </div>
 
-              <div v-if="current.hash" class="mt-1 text-muted small" >
+              <div v-if="current.hash" class="mt-1 text-muted small">
                 {{ current.hash.slice(0,16) }}...
               </div>
 
@@ -225,19 +217,15 @@ export default {
 
             <div
               v-for="d in downstream"
-              :key="d.id + '/' + d.version"
+              :key="d.dataset_id + '/' + d.version"
               class="p-3 border-bottom cursor-pointer"
-              @click="navigateTo(d.namespace, d.id)"
+              @click="navigateTo(d.dataset_id)"
             >
-              <div class="text-muted small">
-                {{ d.namespace }}
+              <div class="text-info">
+                {{ d.dataset_id }}
               </div>
 
-              <div class="text-info" >
-                {{ d.id }}
-              </div>
-
-              <div class="text-secondary small" >
+              <div class="text-secondary small">
                 {{ d.version }}
               </div>
 

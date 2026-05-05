@@ -36,14 +36,19 @@ def _version(row) -> dict | None:
         return None
     d = dict(row)
     return {
-            "dataset_id":     d.get("dataset_id"),
-            "version":        d.get("version"),
-            "location":       d.get("location"),
-            "hash":           d.get("hash"),
-            "status":         d.get("status"),
-            "username":       d.get("username"),
-            "createdate":     d.get("createdate"),
-            "updatedate":     d.get("updatedate"),
+            "dataset_id":       d.get("dataset_id"),
+            "version":          d.get("version"),
+            "location":         d.get("location"),
+            "format":           d.get("format"),
+            "source_id":        d.get("source_id"),
+            "rows":             d.get("rows"),
+            "hash":             d.get("hash"),
+            "produced_by_task": d.get("produced_by_task"),
+            "produced_by_job":  d.get("produced_by_job"),
+            "status":           d.get("status"),
+            "username":         d.get("username"),
+            "createdate":       d.get("createdate"),
+            "updatedate":       d.get("updatedate"),
         }
 
 def _expectation(row) -> dict | None:
