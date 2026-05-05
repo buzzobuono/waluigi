@@ -1,19 +1,21 @@
 """
-test_graph.py — create a dataset, define charts, verify rendered ECharts option.
+test_graph.py — write a dataset, define charts, verify rendered ECharts option.
 
-Charts are an admin/UI feature, so this test calls the REST API directly
-via the catalog client's internal transport (not part of the integrator SDK).
+Data pipeline operations use the SDK (catalog.produce / catalog.resolve).
+Chart management is an admin/UI feature not in the SDK, so those calls
+use raw httpx — clearly isolated in a small helper block below.
+
 Run with: python tests/catalog/test_graph.py
 """
-import json
 import yaml
 import httpx
-from waluigi.sdk.catalog import catalog, CatalogError
-from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
+from waluigi.sdk.catalog import catalog
+from waluigi.catalog.models import (
+    DatasetCreateRequest, DatasetFormat,
+    SourceCreateRequest, SourceType,
+)
 
-BASE = catalog.url
-
-# ── Dataset ───────────────────────────────────────────────────────────────────
+# ── 1. Source & dataset setup ─────────────────────────────────────────────────
 
 SOURCE_ID  = "local_graph_test"
 DATASET_ID = "analytics/graph/sales_chart_test"
@@ -31,6 +33,8 @@ dataset_req = DatasetCreateRequest(
     source_id=SOURCE_ID,
 )
 
+# ── 2. Write data ─────────────────────────────────────────────────────────────
+
 rows = [
     {"date": "2026-01", "category": "Electronics", "revenue": 12400.0, "units": 310, "returns": 18},
     {"date": "2026-01", "category": "Clothing",    "revenue":  5200.0, "units": 420, "returns": 42},
@@ -46,10 +50,37 @@ rows = [
 print("Writing dataset ...")
 with catalog.produce(dataset_req, {"period": "Q1-2026"}, force=True) as writer:
     writer.write(rows)
-    ver = writer.version
-print(f"  version: {ver}")
+    version = writer.version
+print(f"  version : {version}")
 
-# ── Chart specs (YAML) ────────────────────────────────────────────────────────
+# ── 3. Read back & verify ─────────────────────────────────────────────────────
+
+reader = catalog.resolve(DATASET_ID)
+df     = reader.read()
+print(f"  rows    : {len(df)}")
+print(f"  columns : {list(df.columns)}")
+
+# ── 4. Chart admin (REST API — not part of the integrator SDK) ────────────────
+
+BASE = catalog.url
+
+def _add_chart(title, spec):
+    r = httpx.post(f"{BASE}/datasets/{DATASET_ID}/charts",
+                   json={"title": title, "spec": spec})
+    r.raise_for_status()
+    return r.json()["data"]
+
+def _render_chart(chart_id):
+    r = httpx.get(f"{BASE}/datasets/{DATASET_ID}/charts/{chart_id}/render")
+    r.raise_for_status()
+    return r.json()["data"]
+
+def _list_charts():
+    r = httpx.get(f"{BASE}/datasets/{DATASET_ID}/charts")
+    r.raise_for_status()
+    return r.json()["data"]
+
+# ── 5. Define & render charts ─────────────────────────────────────────────────
 
 SPECS = {
     "Revenue by Category (bar)": yaml.safe_load("""
@@ -115,53 +146,33 @@ agg: sum
 """),
 }
 
-# ── Create charts via API, then render ───────────────────────────────────────
-
-print(f"\nCreating {len(SPECS)} chart(s) for dataset '{DATASET_ID}' ...")
-
-def _add_chart(dataset_id, title, spec):
-    r = httpx.post(f"{BASE}/datasets/{dataset_id}/charts",
-                   json={"title": title, "spec": spec})
-    r.raise_for_status()
-    return r.json()["data"]
-
-def _render_chart(dataset_id, chart_id):
-    r = httpx.get(f"{BASE}/datasets/{dataset_id}/charts/{chart_id}/render")
-    r.raise_for_status()
-    return r.json()["data"]
-
-def _list_charts(dataset_id):
-    r = httpx.get(f"{BASE}/datasets/{dataset_id}/charts")
-    r.raise_for_status()
-    return r.json()["data"]
+print(f"\nCreating {len(SPECS)} chart(s) for '{DATASET_ID}' ...")
 
 for title, spec in SPECS.items():
-    chart    = _add_chart(DATASET_ID, title, spec)
-    chart_id = chart["id"]
-
-    rendered = _render_chart(DATASET_ID, chart_id)
+    chart    = _add_chart(title, spec)
+    rendered = _render_chart(chart["id"])
     option   = rendered["option"]
 
-    series_types = [s.get("type") for s in option.get("series", [])]
-    has_data     = any(len(s.get("data", [])) > 0 for s in option.get("series", []))
-
-    status = "✅" if has_data else "⚠️  no data"
+    has_data = any(len(s.get("data", [])) > 0 for s in option.get("series", []))
+    status   = "✅" if has_data else "⚠️  no data"
     print(f"\n  [{status}] {title}")
-    print(f"       chart_id : {chart_id}")
-    print(f"       series   : {series_types}")
+    print(f"       chart_id : {chart['id']}")
+    print(f"       series   : {[s.get('type') for s in option.get('series', [])]}")
     if option.get("xAxis"):
         cats = option["xAxis"].get("data", [])
         print(f"       x cats   : {cats[:5]}{'…' if len(cats) > 5 else ''}")
     if option.get("radar"):
-        axes = [i["name"] for i in option["radar"].get("indicator", [])]
-        print(f"       radar ax : {axes}")
+        print(f"       radar ax : {[i['name'] for i in option['radar'].get('indicator', [])]}")
 
-# ── Final list ────────────────────────────────────────────────────────────────
+# ── 6. Summary ────────────────────────────────────────────────────────────────
 
-all_charts = _list_charts(DATASET_ID)
+versions = catalog.list_versions(DATASET_ID)
+lineage  = catalog.get_lineage(DATASET_ID, version)
+
 print(f"\n{'─'*55}")
-print(f"  Total charts registered: {len(all_charts)}")
-for c in all_charts:
-    print(f"  #{c['id']:>3}  [{c['spec'].get('type','?'):>9}]  {c['title']}")
+print(f"  Dataset  : {DATASET_ID}")
+print(f"  Versions : {len(versions)}")
+print(f"  Upstream : {len(lineage.get('upstream', []))} / Downstream: {len(lineage.get('downstream', []))}")
+print(f"  Charts   : {len(_list_charts())}")
 print(f"{'─'*55}")
-print(f"\n  Frontend: /charts/{DATASET_ID}")
+print(f"\n  Frontend : /charts/{DATASET_ID}")
