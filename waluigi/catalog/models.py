@@ -92,6 +92,16 @@ class SchemaPublishRequest(BaseModel):
     published_by: str = Field("anonymous", example="mario.rossi")
 
 
+class ChartCreateRequest(BaseModel):
+    title: str                   = Field(...,  example="Revenue by Category")
+    spec:  Dict[str, Any]        = Field(...,  example={"type": "bar", "x": {"field": "category"}, "y": {"field": "revenue", "agg": "sum"}})
+    position: int                = Field(0)
+
+class ChartUpdateRequest(BaseModel):
+    title:    Optional[str]            = None
+    spec:     Optional[Dict[str, Any]] = None
+    position: Optional[int]            = None
+
 class ExpectationCreateRequest(BaseModel):
     rule_id:   str            = Field(..., example="expect_column_values_to_not_be_null")
     inputs:    Dict[str, Any] = Field(default_factory=dict)
