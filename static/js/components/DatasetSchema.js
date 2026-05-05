@@ -12,7 +12,7 @@ import ConfirmDialog from './ConfirmDialog.js';
 const { ref, computed, onMounted, watch } = Vue;
 
 const PII_TYPES   = ['none', 'direct', 'indirect', 'sensitive'];
-const CHART_TYPES = ['bar', 'line', 'pie', 'scatter', 'histogram'];
+const CHART_TYPES = ['bar', 'line', 'pie', 'scatter', 'histogram', 'radar'];
 const AGG_TYPES   = ['sum', 'mean', 'count', 'max', 'min'];
 
 const CHART_COLUMNS = [

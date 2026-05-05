@@ -139,6 +139,49 @@ def _build_echarts_option(df: "pd.DataFrame", spec: dict) -> dict:
                 "yAxis":   {"type": "value", "name": y_label},
                 "series":  [{"type": "scatter", "data": data, "symbolSize": 8}]}
 
+    # ── RADAR (spider chart) ─────────────────────────────────────────────────
+    if chart_type == "radar":
+        axes      = spec.get("axes", [])
+        group_by  = spec.get("group_by") or color_field
+        if not axes:
+            return ko("radar requires 'axes' list in spec", 422)
+
+        ax_fields = [a["field"] for a in axes]
+        ax_labels = [a.get("label", a["field"]) for a in axes]
+
+        if group_by:
+            grouped = df.groupby(group_by)[ax_fields].agg(agg if agg != "count" else "sum")
+            maxes   = [grouped[f].max() for f in ax_fields]
+            indicator = [
+                {"name": lbl, "max": a.get("max") or (_safe(mx) * 1.2 if mx else 1)}
+                for a, lbl, mx in zip(axes, ax_labels, maxes)
+            ]
+            series_data = [
+                {"name": str(grp),
+                 "value": [_safe(grouped.loc[grp, f]) for f in ax_fields]}
+                for grp in grouped.index
+            ]
+            legend = {"data": [str(g) for g in grouped.index]}
+        else:
+            agged   = df[ax_fields].agg(agg if agg != "count" else "sum")
+            vals    = [_safe(agged[f]) for f in ax_fields]
+            maxes   = [abs(v) * 1.2 if v else 1 for v in vals]
+            indicator = [
+                {"name": lbl, "max": a.get("max") or mx}
+                for a, lbl, mx in zip(axes, ax_labels, maxes)
+            ]
+            series_data = [{"name": "Total", "value": vals}]
+            legend = {}
+
+        opt = {**base,
+               "tooltip": {"trigger": "item"},
+               "radar":   {"indicator": indicator, "shape": "polygon"},
+               "series":  [{"type": "radar", "data": series_data,
+                            "areaStyle": {"opacity": 0.2}}]}
+        if legend:
+            opt["legend"] = legend
+        return opt
+
     # ── BAR / LINE ───────────────────────────────────────────────────────────
     if color_field:
         if agg == "count":
