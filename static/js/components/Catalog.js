@@ -19,8 +19,8 @@ export default {
       { key: 'format', label: 'Format' },
       { key: 'description', label: 'Description' },
       { key: 'source_id', label: 'Source' },
-      { key: 'type', label: 'Type' },
-      { key: 'status', label: 'Status' }
+      { key: 'status', label: 'Status' },
+      { key: 'actions', label: 'Actions' }
     ];
     
     const columns_history = [
@@ -155,6 +155,10 @@ export default {
       router.push({ path: '/catalog', query: { folder, dataset } });
     }
 
+    function openSchema(item) {
+      router.push('/schema/' + item.id);
+    }
+
     function navigateTo(path) {
       router.push({ path: '/catalog', query: { folder: path || undefined } });
     }
@@ -235,7 +239,7 @@ export default {
       columns, items, folderStack, children, datasets, loading,
       selFolder, selDataset, columns_history, history, metadata, dqResult, detailOpen,
       selectedVersion, currentFolder,
-      navigateTo, navigateBreadcrumb, openDataset, closeDetail, goBack,
+      navigateTo, navigateBreadcrumb, openDataset, openSchema, closeDetail, goBack,
       selectVersion, materializeRef,
     };
   },
@@ -295,19 +299,6 @@ export default {
              </div>
           </template>
   
-          <template #cell(type)="{ item }" >
-            <div v-if="item.type === 'folder'">
-              <span class="badge badge-warning">
-               {{ item.type }}
-             </span>
-            </div>
-            <div v-if="item.type === 'dataset'">
-              <span class="badge badge-primary">
-               {{ item.type }}
-             </span>
-            </div>
-          </template>
-  
           <template #cell(format)="{ item }" >
              <span class="badge badge-info">
                {{ item.format }}
@@ -319,7 +310,18 @@ export default {
                {{ item.status }}
              </span>
           </template>
-  
+          
+          <template #cell(actions)="{ item }">
+             <base-button-group>
+              <base-button
+                  icon="fas fa-columns"
+                  color="outline-warning"
+                  title="Schema"
+                  :hidden="item.type === 'folder'"
+                  @click="openSchema(item)"
+              />
+             </base-button-group>
+           </template>
         </base-table>
        </base-panel>
   
@@ -335,13 +337,6 @@ export default {
         </template>
   
         <template #tools>
-          <base-button
-            icon="fas fa-project-diagram"
-            label="Schema"
-            color="outline-warning"
-            title="Manage Schema"
-            @click="$router.push('/schema/' + selDataset)"
-          />
           <base-button
             icon="fas fa-times"
             color="outline-secondary"

@@ -351,14 +351,13 @@ export default {
           label="Back"
           icon="fas fa-arrow-left"
           color="outline-secondary"
-          class="ml-auto"
           @click="goBack"
         />
         <base-button
           label="Publish All"
           icon="fas fa-check-double"
           color="outline-success"
-          class="ml-2"
+          class="ml-auto"
           :disabled="saving || !schemaData"
           @click="askPublishAll"
         />

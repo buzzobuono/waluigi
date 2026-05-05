@@ -95,7 +95,7 @@ export default {
           label="Schema"
           icon="fas fa-project-diagram"
           color="outline-warning"
-          class="ml-2"
+          class="ml-auto"
           @click="$router.push('/schema/' + params.id)"
         />
       </template>
