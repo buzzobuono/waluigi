@@ -143,8 +143,8 @@ def _build_echarts_option(df: "pd.DataFrame", spec: dict) -> dict:
     if chart_type == "radar":
         axes      = spec.get("axes", [])
         group_by  = spec.get("group_by") or color_field
-        if not axes:
-            return ko("radar requires 'axes' list in spec", 422)
+        if len(axes) < 3:
+            return ko("radar requires at least 3 axes to form a polygon", 422)
 
         ax_fields = [a["field"] for a in axes]
         ax_labels = [a.get("label", a["field"]) for a in axes]
