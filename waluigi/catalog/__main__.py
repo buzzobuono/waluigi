@@ -361,7 +361,7 @@ def _scan(data_path: str, prefix: str = None) -> int:
             try:
                 file_hash = _compute_hash(filepath)
                 schema    = _infer_schema(filepath, fmt)
-                db.create_dataset(dataset_id)
+                db.create_dataset(dataset_id, fmt)
                 db.reserve_version(dataset_id, version, filepath, fmt,
                            "scanner", "scan")
                 result = db.commit(dataset_id, version, file_hash, None,
