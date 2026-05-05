@@ -45,7 +45,6 @@ export default {
     const selDataset      = Vue.ref(null); // selected dataset id
     const history    = Vue.ref([]);
     const metadata         = Vue.ref({});
-    const dqResult         = Vue.ref(null);
     const selectedVersion  = Vue.ref(null);
     const detailOpen = Vue.ref(false);
 
@@ -125,7 +124,6 @@ export default {
       history.value         = [];
       selectedVersion.value = null;
       metadata.value        = {};
-      dqResult.value        = null;
 
       try {
         const res = await api.catalogDatasetVersions(dataset);
@@ -138,14 +136,9 @@ export default {
     async function selectVersion(ver) {
       selectedVersion.value = ver.version;
       metadata.value = {};
-      dqResult.value = null;
       try {
-        const [metaRes, dqRes] = await Promise.allSettled([
-          api.catalogDatasetMetadata(selDataset.value, ver.version),
-          api.datasetDQResult(selDataset.value, ver.version),
-        ]);
-        metadata.value = metaRes.status === 'fulfilled' ? (metaRes.value?.data || {}) : {};
-        dqResult.value = dqRes.status  === 'fulfilled' ? (dqRes.value?.data  || null) : null;
+        const metaRes = await api.catalogDatasetMetadata(selDataset.value, ver.version);
+        metadata.value = metaRes?.data || {};
       } catch(e) {
         console.error('Version detail load error', e);
       }
@@ -237,7 +230,7 @@ export default {
 
     return {
       columns, items, folderStack, children, datasets, loading,
-      selFolder, selDataset, columns_history, history, metadata, dqResult, detailOpen,
+      selFolder, selDataset, columns_history, history, metadata, detailOpen,
       selectedVersion, currentFolder,
       navigateTo, navigateBreadcrumb, openDataset, openSchema, closeDetail, goBack,
       selectVersion, materializeRef,
@@ -367,15 +360,21 @@ export default {
   
            <template #cell(actions)="{ item }">
              <base-button-group>
-              <base-button 
-                icon="fas fa-sitemap" 
-                color="outline-primary" 
+              <base-button
+                icon="fas fa-shield-alt"
+                color="outline-success"
+                title="Data Quality"
+                @click="$router.push('/dq/' + selDataset + '/' + item.version)"
+              />
+              <base-button
+                icon="fas fa-sitemap"
+                color="outline-primary"
                 title="Lineage"
                 @click="$router.push({ path: '/lineage', query: { folder: selFolder, id: selDataset, ver: item.version } })"
               />
-              <base-button 
-                icon="fas fa-eye" 
-                color="outline-info" 
+              <base-button
+                icon="fas fa-eye"
+                color="outline-info"
                 title="Preview"
                 @click="$router.push({ path: '/datasets/' + selDataset + '/' + item.version })"
               />
@@ -384,74 +383,14 @@ export default {
   
         </base-table>
   
-        <div v-if="selectedVersion" class="p-3 border-top">
-
-          <!-- DQ result from dq_results table -->
-          <div v-if="dqResult" class="mb-3">
-            <h6 class="text-muted mb-2">
-              <i class="fas fa-shield-alt mr-1"></i>Data Quality
-              <small class="ml-2 font-weight-normal text-secondary">{{ selectedVersion.slice(0,19) }}</small>
-            </h6>
-
-            <div v-if="dqResult.error" class="alert alert-warning py-1 px-2 small mb-2">
-              <i class="fas fa-exclamation-triangle mr-1"></i>{{ dqResult.error }}
-            </div>
-
-            <div v-else class="p-2 rounded mb-2"
-                 :style="{ background: dqResult.success ? '#d4edda' : '#f8d7da' }">
-              <div class="d-flex align-items-center">
-                <i :class="['fas mr-2', dqResult.success ? 'fa-check-circle text-success' : 'fa-times-circle text-danger']"></i>
-                <strong class="small">{{ dqResult.success ? 'All checks passed' : 'Some checks failed' }}</strong>
-                <span class="ml-auto badge" :class="dqResult.success ? 'badge-success' : 'badge-danger'">
-                  {{ (dqResult.score * 100).toFixed(1) }}%
-                </span>
-              </div>
-              <div class="small text-muted mt-1">
-                {{ dqResult.passed }} / {{ dqResult.total }} rules passed
-              </div>
-            </div>
-
-            <table v-if="dqResult.details && dqResult.details.length"
-                   class="table table-sm table-bordered mb-0 small">
-              <thead class="thead-light">
-                <tr>
-                  <th>Rule</th>
-                  <th style="width:60px" class="text-center">Status</th>
-                  <th style="width:60px" class="text-center">Score</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="r in dqResult.details" :key="r.rule_id">
-                  <td>
-                    <code>{{ r.rule_id }}</code>
-                    <div v-if="r.error" class="text-danger small mt-1">{{ r.error }}</div>
-                  </td>
-                  <td class="text-center">
-                    <i v-if="r.success" class="fas fa-check-circle text-success"></i>
-                    <i v-else class="fas fa-times-circle text-danger"></i>
-                  </td>
-                  <td class="text-center">
-                    {{ r.score !== null ? (r.score * 100).toFixed(1) + '%' : '—' }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <!-- User metadata -->
-          <div v-if="Object.keys(metadata).length">
-            <h6 class="text-muted mb-2">
-              Metadata
-              <small class="ml-2 font-weight-normal text-secondary">{{ selectedVersion.slice(0,19) }}</small>
-            </h6>
-            <div v-for="(val, key) in metadata" :key="key" class="small mb-1">
-              <span class="text-muted">{{ key }}:</span>
-              <span class="ml-2">{{ val }}</span>
-            </div>
-          </div>
-
-          <div v-if="!dqResult && !Object.keys(metadata).length" class="text-muted small">
-            No data for this version.
+        <div v-if="selectedVersion && Object.keys(metadata).length" class="p-3 border-top">
+          <h6 class="text-muted mb-2">
+            Metadata
+            <small class="ml-2 font-weight-normal text-secondary">{{ selectedVersion.slice(0,19) }}</small>
+          </h6>
+          <div v-for="(val, key) in metadata" :key="key" class="small mb-1">
+            <span class="text-muted">{{ key }}:</span>
+            <span class="ml-2">{{ val }}</span>
           </div>
         </div>
   

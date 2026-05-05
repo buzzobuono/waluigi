@@ -9,7 +9,8 @@ import Lineage       from './components/Lineage.js';
 import JobDag        from './components/JobDag.js';
 import DatasetPreview  from './components/DatasetPreview.js';
 import DatasetSchema   from './components/DatasetSchema.js';
-import Expectations         from './components/Expectations.js';
+import DatasetDQ       from './components/DatasetDQ.js';
+import Expectations    from './components/Expectations.js';
 import DatasetCharts   from './components/DatasetCharts.js';
 import Dashboard       from './components/Dashboard.js';
 
@@ -25,6 +26,7 @@ const routes = [
   { path: '/sources',   component: Sources,   meta: { title: 'Sources' } },
   { path: '/datasets/:id+/:version', component: DatasetPreview, meta: { title: 'Dataset Preview'} },
   { path: '/schema/:id+',            component: DatasetSchema,  meta: { title: 'Schema' } },
+  { path: '/dq/:id+/:version',       component: DatasetDQ,      meta: { title: 'Data Quality' } },
   { path: '/chart/:id+/:cid(\\d+)',  component: DatasetCharts,  meta: { title: 'Chart' } },
   { path: '/dashboard',              component: Dashboard,      meta: { title: 'Dashboard' } },
   { path: '/dq/rules',  component: Expectations,   meta: { title: 'DQ Rules' } },
