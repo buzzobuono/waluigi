@@ -396,9 +396,9 @@ export default {
       openEdit, submitEdit,
       askApproveColumn, askDeleteColumn, askPublishAll,
       openAddExpectation, openEditExpectation, submitExpectation, askDeleteExpectation,
-      goBack:     () => router.go(-1),
-      goToRules:  () => router.push('/dq/rules'),
-      goToCharts: () => router.push('/charts/' + datasetId.value),
+      goBack:      () => router.go(-1),
+      goToRules:   () => router.push('/dq/rules'),
+      viewChart:   (chart) => router.push(`/chart/${datasetId.value}/${chart.id}`),
       CHART_COLUMNS, CHART_TYPES, AGG_TYPES,
       charts, chartModalRef, confirmChartDel, chartEditId,
       chartSaving, chartError, chartForm,
@@ -523,10 +523,8 @@ export default {
       <base-panel title="Charts" icon="fa-chart-bar" :no-padding="true">
 
         <template #tools>
-          <base-button icon="fas fa-eye" label="View" color="outline-info"
-                       title="Open charts page" @click="goToCharts" />
           <base-button icon="fas fa-plus" label="Add" color="outline-primary"
-                       class="ml-1" @click="openAddChart" />
+                       @click="openAddChart" />
         </template>
 
         <base-table :columns="CHART_COLUMNS" :items="charts">
@@ -546,6 +544,8 @@ export default {
 
           <template #cell(actions)="{ item }">
             <base-button-group>
+              <base-button icon="fas fa-eye" color="outline-info"
+                           title="View chart" @click="viewChart(item)" />
               <base-button icon="fas fa-pencil-alt" color="outline-primary"
                            title="Edit" @click="openEditChart(item)" />
               <base-button icon="fas fa-trash" color="outline-danger"
