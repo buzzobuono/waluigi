@@ -113,6 +113,18 @@ class CatalogDB:
                     updatedate  TEXT NOT NULL
                 );
 
+                -- Chart definitions: one row per chart per dataset.
+                CREATE TABLE IF NOT EXISTS charts (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    dataset_id  TEXT NOT NULL REFERENCES datasets(id),
+                    title       TEXT NOT NULL,
+                    spec        TEXT NOT NULL DEFAULT '{}',  -- JSON chart spec
+                    position    INTEGER NOT NULL DEFAULT 0,
+                    username    TEXT NOT NULL,
+                    createdate  TEXT NOT NULL,
+                    updatedate  TEXT NOT NULL
+                );
+
                 -- DQ run results: one row per committed version.
                 -- Replaces sys.dq.* version_metadata keys.
                 CREATE TABLE IF NOT EXISTS dq_results (
@@ -182,6 +194,16 @@ class CatalogDB:
                     error       TEXT,
                     createdate  TEXT NOT NULL,
                     UNIQUE (dataset_id, version)
+                )""",
+                """CREATE TABLE IF NOT EXISTS charts (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    dataset_id  TEXT NOT NULL REFERENCES datasets(id),
+                    title       TEXT NOT NULL,
+                    spec        TEXT NOT NULL DEFAULT '{}',
+                    position    INTEGER NOT NULL DEFAULT 0,
+                    username    TEXT NOT NULL,
+                    createdate  TEXT NOT NULL,
+                    updatedate  TEXT NOT NULL
                 )""",
             ]:
                 try:
@@ -658,6 +680,61 @@ class CatalogDB:
             r["details"] = json.loads(r.get("details") or "[]")
             r["success"] = bool(r["success"])
         return rows
+
+    # Charts
+
+    def list_charts(self, dataset_id: str) -> list[dict]:
+        cur = self.conn.execute("""
+            SELECT * FROM charts WHERE dataset_id = ?
+            ORDER BY position, id
+        """, (dataset_id,))
+        rows = self._rows(cur)
+        for r in rows:
+            r["spec"] = json.loads(r.get("spec") or "{}")
+        return rows
+
+    def add_chart(self, dataset_id: str, title: str, spec: dict,
+                  position: int = 0) -> dict:
+        now = _now()
+        with self.conn:
+            cur = self.conn.execute("""
+                INSERT INTO charts (dataset_id, title, spec, position, username, createdate, updatedate)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (dataset_id, title, json.dumps(spec), position, _user(), now, now))
+            row_id = cur.lastrowid
+        return self.get_chart(dataset_id, row_id)
+
+    def get_chart(self, dataset_id: str, chart_id: int) -> dict | None:
+        cur = self.conn.execute("""
+            SELECT * FROM charts WHERE dataset_id = ? AND id = ?
+        """, (dataset_id, chart_id))
+        row = self._row(cur.fetchone())
+        if row:
+            row["spec"] = json.loads(row.get("spec") or "{}")
+        return row
+
+    def update_chart(self, dataset_id: str, chart_id: int, **kwargs) -> bool:
+        allowed = {"title", "spec", "position"}
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return False
+        if "spec" in updates:
+            updates["spec"] = json.dumps(updates["spec"])
+        updates["updatedate"] = _now()
+        updates["username"] = _user()
+        cols = ", ".join(f"{k} = ?" for k in updates)
+        vals = list(updates.values()) + [dataset_id, chart_id]
+        with self.conn:
+            cur = self.conn.execute(
+                f"UPDATE charts SET {cols} WHERE dataset_id = ? AND id = ?", vals)
+            return cur.rowcount > 0
+
+    def delete_chart(self, dataset_id: str, chart_id: int) -> bool:
+        with self.conn:
+            cur = self.conn.execute(
+                "DELETE FROM charts WHERE dataset_id = ? AND id = ?",
+                (dataset_id, chart_id))
+            return cur.rowcount > 0
 
     def diff_schema_against_inferred(self, dataset_id: str,
                                       inferred: list[dict]) -> dict:

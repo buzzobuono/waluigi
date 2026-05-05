@@ -11,7 +11,17 @@ import ConfirmDialog from './ConfirmDialog.js';
 
 const { ref, computed, onMounted, watch } = Vue;
 
-const PII_TYPES = ['none', 'direct', 'indirect', 'sensitive'];
+const PII_TYPES   = ['none', 'direct', 'indirect', 'sensitive'];
+const CHART_TYPES = ['bar', 'line', 'pie', 'scatter', 'histogram'];
+const AGG_TYPES   = ['sum', 'mean', 'count', 'max', 'min'];
+
+const CHART_COLUMNS = [
+  { key: 'title',   label: 'Title' },
+  { key: 'type',    label: 'Type' },
+  { key: 'x',      label: 'X' },
+  { key: 'y',      label: 'Y / Agg' },
+  { key: 'actions', label: '', class: 'text-right pr-3' },
+];
 
 const STATUS_BADGE = {
   inferred:  'badge-secondary',
@@ -111,19 +121,88 @@ export default {
       expForm.value.params = newParams;
     });
 
+    // charts
+    const charts           = ref([]);
+    const chartModalRef    = ref(null);
+    const confirmChartDel  = ref(null);
+    const chartEditId      = ref(null);
+    const chartSaving      = ref(false);
+    const chartError       = ref(null);
+    const chartForm        = ref({ title: '', spec_yaml: '', _parsed: null });
+
+    function _defaultSpec() {
+      return `type: bar\nx:\n  field: column_name\ny:\n  field: value_column\n  agg: sum\n`;
+    }
+
+    function openAddChart() {
+      chartEditId.value = null;
+      chartError.value  = null;
+      chartForm.value   = { title: '', spec_yaml: _defaultSpec(), _parsed: null };
+      chartModalRef.value?.open();
+    }
+
+    function openEditChart(chart) {
+      chartEditId.value = chart.id;
+      chartError.value  = null;
+      const yamlText = window.jsyaml ? window.jsyaml.dump(chart.spec) : JSON.stringify(chart.spec, null, 2);
+      chartForm.value = { title: chart.title, spec_yaml: yamlText, _parsed: null };
+      chartModalRef.value?.open();
+    }
+
+    async function submitChart() {
+      chartError.value  = null;
+      chartSaving.value = true;
+      try {
+        let spec;
+        try {
+          spec = window.jsyaml ? window.jsyaml.load(chartForm.value.spec_yaml)
+                               : JSON.parse(chartForm.value.spec_yaml);
+        } catch (e) {
+          chartError.value = `Invalid YAML: ${e.message}`;
+          return;
+        }
+        const body = { title: chartForm.value.title, spec };
+        let res;
+        if (chartEditId.value !== null) {
+          res = await api.updateChart(datasetId.value, chartEditId.value, body);
+        } else {
+          res = await api.addChart(datasetId.value, body);
+        }
+        if (res.diagnostic?.result === 'KO') {
+          chartError.value = res.diagnostic?.messages?.[0] || 'Error';
+          return;
+        }
+        chartModalRef.value?.close();
+        await loadAll();
+      } catch (e) {
+        chartError.value = e.message;
+      } finally {
+        chartSaving.value = false;
+      }
+    }
+
+    function askDeleteChart(chart) {
+      confirmChartDel.value?.ask(
+        `Delete chart "${chart.title}"?`,
+        async (ok) => { if (ok) { await api.deleteChart(datasetId.value, chart.id); await loadAll(); } }
+      );
+    }
+
     async function loadAll() {
       if (!datasetId.value) return;
       loading.value   = true;
       pageError.value = null;
       try {
-        const [schemaRes, expRes, rulesRes] = await Promise.all([
+        const [schemaRes, expRes, rulesRes, chartsRes] = await Promise.all([
           api.catalogDatasetSchema(datasetId.value),
           api.datasetExpectations(datasetId.value),
           api.dqRules(),
+          api.datasetCharts(datasetId.value),
         ]);
         schemaData.value   = schemaRes.data || null;
         expectations.value = expRes.data || [];
         availableRules.value = rulesRes.data || [];
+        charts.value       = chartsRes.data || [];
       } catch (e) {
         pageError.value = e.message;
       } finally {
@@ -317,8 +396,13 @@ export default {
       openEdit, submitEdit,
       askApproveColumn, askDeleteColumn, askPublishAll,
       openAddExpectation, openEditExpectation, submitExpectation, askDeleteExpectation,
-      goBack: () => router.go(-1),
-      goToRules: () => router.push('/dq/rules'),
+      goBack:     () => router.go(-1),
+      goToRules:  () => router.push('/dq/rules'),
+      goToCharts: () => router.push('/charts/' + datasetId.value),
+      CHART_COLUMNS, CHART_TYPES, AGG_TYPES,
+      charts, chartModalRef, confirmChartDel, chartEditId,
+      chartSaving, chartError, chartForm,
+      openAddChart, openEditChart, submitChart, askDeleteChart,
     };
   },
 
@@ -431,6 +515,48 @@ export default {
 
         <div v-if="!expectations.length" class="p-3 text-muted small text-center">
           No expectations configured — quality checks will be skipped at commit.
+        </div>
+
+      </base-panel>
+
+      <!-- Charts -->
+      <base-panel title="Charts" icon="fa-chart-bar" :no-padding="true">
+
+        <template #tools>
+          <base-button icon="fas fa-eye" label="View" color="outline-info"
+                       title="Open charts page" @click="goToCharts" />
+          <base-button icon="fas fa-plus" label="Add" color="outline-primary"
+                       class="ml-1" @click="openAddChart" />
+        </template>
+
+        <base-table :columns="CHART_COLUMNS" :items="charts">
+
+          <template #cell(type)="{ item }">
+            <span class="badge badge-secondary">{{ item.spec.type || 'bar' }}</span>
+          </template>
+
+          <template #cell(x)="{ item }">
+            <code class="small">{{ item.spec.x?.field || '—' }}</code>
+          </template>
+
+          <template #cell(y)="{ item }">
+            <code class="small">{{ item.spec.y?.field || '—' }}</code>
+            <span v-if="item.spec.y?.agg" class="text-muted small ml-1">({{ item.spec.y.agg }})</span>
+          </template>
+
+          <template #cell(actions)="{ item }">
+            <base-button-group>
+              <base-button icon="fas fa-pencil-alt" color="outline-primary"
+                           title="Edit" @click="openEditChart(item)" />
+              <base-button icon="fas fa-trash" color="outline-danger"
+                           title="Delete" @click="askDeleteChart(item)" />
+            </base-button-group>
+          </template>
+
+        </base-table>
+
+        <div v-if="!charts.length" class="p-3 text-muted small text-center">
+          No charts defined — click Add to create one.
         </div>
 
       </base-panel>
@@ -614,9 +740,44 @@ export default {
         </template>
       </base-modal>
 
+      <!-- add/edit chart modal -->
+      <base-modal ref="chartModalRef" size="lg" icon="fas fa-chart-bar"
+                  :title="chartEditId !== null ? 'Edit Chart' : 'Add Chart'"
+                  :scrollable="true">
+
+        <div v-if="chartError" class="alert alert-danger mb-3">{{ chartError }}</div>
+
+        <div class="form-group">
+          <label class="small text-muted">Title</label>
+          <base-input v-model="chartForm.title" placeholder="e.g. Revenue by Category" />
+        </div>
+
+        <div class="form-group">
+          <label class="small text-muted">
+            Spec <span class="text-secondary">(YAML)</span>
+          </label>
+          <textarea class="form-control form-control-sm font-monospace"
+                    rows="14" v-model="chartForm.spec_yaml"
+                    style="font-family: monospace; font-size: 0.8rem;"></textarea>
+          <small class="text-muted">
+            type: bar | line | pie | scatter | histogram &nbsp;·&nbsp;
+            agg: sum | mean | count | max | min
+          </small>
+        </div>
+
+        <template #footer>
+          <base-button label="Save" icon="fas fa-save" color="primary"
+                       :disabled="chartSaving || !chartForm.title"
+                       :loading="chartSaving" @click="submitChart" />
+          <base-button label="Close" icon="fas fa-times" color="outline-secondary"
+                       class="ml-auto" @click="chartModalRef && chartModalRef.close()" />
+        </template>
+      </base-modal>
+
       <confirm-dialog ref="confirmPublishRef" />
       <confirm-dialog ref="confirmDeleteRef" />
       <confirm-dialog ref="confirmExpDeleteRef" />
+      <confirm-dialog ref="confirmChartDel" />
 
     </base-page>
   `

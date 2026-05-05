@@ -79,6 +79,12 @@ export const api = {
   dqRules: ()       => _get('/catalog/dq/rules'),
   dqSuite: (path)   => _get('/catalog/dq/suite', { path }),
 
+  datasetCharts:       (id)              => _get(`/catalog/datasets/${_enc(id)}/charts`),
+  addChart:            (id, body)        => _postJson(`/catalog/datasets/${_enc(id)}/charts`, body),
+  updateChart:         (id, cid, body)   => _patchJson(`/catalog/datasets/${_enc(id)}/charts/${cid}`, body),
+  deleteChart:         (id, cid)         => _delete(`/catalog/datasets/${_enc(id)}/charts/${cid}`),
+  renderChart:         (id, cid, ver)    => _get(`/catalog/datasets/${_enc(id)}/charts/${cid}/render`, ver ? { version: ver } : {}),
+
   datasetDQResults:    (id)              => _get(`/catalog/datasets/${_enc(id)}/dq`),
   datasetDQResult:     (id, ver)         => _get(`/catalog/datasets/${_enc(id)}/dq/${_enc(ver)}`),
 

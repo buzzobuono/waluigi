@@ -2,6 +2,7 @@ import os
 import sys
 import csv
 import json
+import math
 import socket
 import yaml
 from datetime import datetime, timezone
@@ -67,6 +68,117 @@ dq_manager = DQManager(RULES_PATH)
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
+
+
+def _safe(v):
+    """Convert a value to a JSON-serialisable scalar."""
+    if v is None:
+        return None
+    if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+        return None
+    try:
+        f = float(v)
+        return round(f, 6)
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def _build_echarts_option(df: "pd.DataFrame", spec: dict) -> dict:
+    chart_type = spec.get("type", "bar")
+    x_conf     = spec.get("x", {})
+    y_conf     = spec.get("y", {})
+    x_field    = x_conf.get("field")
+    y_field    = y_conf.get("field")
+    x_label    = x_conf.get("label", x_field or "")
+    y_label    = y_conf.get("label", y_field or "")
+    agg        = y_conf.get("agg", "sum")
+    color_field = spec.get("color")
+    limit      = int(spec.get("limit", 200))
+
+    base = {
+        "tooltip": {},
+        "toolbox": {"feature": {"saveAsImage": {}, "dataZoom": {}}},
+        "grid":    {"containLabel": True},
+    }
+
+    # ── PIE ──────────────────────────────────────────────────────────────────
+    if chart_type == "pie":
+        grouped = (df.groupby(x_field)[y_field].agg(agg)
+                   .reset_index().head(limit))
+        data = [{"name": str(r[x_field]), "value": _safe(r[y_field])}
+                for _, r in grouped.iterrows()]
+        return {**base,
+                "tooltip": {"trigger": "item", "formatter": "{b}: {c} ({d}%)"},
+                "legend":  {"orient": "vertical", "left": "left"},
+                "series":  [{"type": "pie", "data": data,
+                             "radius": "60%", "label": {"formatter": "{b}\n{d}%"}}]}
+
+    # ── HISTOGRAM ────────────────────────────────────────────────────────────
+    if chart_type == "histogram":
+        col  = df[x_field].dropna()
+        bins = int(spec.get("bins", 20))
+        cuts = pd.cut(col, bins=bins)
+        counts = cuts.value_counts().sort_index()
+        cats = [str(i) for i in counts.index]
+        vals = [int(v) for v in counts.values]
+        return {**base,
+                "tooltip": {"trigger": "axis"},
+                "xAxis":   {"type": "category", "data": cats,
+                            "name": x_label, "axisLabel": {"rotate": 30}},
+                "yAxis":   {"type": "value", "name": "Count"},
+                "series":  [{"type": "bar", "data": vals, "barWidth": "99%"}]}
+
+    # ── SCATTER ──────────────────────────────────────────────────────────────
+    if chart_type == "scatter":
+        data = (df[[x_field, y_field]].dropna().head(limit)
+                .apply(lambda r: [_safe(r[x_field]), _safe(r[y_field])], axis=1)
+                .tolist())
+        return {**base,
+                "tooltip": {"trigger": "item"},
+                "xAxis":   {"type": "value", "name": x_label},
+                "yAxis":   {"type": "value", "name": y_label},
+                "series":  [{"type": "scatter", "data": data, "symbolSize": 8}]}
+
+    # ── BAR / LINE ───────────────────────────────────────────────────────────
+    if color_field:
+        if agg == "count":
+            agged = (df.groupby([x_field, color_field])
+                     .size().reset_index(name=y_field or "_count"))
+            y_field = y_field or "_count"
+        else:
+            agged = (df.groupby([x_field, color_field])[y_field]
+                     .agg(agg).reset_index())
+        pivot    = (agged.pivot(index=x_field, columns=color_field, values=y_field)
+                    .fillna(0).head(limit))
+        cats     = [str(c) for c in pivot.index]
+        series   = [{"name": str(col), "type": chart_type,
+                     "data": [_safe(v) for v in pivot[col]]}
+                    for col in pivot.columns]
+        legend   = {"data": [str(c) for c in pivot.columns]}
+    else:
+        if agg == "count":
+            grouped = (df[x_field].value_counts()
+                       .reset_index().head(limit))
+            grouped.columns = [x_field, "_count"]
+            cats = [str(v) for v in grouped[x_field]]
+            vals = [int(v) for v in grouped["_count"]]
+        else:
+            grouped = (df.groupby(x_field)[y_field]
+                       .agg(agg).reset_index().head(limit))
+            cats = [str(v) for v in grouped[x_field]]
+            vals = [_safe(v) for v in grouped[y_field]]
+        series = [{"type": chart_type, "data": vals, "name": y_label}]
+        legend = {}
+
+    opt = {**base,
+           "tooltip": {"trigger": "axis"},
+           "xAxis":   {"type": "category", "data": cats,
+                       "name": x_label, "axisLabel": {"rotate": 30}},
+           "yAxis":   {"type": "value", "name": y_label},
+           "series":  series}
+    if legend:
+        opt["legend"] = legend
+    return opt
 
 
 def _run_dq_nonblocking(dataset_id: str, version: str,
@@ -514,6 +626,76 @@ async def delete_expectation(dataset_id: str, exp_id: int):
     if not deleted:
         return ko("Expectation not found", 404)
     return ok({"deleted": exp_id})
+
+
+# Routes - Charts
+
+@app.get("/datasets/{dataset_id:path}/charts", tags=["Charts"],
+         summary="List chart definitions for a dataset")
+async def list_charts(dataset_id: str):
+    if not db.exists_dataset(dataset_id):
+        return ko("Dataset not found", 404)
+    return ok(db.list_charts(dataset_id))
+
+
+@app.post("/datasets/{dataset_id:path}/charts", tags=["Charts"],
+          summary="Add a chart definition")
+async def add_chart(dataset_id: str, body: ChartCreateRequest):
+    if not db.exists_dataset(dataset_id):
+        return ko("Dataset not found", 404)
+    chart = db.add_chart(dataset_id, body.title, body.spec, body.position)
+    return ok(chart)
+
+
+@app.patch("/datasets/{dataset_id:path}/charts/{chart_id}", tags=["Charts"],
+           summary="Update a chart definition")
+async def update_chart(dataset_id: str, chart_id: int, body: ChartUpdateRequest):
+    if not db.exists_dataset(dataset_id):
+        return ko("Dataset not found", 404)
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not db.update_chart(dataset_id, chart_id, **updates):
+        return ko("Chart not found", 404)
+    return ok(db.get_chart(dataset_id, chart_id))
+
+
+@app.delete("/datasets/{dataset_id:path}/charts/{chart_id}", tags=["Charts"],
+            summary="Delete a chart definition")
+async def delete_chart(dataset_id: str, chart_id: int):
+    if not db.exists_dataset(dataset_id):
+        return ko("Dataset not found", 404)
+    if not db.delete_chart(dataset_id, chart_id):
+        return ko("Chart not found", 404)
+    return ok({"deleted": chart_id})
+
+
+@app.get("/datasets/{dataset_id:path}/charts/{chart_id}/render", tags=["Charts"],
+         summary="Render a chart — returns an ECharts option object with aggregated data")
+async def render_chart(dataset_id: str, chart_id: int,
+                       version: str = Query(None, description="Dataset version; defaults to latest")):
+    chart = db.get_chart(dataset_id, chart_id)
+    if not chart:
+        return ko("Chart not found", 404)
+    dataset = db.get_dataset(dataset_id)
+    if not dataset:
+        return ko("Dataset not found", 404)
+
+    ver = db.get_version(dataset_id, version) if version else db.get_latest_version(dataset_id)
+    if not ver:
+        return ko("No committed version available", 404)
+
+    source    = db.get_source(dataset["source_id"])
+    connector = ConnectorFactory.get(source["type"], source["config"])
+    try:
+        df = connector.read(ver["location"], dataset["format"])
+    except Exception as e:
+        return ko(f"Cannot read dataset: {e}", 500)
+
+    try:
+        option = _build_echarts_option(df, chart["spec"])
+    except Exception as e:
+        return ko(f"Cannot build chart: {e}", 422)
+
+    return ok({"option": option, "version": ver["version"], "rows": len(df)})
 
 
 # Routes - DQ Results
