@@ -1,38 +1,53 @@
-import time
+import pandas as pd
 from waluigi.sdk.task import Task
 from waluigi.sdk.catalog import catalog
+from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
+
 
 class GlobalReport(Task):
+
     def run(self):
-        print(f"Variabile: {self.attributes.var}")
-        print("📊 Generazione Global Report...")
+        date = self.params.date
+        print(f"Building global report for {date} (var={self.attributes.var}) ...")
 
-        sources = ["erp", "web", "social"]
-        inputs_for_lineage = []
-        results = []
+        catalog.create_source(SourceCreateRequest(
+            id="analytics-local",
+            type=SourceType.LOCAL,
+            config={},
+            description="Local storage for analytics pipeline",
+        ))
 
-        # Raccogliamo path e versioni dei 3 input
-        for s in sources:
-            ds_id = f"clean_{s}"
-            path = catalog.resolve(f"analytics/{s}/clean/{ds_id}").path
-            ver = catalog.last_version(f"analytics/{s}/clean/{ds_id}")
-            
-            inputs_for_lineage.append(catalog.ref(f"analytics/{s}/clean/{ds_id}", ver))
-            
-            with open(path, "r") as f:
-                results.append(f.read())
-            print(f"Letto dataset: {ds_id} (v: {ver})")
+        sources  = ["erp", "web", "social"]
+        frames   = []
+        lineage  = []
 
-        # Produciamo il report finale con lineage completa
-        with catalog.produce("analytics/reports/global_report",
-                             format="out",
-                             inputs=inputs_for_lineage) as ctx:
-            
-            with open(ctx.path, "w") as f:
-                f.write("=== WALUIGI GLOBAL REPORT ===\n")
-                f.write("\n".join(results))
-            
-            print(f"✅ Report Finale Creato in: {ctx.path}")
+        for source in sources:
+            reader = catalog.resolve(f"analytics/{source}/clean/clean_{source}")
+            df     = reader.read()
+            df["pipeline_source"] = source
+            frames.append(df)
+            lineage.append({"dataset_id": reader.dataset_id, "version": reader.version})
+            print(f"  {source}: {len(df)} rows @ {reader.version}")
+
+        report_df = pd.concat(frames, ignore_index=True)
+        print(f"Total rows in report: {len(report_df)}")
+
+        dataset = DatasetCreateRequest(
+            id="analytics/reports/global_report",
+            format=DatasetFormat.PARQUET,
+            description="Global consolidated report across all sources",
+            source_id="analytics-local",
+        )
+
+        with catalog.produce(dataset, metadata={"date": date}, inputs=lineage) as writer:
+            writer.write(report_df)
+
+        if writer.skipped:
+            print(f"Skipped — same metadata, existing version: {writer.version}")
+            return
+
+        print(f"Done: {writer.dataset_id} @ {writer.version} ({len(report_df)} rows)")
+
 
 if __name__ == "__main__":
     GlobalReport().start()

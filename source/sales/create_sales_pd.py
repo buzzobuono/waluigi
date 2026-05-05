@@ -1,52 +1,46 @@
 import pandas as pd
 from waluigi.sdk.task import Task
 from waluigi.sdk.catalog import catalog
-from waluigi.catalog.models import * 
+from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
 
-DATASET_ID = "sales/raw/sales_raw_pd"
 
 class CreateSalesDataset(Task):
 
     def run(self):
-        source_id="local"
-        
-        print(f"📊 Creazione local source: {source_id}")
-        
-        source = SourceCreateRequest(
-                id=source_id,
-                type=SourceType.LOCAL,
-                config={},
-                description="Local Source"
-        )
-    
-        catalog.create_source(source)
-        
-        print(f"📊 Creazione dataset vendite per data: {self.params.date}")
+        date = self.params.date
 
-        rows = [
-            {"date": self.params.date, "product": "A", "quantity": 10, "revenue": 100.0},
-            {"date": self.params.date, "product": "B", "quantity": 25, "revenue": 250.0},
-            {"date": self.params.date, "product": "C", "quantity": 7,  "revenue": 70.0},
-            {"date": self.params.date, "product": "D", "quantity": 42, "revenue": 420.0},
-            {"date": self.params.date, "product": "E", "quantity": 3,  "revenue": 30.0},
-        ]
+        catalog.create_source(SourceCreateRequest(
+            id="local",
+            type=SourceType.LOCAL,
+            config={},
+            description="Local Source",
+        ))
 
-        df = pd.DataFrame(rows)
+        print(f"Creating sales parquet dataset for date: {date}")
+
+        df = pd.DataFrame([
+            {"date": date, "product": "A", "quantity": 10, "revenue": 100.0},
+            {"date": date, "product": "B", "quantity": 25, "revenue": 250.0},
+            {"date": date, "product": "C", "quantity":  7, "revenue":  70.0},
+            {"date": date, "product": "D", "quantity": 42, "revenue": 420.0},
+            {"date": date, "product": "E", "quantity":  3, "revenue":  30.0},
+        ])
 
         dataset = DatasetCreateRequest(
-            id=DATASET_ID,
+            id="sales/raw/sales_raw_pd",
             format=DatasetFormat.PARQUET,
-            description="Sales raw pd",
-            source_id=source_id
+            description="Sales raw data (parquet)",
+            source_id="local",
         )
-        with catalog.produce(dataset) as ctx:
-            ctx.write(rows, source="SAP_EXTRACT", date_ref=self.params.date)
-            
-        if ctx.skipped:
-            print(f"⏭️  Contenuto invariato — versione: {ctx.version}")
+
+        with catalog.produce(dataset, metadata={"date": date, "source": "SAP_EXTRACT"}) as writer:
+            writer.write(df)
+
+        if writer.skipped:
+            print(f"Skipped — same metadata, existing version: {writer.version}")
             return
 
-        print(f"✅ {ctx.dataset_id}@{ctx.version} scritto.")
+        print(f"Done: {writer.dataset_id} @ {writer.version} ({len(df)} rows)")
 
 
 if __name__ == "__main__":
