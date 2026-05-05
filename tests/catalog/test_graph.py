@@ -1,13 +1,17 @@
 """
 test_graph.py — create a dataset, define charts, verify rendered ECharts option.
 
-Charts defined via YAML spec (parsed to dict by the test, sent as JSON to the API).
+Charts are an admin/UI feature, so this test calls the REST API directly
+via the catalog client's internal transport (not part of the integrator SDK).
 Run with: python tests/catalog/test_graph.py
 """
 import json
 import yaml
+import httpx
 from waluigi.sdk.catalog import catalog, CatalogError
 from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
+
+BASE = catalog.url
 
 # ── Dataset ───────────────────────────────────────────────────────────────────
 
@@ -115,12 +119,27 @@ agg: sum
 
 print(f"\nCreating {len(SPECS)} chart(s) for dataset '{DATASET_ID}' ...")
 
+def _add_chart(dataset_id, title, spec):
+    r = httpx.post(f"{BASE}/datasets/{dataset_id}/charts",
+                   json={"title": title, "spec": spec})
+    r.raise_for_status()
+    return r.json()["data"]
+
+def _render_chart(dataset_id, chart_id):
+    r = httpx.get(f"{BASE}/datasets/{dataset_id}/charts/{chart_id}/render")
+    r.raise_for_status()
+    return r.json()["data"]
+
+def _list_charts(dataset_id):
+    r = httpx.get(f"{BASE}/datasets/{dataset_id}/charts")
+    r.raise_for_status()
+    return r.json()["data"]
+
 for title, spec in SPECS.items():
-    chart = catalog._post(f"/datasets/{DATASET_ID}/charts",
-                          json={"title": title, "spec": spec})
+    chart    = _add_chart(DATASET_ID, title, spec)
     chart_id = chart["id"]
 
-    rendered = catalog._get(f"/datasets/{DATASET_ID}/charts/{chart_id}/render")
+    rendered = _render_chart(DATASET_ID, chart_id)
     option   = rendered["option"]
 
     series_types = [s.get("type") for s in option.get("series", [])]
@@ -139,7 +158,7 @@ for title, spec in SPECS.items():
 
 # ── Final list ────────────────────────────────────────────────────────────────
 
-all_charts = catalog._get(f"/datasets/{DATASET_ID}/charts")
+all_charts = _list_charts(DATASET_ID)
 print(f"\n{'─'*55}")
 print(f"  Total charts registered: {len(all_charts)}")
 for c in all_charts:
