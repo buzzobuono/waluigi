@@ -1,0 +1,66 @@
+- title: Revenue by Category (bar)
+  spec:
+    type: bar
+    x:
+      field: category
+      label: Category
+    y:
+      field: revenue
+      agg: sum
+      label: Total Revenue (€)
+
+- title: Revenue over Time grouped by Category (line)
+  spec:
+    type: line
+    x:
+      field: date
+      label: Month
+    y:
+      field: revenue
+      agg: sum
+      label: Revenue (€)
+    color: category
+
+- title: Revenue share by Category (pie)
+  spec:
+    type: pie
+    x:
+      field: category
+    y:
+      field: revenue
+      agg: sum
+
+- title: Units distribution (histogram)
+  spec:
+    type: histogram
+    x:
+      field: units
+      label: Units Sold
+    bins: 6
+
+- title: Revenue vs Units (scatter)
+  spec:
+    type: scatter
+    x:
+      field: units
+      label: Units Sold
+    y:
+      field: revenue
+      label: Revenue (€)
+    limit: 100
+
+- title: Category performance radar (radar)
+  spec:
+    type: radar
+    group_by: category
+    axes:
+      - field: revenue
+        label: Revenue (€)
+        max: 50000
+      - field: units
+        label: Units Sold
+        max: 3500
+      - field: returns
+        label: Returns
+        max: 200
+    agg: sum

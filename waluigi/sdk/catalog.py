@@ -142,6 +142,35 @@ class CatalogClient:
             for i, exp in enumerate(expectations)
         ]
 
+    # ── CHARTS ────────────────────────────────────────────────────────────────
+
+    def set_charts(self, dataset_id: str, charts: List[dict]) -> List[dict]:
+        """Replace all chart definitions for a dataset (idempotent).
+
+        Deletes existing charts then recreates them from *charts*, so the
+        result always matches the provided list exactly — safe to call from
+        a pipeline job on every run.
+
+        Each item: {"title": str, "spec": dict, "position": int (optional)}
+
+        Typical usage from a pipeline task::
+
+            with open("charts/sales.yaml") as f:
+                chart_defs = yaml.safe_load(f)
+            catalog.set_charts("analytics/sales/monthly", chart_defs)
+        """
+        for c in self._get(f"/datasets/{dataset_id}/charts"):
+            self._delete(f"/datasets/{dataset_id}/charts/{c['id']}")
+        result = []
+        for i, c in enumerate(charts):
+            created = self._post(f"/datasets/{dataset_id}/charts", json={
+                "title":    c["title"],
+                "spec":     c["spec"],
+                "position": c.get("position", i),
+            })
+            result.append(created)
+        return result
+
     # ── DATA OPS ──────────────────────────────────────────────────────────────
 
     def resolve(self, dataset_id: str, version: str = None) -> "DatasetReader":
