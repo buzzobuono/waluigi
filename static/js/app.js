@@ -42,10 +42,11 @@ const App = {
       {
         label: 'Data Management', icon: 'fa-database',
         children: [
-          { path: '/catalog',   label: 'Catalog',   icon: 'fa-table',           key: null },
-          { path: '/sources',   label: 'Sources',   icon: 'fa-plug',            key: null },
-          { path: '/lineage',   label: 'Lineage',   icon: 'fa-project-diagram', key: null },
-          { path: '/dq/rules',  label: 'DQ Rules',  icon: 'fa-shield-alt',      key: null }
+          { path: '/catalog',    label: 'Catalog',    icon: 'fa-table',           key: null },
+          { path: '/sources',    label: 'Sources',    icon: 'fa-plug',            key: null },
+          { path: '/lineage',    label: 'Lineage',    icon: 'fa-project-diagram', key: null },
+          { path: '/dq/rules',   label: 'DQ Rules',   icon: 'fa-shield-alt',      key: null },
+          { path: '/dashboard',  label: 'Dashboard',  icon: 'fa-th-large',        key: null }
         ]
       }
     ];
