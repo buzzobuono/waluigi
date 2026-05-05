@@ -28,15 +28,15 @@ dataset_req = DatasetCreateRequest(
 )
 
 rows = [
-    {"date": "2026-01", "category": "Electronics", "revenue": 12400.0, "units": 310},
-    {"date": "2026-01", "category": "Clothing",    "revenue":  5200.0, "units": 420},
-    {"date": "2026-01", "category": "Food",        "revenue":  3100.0, "units": 890},
-    {"date": "2026-02", "category": "Electronics", "revenue": 14800.0, "units": 370},
-    {"date": "2026-02", "category": "Clothing",    "revenue":  6100.0, "units": 510},
-    {"date": "2026-02", "category": "Food",        "revenue":  3500.0, "units": 940},
-    {"date": "2026-03", "category": "Electronics", "revenue": 11900.0, "units": 298},
-    {"date": "2026-03", "category": "Clothing",    "revenue":  7300.0, "units": 590},
-    {"date": "2026-03", "category": "Food",        "revenue":  4200.0, "units": 1100},
+    {"date": "2026-01", "category": "Electronics", "revenue": 12400.0, "units": 310, "returns": 18},
+    {"date": "2026-01", "category": "Clothing",    "revenue":  5200.0, "units": 420, "returns": 42},
+    {"date": "2026-01", "category": "Food",        "revenue":  3100.0, "units": 890, "returns":  5},
+    {"date": "2026-02", "category": "Electronics", "revenue": 14800.0, "units": 370, "returns": 21},
+    {"date": "2026-02", "category": "Clothing",    "revenue":  6100.0, "units": 510, "returns": 55},
+    {"date": "2026-02", "category": "Food",        "revenue":  3500.0, "units": 940, "returns":  7},
+    {"date": "2026-03", "category": "Electronics", "revenue": 11900.0, "units": 298, "returns": 15},
+    {"date": "2026-03", "category": "Clothing",    "revenue":  7300.0, "units": 590, "returns": 61},
+    {"date": "2026-03", "category": "Food",        "revenue":  4200.0, "units": 1100, "returns":  9},
 ]
 
 print("Writing dataset ...")
@@ -104,6 +104,9 @@ axes:
   - field: units
     label: Units Sold
     max: 3500
+  - field: returns
+    label: Returns
+    max: 200
 agg: sum
 """),
 }
