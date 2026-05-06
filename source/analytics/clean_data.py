@@ -1,4 +1,5 @@
 import random
+import pandas as pd
 from waluigi.sdk.task import Task
 from waluigi.sdk.catalog import catalog
 from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
