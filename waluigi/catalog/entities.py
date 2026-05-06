@@ -40,7 +40,6 @@ def _version(row) -> dict | None:
             "version":          d.get("version"),
             "location":         d.get("location"),
             "format":           d.get("format"),
-            "source_id":        d.get("source_id"),
             "rows":             d.get("rows"),
             "produced_by_task": d.get("produced_by_task"),
             "produced_by_job":  d.get("produced_by_job"),
