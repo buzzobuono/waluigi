@@ -34,6 +34,23 @@ class CleanDataTask(Task):
 
         clean_id = f"analytics/{source}/clean/clean_{source}"
 
+        dataset = DatasetCreateRequest(
+            id=clean_id,
+            format=DatasetFormat.PARQUET,
+            description=f"Cleaned data for {source}",
+            source_id="analytics-local",
+        )
+        lineage = [{"dataset_id": reader.dataset_id, "version": reader.version}]
+
+        with catalog.produce(dataset, metadata={"date": date, "source": source},
+                             inputs=lineage) as writer:
+            writer.write(df)
+
+        if writer.skipped:
+            print(f"Skipped — same metadata, existing version: {writer.version}")
+        else:
+            print(f"Done: {writer.dataset_id} @ {writer.version} ({len(df)} rows)")
+
         catalog.set_expectations(clean_id, [
             {
                 "rule_id":   "expect_column_values_to_not_be_null",
@@ -64,24 +81,6 @@ class CleanDataTask(Task):
             },
         ])
         print(f"DQ expectations set on {clean_id}")
-
-        dataset = DatasetCreateRequest(
-            id=clean_id,
-            format=DatasetFormat.PARQUET,
-            description=f"Cleaned data for {source}",
-            source_id="analytics-local",
-        )
-        lineage = [{"dataset_id": reader.dataset_id, "version": reader.version}]
-
-        with catalog.produce(dataset, metadata={"date": date, "source": source},
-                             inputs=lineage) as writer:
-            writer.write(df)
-
-        if writer.skipped:
-            print(f"Skipped — same metadata, existing version: {writer.version}")
-            return
-
-        print(f"Done: {writer.dataset_id} @ {writer.version} ({len(df)} rows)")
 
 
 if __name__ == "__main__":
