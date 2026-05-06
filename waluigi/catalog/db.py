@@ -172,55 +172,6 @@ class CatalogDB:
                 );
 
             """)
-            # migrations for existing databases
-            for stmt in [
-                "ALTER TABLE versions ADD COLUMN format TEXT",
-                "ALTER TABLE versions ADD COLUMN source_id TEXT",
-                "ALTER TABLE versions ADD COLUMN rows INTEGER",
-                "ALTER TABLE versions DROP COLUMN hash",
-                "ALTER TABLE versions ADD COLUMN produced_by_task TEXT",
-                "ALTER TABLE versions ADD COLUMN produced_by_job TEXT",
-                "ALTER TABLE datasets ADD COLUMN dq_suite TEXT",
-                """CREATE TABLE IF NOT EXISTS expectations (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                    dataset_id  TEXT NOT NULL REFERENCES datasets(id),
-                    rule_id     TEXT NOT NULL,
-                    inputs      TEXT NOT NULL DEFAULT '{}',
-                    params      TEXT NOT NULL DEFAULT '{}',
-                    tolerance   REAL NOT NULL DEFAULT 1.0,
-                    position    INTEGER NOT NULL DEFAULT 0,
-                    username    TEXT NOT NULL,
-                    createdate  TEXT NOT NULL,
-                    updatedate  TEXT NOT NULL
-                )""",
-                """CREATE TABLE IF NOT EXISTS dq_results (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                    dataset_id  TEXT NOT NULL REFERENCES datasets(id),
-                    version     TEXT NOT NULL,
-                    score       REAL NOT NULL DEFAULT 0,
-                    passed      INTEGER NOT NULL DEFAULT 0,
-                    total       INTEGER NOT NULL DEFAULT 0,
-                    success     INTEGER NOT NULL DEFAULT 0,
-                    details     TEXT NOT NULL DEFAULT '[]',
-                    error       TEXT,
-                    createdate  TEXT NOT NULL,
-                    UNIQUE (dataset_id, version)
-                )""",
-                """CREATE TABLE IF NOT EXISTS charts (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                    dataset_id  TEXT NOT NULL REFERENCES datasets(id),
-                    title       TEXT NOT NULL,
-                    spec        TEXT NOT NULL DEFAULT '{}',
-                    position    INTEGER NOT NULL DEFAULT 0,
-                    username    TEXT NOT NULL,
-                    createdate  TEXT NOT NULL,
-                    updatedate  TEXT NOT NULL
-                )""",
-            ]:
-                try:
-                    self.conn.execute(stmt)
-                except Exception:
-                    pass
 
 
     # Folders
