@@ -361,7 +361,7 @@ def _scan(data_path: str, prefix: str = None) -> int:
             try:
                 schema = _infer_schema(filepath, fmt)
                 db.create_dataset(dataset_id, fmt)
-                db.reserve_version(dataset_id, version, filepath, fmt,
+                db.reserve_version(dataset_id, version, filepath,
                            "scanner", "scan")
                 committed = db.commit_version(dataset_id, version)
                 if committed:
@@ -1096,8 +1096,7 @@ async def register_virtual(dataset_id: str, body: VirtualRegisterRequest):
                           owner=body.owner,
                           tags=body.tags)
         db.commit_virtual(dataset_id, version,
-                          body.location, body.format,
-                          body.task_id, body.job_id)
+                          body.location, body.task_id, body.job_id)
         logger.info(f"Virtual {dataset_id}@{version} [{src['type']}]")
         return ok({"dataset_id":  dataset_id,
                    "version":     version,
@@ -1126,7 +1125,7 @@ async def materialize(dataset_id: str, body: MaterializeRequest):
                           display_name=body.display_name,
                           description=body.description)
         db.reserve_version(dataset_id, version, path,
-                   "csv", body.task_id, body.job_id)
+                   body.task_id, body.job_id)
 
         rows, schema_cols = await _fetch_and_write(
             body.base_url, body.endpoint, body.params, path)

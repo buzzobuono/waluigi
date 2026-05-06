@@ -165,10 +165,6 @@ export default {
                 <span v-else>{{ u.version ? u.version.slice(0, 19) : '—' }}</span>
               </div>
 
-              <div class="mt-1">
-                <span v-if="u.format" class="badge badge-secondary mr-1">{{ u.format }}</span>
-                <span v-if="u.rows != null" class="text-muted small">{{ u.rows.toLocaleString() }} rows</span>
-              </div>
             </div>
 
           </base-panel>
@@ -186,11 +182,6 @@ export default {
               <div class="text-info font-weight-bold">{{ current.dataset_id }}</div>
 
               <div class="text-secondary small mt-1">{{ current.version ? current.version.slice(0, 19) : '' }}</div>
-
-              <div class="mt-2">
-                <span v-if="current.format" class="badge badge-secondary mr-1">{{ current.format }}</span>
-                <span v-if="current.rows != null" class="text-muted small">{{ current.rows.toLocaleString() }} rows</span>
-              </div>
 
               <div v-if="current.produced_by_task" class="mt-2 text-muted small">
                 Task: <code>{{ current.produced_by_task }}</code>
@@ -223,11 +214,6 @@ export default {
 
               <div class="text-secondary small mt-1">
                 {{ d.version ? d.version.slice(0, 19) : '—' }}
-              </div>
-
-              <div class="mt-1">
-                <span v-if="d.format" class="badge badge-secondary mr-1">{{ d.format }}</span>
-                <span v-if="d.rows != null" class="text-muted small">{{ d.rows.toLocaleString() }} rows</span>
               </div>
             </div>
 
