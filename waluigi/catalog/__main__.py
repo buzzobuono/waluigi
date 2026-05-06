@@ -1095,7 +1095,7 @@ async def register_virtual(dataset_id: str, body: VirtualRegisterRequest):
                           description=body.description,
                           owner=body.owner,
                           tags=body.tags)
-        db.commit_virtual(dataset_id, version, body.source_id,
+        db.commit_virtual(dataset_id, version,
                           body.location, body.format,
                           body.task_id, body.job_id)
         logger.info(f"Virtual {dataset_id}@{version} [{src['type']}]")

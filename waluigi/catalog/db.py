@@ -73,7 +73,6 @@ class CatalogDB:
                     version          TEXT NOT NULL,
                     location         TEXT NOT NULL,
                     format           TEXT,
-                    source_id        TEXT,
                     rows             INTEGER,
                     produced_by_task TEXT,
                     produced_by_job  TEXT,
@@ -746,19 +745,19 @@ class CatalogDB:
             """, (approved_by, now, id))
             return cur.rowcount > 0
     
-    def commit_virtual(self, dataset_id: str, version: str, source_id: str,
+    def commit_virtual(self, dataset_id: str, version: str,
                        location: str, fmt: str,
                        task_id: str, job_id: str) -> dict:
-        """Register a virtual version (no local file, no hash)."""
+        """Register a virtual version (no local file)."""
         now = _now()
         with self.conn:
             self.conn.execute("""
                 INSERT OR REPLACE INTO versions
-                    (dataset_id, version, source_id, location, format,
+                    (dataset_id, version, location, format,
                      produced_by_task, produced_by_job,
                      status, username, createdate, updatedate)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'committed', ?, ?, ?)
-            """, (dataset_id, version, source_id, location, fmt,
+                VALUES (?, ?, ?, ?, ?, ?, 'committed', ?, ?, ?)
+            """, (dataset_id, version, location, fmt,
                   task_id, job_id, _user(), now, now))
         return {"skipped": False, "version": version}
 
@@ -794,7 +793,7 @@ class CatalogDB:
         cur = self.conn.execute("""
             SELECT l.input_dataset  AS dataset_id,
                    l.input_version  AS version,
-                   v.location, v.format, v.source_id, v.rows,
+                   v.location, v.format, v.rows,
                    v.produced_by_task, v.produced_by_job
             FROM lineage l
             LEFT JOIN versions v
@@ -808,7 +807,7 @@ class CatalogDB:
         cur = self.conn.execute("""
             SELECT l.output_dataset AS dataset_id,
                    l.output_version AS version,
-                   v.location, v.format, v.source_id, v.rows,
+                   v.location, v.format, v.rows,
                    v.produced_by_task, v.produced_by_job
             FROM lineage l
             LEFT JOIN versions v
