@@ -182,10 +182,6 @@ export default {
               <div class="text-info font-weight-bold">{{ current.dataset_id }}</div>
 
               <div class="text-secondary small mt-1">{{ current.version ? current.version.slice(0, 19) : '' }}</div>
-
-              <div v-if="current.produced_by_task" class="mt-2 text-muted small">
-                Task: <code>{{ current.produced_by_task }}</code>
-              </div>
             </div>
 
           </base-panel>

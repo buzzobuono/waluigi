@@ -312,7 +312,12 @@ class DatasetWriter:
     def _commit(self):
         self._client._post(
             f"/datasets/{self.dataset_id}/_commit/{self.version}",
-            json={"inputs": self.inputs, "metadata": self.metadata},
+            json={
+                "inputs":   self.inputs,
+                "metadata": self.metadata,
+                "task_id":  self._client._task_id,
+                "job_id":   self._client._job_id,
+            },
         )
 
     def _fail(self):

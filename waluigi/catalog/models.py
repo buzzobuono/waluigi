@@ -55,8 +55,10 @@ class LineageRef(BaseModel):
     version:    str = Field(..., example="2026-04-11T10:00:00+00:00")
         
 class CommitRequest(BaseModel):
-    metadata:      Dict[str, str]  = Field(default_factory=dict)
-    inputs:        List[LineageRef]  = Field(default_factory=list)
+    metadata: Dict[str, str]  = Field(default_factory=dict)
+    inputs:   List[LineageRef] = Field(default_factory=list)
+    task_id:  Optional[str]   = None
+    job_id:   Optional[str]   = None
         
 class MetadataSetRequest(BaseModel):
     key:   str = Field(..., example="source")
