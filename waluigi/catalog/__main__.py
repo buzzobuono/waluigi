@@ -359,14 +359,12 @@ def _scan(data_path: str, prefix: str = None) -> int:
                 dataset_id = f"{rel_dir}/{name}".replace("//", "/")
 
             try:
-                file_hash = _compute_hash(filepath)
-                schema    = _infer_schema(filepath, fmt)
+                schema = _infer_schema(filepath, fmt)
                 db.create_dataset(dataset_id, fmt)
                 db.reserve_version(dataset_id, version, filepath, fmt,
                            "scanner", "scan")
-                result = db.commit(dataset_id, version, file_hash, None,
-                                   {c["name"]: c["physical_type"] for c in schema})
-                if result and not result["skipped"]:
+                committed = db.commit_version(dataset_id, version)
+                if committed:
                     db.upsert_schema_columns(dataset_id, schema)
                 count += 1
                 logger.info(f"  ✅ {dataset_id}@{version[:19]} [{fmt}]")
@@ -1134,29 +1132,13 @@ async def materialize(dataset_id: str, body: MaterializeRequest):
             body.base_url, body.endpoint, body.params, path)
 
         if rows == 0:
-            db.fail(dataset_id, version)
+            db.fail_version(dataset_id, version)
             return ko("No records returned from endpoint", 422)
 
-        file_hash = _compute_hash(path)
-        schema_kv = {c["name"]: c["physical_type"] for c in schema_cols}
-        result    = db.commit(dataset_id, version,
-                              file_hash, rows, schema_kv)
-
-        if result is None:
+        committed = db.commit_version(dataset_id, version, rows)
+        if not committed:
             db.fail_version(dataset_id, version)
             return ko("Commit failed", 409)
-
-        if result["skipped"]:
-            try:
-                os.remove(path)
-            except Exception:
-                pass
-            return ok({"dataset_id": dataset_id,
-                       "version":    result["version"],
-                       "rows":       rows,
-                       "skipped":    True,
-                       "reason":     "Identical to latest committed version",
-                       "source_url": f"{body.base_url}{body.endpoint}"})
 
         db.upsert_schema_columns(dataset_id, schema_cols)
         db.insert_lineage(dataset_id, version, [{
@@ -1168,16 +1150,14 @@ async def materialize(dataset_id: str, body: MaterializeRequest):
                    "version":    version,
                    "path":       path,
                    "rows":       rows,
-                   "hash":       file_hash,
-                   "skipped":    False,
                    "source_url": f"{body.base_url}{body.endpoint}"})
 
     except httpx.HTTPError as e:
-        db.fail(dataset_id, version)
+        db.fail_version(dataset_id, version)
         return ko(f"HTTP error: {e}", 502)
     except Exception as e:
         try:
-            db.fail(dataset_id, version)
+            db.fail_version(dataset_id, version)
         except Exception:
             pass
         return ko(str(e), 500)

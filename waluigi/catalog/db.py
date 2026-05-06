@@ -75,7 +75,6 @@ class CatalogDB:
                     format           TEXT,
                     source_id        TEXT,
                     rows             INTEGER,
-                    hash             TEXT,
                     produced_by_task TEXT,
                     produced_by_job  TEXT,
                     status           TEXT NOT NULL DEFAULT 'reserved',
@@ -173,55 +172,6 @@ class CatalogDB:
                 );
 
             """)
-            # migrations for existing databases
-            for stmt in [
-                "ALTER TABLE versions ADD COLUMN format TEXT",
-                "ALTER TABLE versions ADD COLUMN source_id TEXT",
-                "ALTER TABLE versions ADD COLUMN rows INTEGER",
-                "ALTER TABLE versions ADD COLUMN hash TEXT",
-                "ALTER TABLE versions ADD COLUMN produced_by_task TEXT",
-                "ALTER TABLE versions ADD COLUMN produced_by_job TEXT",
-                "ALTER TABLE datasets ADD COLUMN dq_suite TEXT",
-                """CREATE TABLE IF NOT EXISTS expectations (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                    dataset_id  TEXT NOT NULL REFERENCES datasets(id),
-                    rule_id     TEXT NOT NULL,
-                    inputs      TEXT NOT NULL DEFAULT '{}',
-                    params      TEXT NOT NULL DEFAULT '{}',
-                    tolerance   REAL NOT NULL DEFAULT 1.0,
-                    position    INTEGER NOT NULL DEFAULT 0,
-                    username    TEXT NOT NULL,
-                    createdate  TEXT NOT NULL,
-                    updatedate  TEXT NOT NULL
-                )""",
-                """CREATE TABLE IF NOT EXISTS dq_results (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                    dataset_id  TEXT NOT NULL REFERENCES datasets(id),
-                    version     TEXT NOT NULL,
-                    score       REAL NOT NULL DEFAULT 0,
-                    passed      INTEGER NOT NULL DEFAULT 0,
-                    total       INTEGER NOT NULL DEFAULT 0,
-                    success     INTEGER NOT NULL DEFAULT 0,
-                    details     TEXT NOT NULL DEFAULT '[]',
-                    error       TEXT,
-                    createdate  TEXT NOT NULL,
-                    UNIQUE (dataset_id, version)
-                )""",
-                """CREATE TABLE IF NOT EXISTS charts (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                    dataset_id  TEXT NOT NULL REFERENCES datasets(id),
-                    title       TEXT NOT NULL,
-                    spec        TEXT NOT NULL DEFAULT '{}',
-                    position    INTEGER NOT NULL DEFAULT 0,
-                    username    TEXT NOT NULL,
-                    createdate  TEXT NOT NULL,
-                    updatedate  TEXT NOT NULL
-                )""",
-            ]:
-                try:
-                    self.conn.execute(stmt)
-                except Exception:
-                    pass
 
 
     # Folders
@@ -439,33 +389,16 @@ class CatalogDB:
         except sqlite3.IntegrityError:
             return False
 
-    def commit_version(self, dataset_id: str, version: str) -> dict | None:
-        with self.conn:
-            now = _now()
-            cur = self.conn.execute("""
-                UPDATE versions SET
-                    updatedate = ?,
-                    status = 'committed'
-                WHERE dataset_id = ? AND version = ? AND status = 'reserved'
-            """, (now, dataset_id, version))
-            if cur.rowcount == 0:
-                return False
-            return True
-
-    def commit(self, dataset_id: str, version: str,
-               file_hash: str, rows: int = None,
-               schema_kv: dict = None) -> dict | None:
-        """Commit a reserved version, setting hash and rows."""
+    def commit_version(self, dataset_id: str, version: str,
+                       rows: int = None) -> bool:
         now = _now()
         with self.conn:
             cur = self.conn.execute("""
                 UPDATE versions SET
-                    hash = ?, rows = ?, status = 'committed', updatedate = ?
+                    rows = COALESCE(?, rows), status = 'committed', updatedate = ?
                 WHERE dataset_id = ? AND version = ? AND status = 'reserved'
-            """, (file_hash, rows, now, dataset_id, version))
-            if cur.rowcount == 0:
-                return None
-        return {"skipped": False, "version": version}
+            """, (rows, now, dataset_id, version))
+            return cur.rowcount > 0
     
     def fail_version(self, dataset_id: str, version: str):
         now = _now()
@@ -861,7 +794,7 @@ class CatalogDB:
         cur = self.conn.execute("""
             SELECT l.input_dataset  AS dataset_id,
                    l.input_version  AS version,
-                   v.location, v.format, v.source_id, v.rows, v.hash,
+                   v.location, v.format, v.source_id, v.rows,
                    v.produced_by_task, v.produced_by_job
             FROM lineage l
             LEFT JOIN versions v
@@ -875,7 +808,7 @@ class CatalogDB:
         cur = self.conn.execute("""
             SELECT l.output_dataset AS dataset_id,
                    l.output_version AS version,
-                   v.location, v.format, v.source_id, v.rows, v.hash,
+                   v.location, v.format, v.source_id, v.rows,
                    v.produced_by_task, v.produced_by_job
             FROM lineage l
             LEFT JOIN versions v
