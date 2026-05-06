@@ -69,15 +69,13 @@ class CatalogDB:
                 --   sftp  → remote absolute path
                 --   api   → base_url#endpoint
                 CREATE TABLE IF NOT EXISTS versions (
-                    dataset_id       TEXT NOT NULL REFERENCES datasets(id),
-                    version          TEXT NOT NULL,
-                    location         TEXT NOT NULL,
-                    produced_by_task TEXT,
-                    produced_by_job  TEXT,
-                    status           TEXT NOT NULL DEFAULT 'reserved',
-                    username         TEXT NOT NULL,
-                    createdate       TEXT NOT NULL,
-                    updatedate       TEXT NOT NULL,
+                    dataset_id  TEXT NOT NULL REFERENCES datasets(id),
+                    version     TEXT NOT NULL,
+                    location    TEXT NOT NULL,
+                    status      TEXT NOT NULL DEFAULT 'reserved',
+                    username    TEXT NOT NULL,
+                    createdate  TEXT NOT NULL,
+                    updatedate  TEXT NOT NULL,
                     PRIMARY KEY (dataset_id, version)
                 );
 
@@ -368,19 +366,16 @@ class CatalogDB:
             
         return None
 
-    def reserve_version(self, dataset_id: str, version: str, location: str,
-                        task_id: str = None, job_id: str = None) -> bool:
+    def reserve_version(self, dataset_id: str, version: str, location: str) -> bool:
         now = _now()
         try:
             with self.conn:
                 self.conn.execute("""
                     INSERT INTO versions
-                        (dataset_id, version, location,
-                         produced_by_task, produced_by_job,
-                         status, username, createdate, updatedate)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (dataset_id, version, location,
-                      task_id, job_id, 'reserved', _user(), now, now))
+                        (dataset_id, version, location, status,
+                         username, createdate, updatedate)
+                    VALUES (?, ?, ?, 'reserved', ?, ?, ?)
+                """, (dataset_id, version, location, _user(), now, now))
             return True
         except sqlite3.IntegrityError:
             return False
@@ -740,19 +735,16 @@ class CatalogDB:
             """, (approved_by, now, id))
             return cur.rowcount > 0
     
-    def commit_virtual(self, dataset_id: str, version: str,
-                       location: str, task_id: str, job_id: str) -> dict:
+    def commit_virtual(self, dataset_id: str, version: str, location: str) -> dict:
         """Register a virtual version (no local file)."""
         now = _now()
         with self.conn:
             self.conn.execute("""
                 INSERT OR REPLACE INTO versions
-                    (dataset_id, version, location,
-                     produced_by_task, produced_by_job,
-                     status, username, createdate, updatedate)
-                VALUES (?, ?, ?, ?, ?, 'committed', ?, ?, ?)
-            """, (dataset_id, version, location,
-                  task_id, job_id, _user(), now, now))
+                    (dataset_id, version, location, status,
+                     username, createdate, updatedate)
+                VALUES (?, ?, ?, 'committed', ?, ?, ?)
+            """, (dataset_id, version, location, _user(), now, now))
         return {"skipped": False, "version": version}
 
 
@@ -785,13 +777,9 @@ class CatalogDB:
 
     def get_upstream(self, dataset_id: str, version: str) -> list[dict]:
         cur = self.conn.execute("""
-            SELECT l.input_dataset  AS dataset_id,
-                   l.input_version  AS version,
-                   v.produced_by_task, v.produced_by_job
+            SELECT l.input_dataset AS dataset_id,
+                   l.input_version AS version
             FROM lineage l
-            LEFT JOIN versions v
-                ON v.dataset_id = l.input_dataset
-                AND v.version   = l.input_version
             WHERE l.output_dataset = ? AND l.output_version = ?
         """, (dataset_id, version))
         return self._rows(cur)
@@ -799,12 +787,8 @@ class CatalogDB:
     def get_downstream(self, dataset_id: str, version: str) -> list[dict]:
         cur = self.conn.execute("""
             SELECT l.output_dataset AS dataset_id,
-                   l.output_version AS version,
-                   v.produced_by_task, v.produced_by_job
+                   l.output_version AS version
             FROM lineage l
-            LEFT JOIN versions v
-                ON v.dataset_id = l.output_dataset
-                AND v.version   = l.output_version
             WHERE l.input_dataset = ? AND l.input_version = ?
         """, (dataset_id, version))
         return self._rows(cur)

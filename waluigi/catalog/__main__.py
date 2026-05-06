@@ -987,9 +987,13 @@ async def dataset_commit(dataset_id: str, version: str, body: CommitRequest):
     try:
         if not db.commit_version(dataset_id, version):
             raise Exception
-        
+
         for k, v in (body.metadata or {}).items():
             db.set_metadata(dataset_id, version, k, v)
+        if body.task_id:
+            db.set_metadata(dataset_id, version, "sys.produced_by_task", body.task_id)
+        if body.job_id:
+            db.set_metadata(dataset_id, version, "sys.produced_by_job", body.job_id)
 
         inferred = connector.infer_schema(location)
         db.upsert_schema_columns(dataset_id, inferred)
@@ -1097,8 +1101,11 @@ async def register_virtual(dataset_id: str, body: VirtualRegisterRequest):
                           description=body.description,
                           owner=body.owner,
                           tags=body.tags)
-        db.commit_virtual(dataset_id, version,
-                          body.location, body.task_id, body.job_id)
+        db.commit_virtual(dataset_id, version, body.location)
+        if body.task_id:
+            db.set_metadata(dataset_id, version, "sys.produced_by_task", body.task_id)
+        if body.job_id:
+            db.set_metadata(dataset_id, version, "sys.produced_by_job", body.job_id)
         logger.info(f"Virtual {dataset_id}@{version} [{src['type']}]")
         return ok({"dataset_id":  dataset_id,
                    "version":     version,
@@ -1126,8 +1133,7 @@ async def materialize(dataset_id: str, body: MaterializeRequest):
         db.create_dataset(dataset_id,
                           display_name=body.display_name,
                           description=body.description)
-        db.reserve_version(dataset_id, version, path,
-                   body.task_id, body.job_id)
+        db.reserve_version(dataset_id, version, path)
 
         rows, schema_cols = await _fetch_and_write(
             body.base_url, body.endpoint, body.params, path)
@@ -1136,7 +1142,7 @@ async def materialize(dataset_id: str, body: MaterializeRequest):
             db.fail_version(dataset_id, version)
             return ko("No records returned from endpoint", 422)
 
-        committed = db.commit_version(dataset_id, version, rows)
+        committed = db.commit_version(dataset_id, version)
         if not committed:
             db.fail_version(dataset_id, version)
             return ko("Commit failed", 409)
@@ -1146,6 +1152,10 @@ async def materialize(dataset_id: str, body: MaterializeRequest):
             "dataset_id": f"__external__/{body.base_url}{body.endpoint}",
             "version":    "live",
         }])
+        if body.task_id:
+            db.set_metadata(dataset_id, version, "sys.produced_by_task", body.task_id)
+        if body.job_id:
+            db.set_metadata(dataset_id, version, "sys.produced_by_job", body.job_id)
         logger.info(f"Materialized {dataset_id}@{version} rows={rows}")
         return ok({"dataset_id": dataset_id,
                    "version":    version,
