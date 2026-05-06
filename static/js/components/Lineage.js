@@ -194,10 +194,6 @@ export default {
                 Task: <code>{{ current.produced_by_task }}</code>
               </div>
 
-              <div v-if="current.hash" class="mt-1 text-muted small">
-                {{ current.hash.slice(0,16) }}...
-              </div>
-
             </div>
 
           </base-panel>

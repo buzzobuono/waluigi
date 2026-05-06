@@ -25,8 +25,8 @@ export default {
     
     const columns_history = [
       { key: 'version', label: 'Version' },
-      { key: 'hash', label: 'Hash' },
-      { key: 'status', label: 'Status' },
+      { key: 'rows',    label: 'Rows' },
+      { key: 'status',  label: 'Status' },
       { key: 'actions', label: 'Actions' }
     ];
     
@@ -355,10 +355,10 @@ export default {
              </a>
            </template>
 
-           <template #cell(hash)="{ item }" >
-             {{ item.hash ? item.hash.slice(0,8) : '—' }}
+           <template #cell(rows)="{ item }">
+             {{ item.rows != null ? item.rows.toLocaleString() : '—' }}
            </template>
-        
+
            <template #cell(status)="{ item }" >
              <span class="badge badge-success">
                {{ item.status }}

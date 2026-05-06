@@ -75,7 +75,6 @@ class CatalogDB:
                     format           TEXT,
                     source_id        TEXT,
                     rows             INTEGER,
-                    hash             TEXT,
                     produced_by_task TEXT,
                     produced_by_job  TEXT,
                     status           TEXT NOT NULL DEFAULT 'reserved',
@@ -178,7 +177,7 @@ class CatalogDB:
                 "ALTER TABLE versions ADD COLUMN format TEXT",
                 "ALTER TABLE versions ADD COLUMN source_id TEXT",
                 "ALTER TABLE versions ADD COLUMN rows INTEGER",
-                "ALTER TABLE versions ADD COLUMN hash TEXT",
+                "ALTER TABLE versions DROP COLUMN hash",
                 "ALTER TABLE versions ADD COLUMN produced_by_task TEXT",
                 "ALTER TABLE versions ADD COLUMN produced_by_job TEXT",
                 "ALTER TABLE datasets ADD COLUMN dq_suite TEXT",
@@ -439,33 +438,16 @@ class CatalogDB:
         except sqlite3.IntegrityError:
             return False
 
-    def commit_version(self, dataset_id: str, version: str) -> dict | None:
-        with self.conn:
-            now = _now()
-            cur = self.conn.execute("""
-                UPDATE versions SET
-                    updatedate = ?,
-                    status = 'committed'
-                WHERE dataset_id = ? AND version = ? AND status = 'reserved'
-            """, (now, dataset_id, version))
-            if cur.rowcount == 0:
-                return False
-            return True
-
-    def commit(self, dataset_id: str, version: str,
-               file_hash: str, rows: int = None,
-               schema_kv: dict = None) -> dict | None:
-        """Commit a reserved version, setting hash and rows."""
+    def commit_version(self, dataset_id: str, version: str,
+                       rows: int = None) -> bool:
         now = _now()
         with self.conn:
             cur = self.conn.execute("""
                 UPDATE versions SET
-                    hash = ?, rows = ?, status = 'committed', updatedate = ?
+                    rows = COALESCE(?, rows), status = 'committed', updatedate = ?
                 WHERE dataset_id = ? AND version = ? AND status = 'reserved'
-            """, (file_hash, rows, now, dataset_id, version))
-            if cur.rowcount == 0:
-                return None
-        return {"skipped": False, "version": version}
+            """, (rows, now, dataset_id, version))
+            return cur.rowcount > 0
     
     def fail_version(self, dataset_id: str, version: str):
         now = _now()
@@ -861,7 +843,7 @@ class CatalogDB:
         cur = self.conn.execute("""
             SELECT l.input_dataset  AS dataset_id,
                    l.input_version  AS version,
-                   v.location, v.format, v.source_id, v.rows, v.hash,
+                   v.location, v.format, v.source_id, v.rows,
                    v.produced_by_task, v.produced_by_job
             FROM lineage l
             LEFT JOIN versions v
@@ -875,7 +857,7 @@ class CatalogDB:
         cur = self.conn.execute("""
             SELECT l.output_dataset AS dataset_id,
                    l.output_version AS version,
-                   v.location, v.format, v.source_id, v.rows, v.hash,
+                   v.location, v.format, v.source_id, v.rows,
                    v.produced_by_task, v.produced_by_job
             FROM lineage l
             LEFT JOIN versions v
