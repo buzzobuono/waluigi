@@ -9,12 +9,13 @@ import Lineage       from './components/Lineage.js';
 import JobDag        from './components/JobDag.js';
 import DatasetPreview  from './components/DatasetPreview.js';
 import DatasetSchema   from './components/DatasetSchema.js';
-import DQRules         from './components/DQRules.js';
+import DatasetDQ       from './components/DatasetDQ.js';
+import Expectations    from './components/Expectations.js';
 import DatasetCharts   from './components/DatasetCharts.js';
 import Dashboard       from './components/Dashboard.js';
 
 const routes = [
-  { path: '/',          redirect: '/jobs' },
+  { path: '/',          redirect: '/dashboard' },
   { path: '/jobs',      component: Jobs,      meta: { title: 'Jobs' } },
   { path: '/namespaces', component: Namespaces, meta: { title: 'Namespaces' } },
   { path: '/tasks',     component: Tasks,     meta: { title: 'Tasks' } },
@@ -25,9 +26,10 @@ const routes = [
   { path: '/sources',   component: Sources,   meta: { title: 'Sources' } },
   { path: '/datasets/:id+/:version', component: DatasetPreview, meta: { title: 'Dataset Preview'} },
   { path: '/schema/:id+',            component: DatasetSchema,  meta: { title: 'Schema' } },
+  { path: '/dq/:id+/:version',       component: DatasetDQ,      meta: { title: 'Data Quality' } },
   { path: '/chart/:id+/:cid(\\d+)',  component: DatasetCharts,  meta: { title: 'Chart' } },
   { path: '/dashboard',              component: Dashboard,      meta: { title: 'Dashboard' } },
-  { path: '/dq/rules',  component: DQRules,   meta: { title: 'DQ Rules' } },
+  { path: '/dq/rules',  component: Expectations,   meta: { title: 'DQ Rules' } },
   { path: '/lineage',   component: Lineage,   meta: { title: 'Lineage' } },
   { path: '/jobs/:jobId', component: JobDag,  meta: { title: 'Job DAG' } }
 ];

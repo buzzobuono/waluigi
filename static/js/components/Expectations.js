@@ -16,7 +16,7 @@ const COLUMNS = [
 ];
 
 export default {
-  name: 'DQRules',
+  name: 'Expectations',
   components: { BasePage, BasePanel, BaseButton, BaseTable, BaseModal },
 
   setup() {
@@ -51,7 +51,7 @@ export default {
 
   template: `
     <base-page
-      title="DQ Rules"
+      title="Expectations"
       subtitle="Available rules catalogue"
       icon="fas fa-shield-alt"
       :loading="loading">

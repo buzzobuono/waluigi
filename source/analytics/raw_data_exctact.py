@@ -4,15 +4,6 @@ from waluigi.sdk.task import Task
 from waluigi.sdk.catalog import catalog
 from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
 
-METRICS = {
-    "erp":    [("revenue",     "finance"),     ("costs",       "finance"),
-               ("orders",      "operations"),  ("refunds",     "finance")],
-    "web":    [("sessions",    "traffic"),     ("pageviews",   "traffic"),
-               ("conversions", "acquisition"), ("bounce_rate", "engagement")],
-    "social": [("followers",   "audience"),    ("impressions", "reach"),
-               ("engagements", "interaction"), ("shares",      "viral")],
-}
-
 
 class RawDataExtract(Task):
 
@@ -27,21 +18,20 @@ class RawDataExtract(Task):
             description="Local storage for analytics pipeline",
         ))
 
-        print(f"Extracting raw data for source: {source}, date: {date}")
-
-        rows = [
-            {"date": date, "source": source, "metric": metric,
-             "value": round(random.uniform(100, 10_000), 2), "category": category}
-            for metric, category in METRICS[source]
-        ]
-        df = pd.DataFrame(rows)
-
         dataset = DatasetCreateRequest(
             id=f"analytics/{source}/raw/raw_{source}",
             format=DatasetFormat.PARQUET,
-            description=f"Raw extracted data for {source}",
+            description=f"Raw data extracted from {self.params.source}",
             source_id="analytics-local",
         )
+
+        rows = [
+            {"date": date, "source": source, "metric": f"m_{i}", "value": round(random.uniform(10, 1000), 2)}
+            for i in range(random.randint(50, 200))
+        ]
+        df = pd.DataFrame(rows)
+
+        print(f"Extracting {len(df)} rows from {self.params.source} for {date} ...")
 
         with catalog.produce(dataset, metadata={"date": date, "source": source}) as writer:
             writer.write(df)

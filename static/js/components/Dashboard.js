@@ -1,12 +1,13 @@
-import { api }      from '../api.js';
-import BasePage    from './BasePage.js';
-import BasePanel   from './BasePanel.js';
-import BaseButton  from './BaseButton.js';
-import BaseModal   from './BaseModal.js';
-import BaseInput   from './BaseInput.js';
-import ChartWidget from './ChartWidget.js';
+import { api }         from '../api.js';
+import BasePage       from './BasePage.js';
+import BasePanel      from './BasePanel.js';
+import BaseButton     from './BaseButton.js';
+import BaseButtonGroup from './BaseButtonGroup.js';
+import BaseModal      from './BaseModal.js';
+import BaseInput      from './BaseInput.js';
+import ChartWidget    from './ChartWidget.js';
 
-const { ref, onMounted } = Vue;
+const { ref, onMounted, nextTick } = Vue;
 
 const LS_KEY = 'waluigi_dashboard_panels';
 
@@ -15,25 +16,26 @@ function savePanels(p) { localStorage.setItem(LS_KEY, JSON.stringify(p)); }
 
 export default {
   name: 'Dashboard',
-  components: { BasePage, BasePanel, BaseButton, BaseModal, BaseInput, ChartWidget },
+  components: { BasePage, BasePanel, BaseButton, BaseButtonGroup, BaseModal, BaseInput, ChartWidget },
 
   setup() {
-    const panels      = ref([]);   // [{ dataset_id, chart_id, title, option, loading, error }]
-    const modalRef    = ref(null);
+    const panels       = ref([]);  // [{ dataset_id, chart_id, title, option, loading, error }]
+    const modalRef     = ref(null);
     const addDatasetId = ref('');
     const addCharts    = ref([]);
     const addChartId   = ref(null);
     const addLoading   = ref(false);
     const addError     = ref(null);
 
-    async function renderPanel(p) {
-      p.loading = true;
-      p.error   = null;
-      p.option  = null;
+    // Always access panels through the reactive array by index so Vue tracks mutations.
+    async function renderPanel(idx) {
+      const p    = panels.value[idx];
+      p.loading  = true;
+      p.error    = null;
+      p.option   = null;
       try {
-        const res  = await api.renderChart(p.dataset_id, p.chart_id);
-        p.option   = res.data?.option ?? null;
-        p.title    = res.data?.title  ?? p.title;
+        const res = await api.renderChart(p.dataset_id, p.chart_id);
+        p.option  = res.data?.option ?? null;
       } catch (e) {
         p.error = e.message;
       } finally {
@@ -42,9 +44,9 @@ export default {
     }
 
     async function init() {
-      const saved = loadPanels();
+      const saved  = loadPanels();
       panels.value = saved.map(s => ({ ...s, option: null, loading: false, error: null }));
-      await Promise.all(panels.value.map(renderPanel));
+      await Promise.all(panels.value.map((_, idx) => renderPanel(idx)));
     }
 
     async function loadChartsForDataset() {
@@ -65,21 +67,21 @@ export default {
     }
 
     async function addPanel() {
-      if (!addChartId.value) return;
       const chart = addCharts.value.find(c => c.id === Number(addChartId.value));
       if (!chart) return;
-      const panel = {
+      panels.value.push({
         dataset_id: addDatasetId.value.trim(),
         chart_id:   chart.id,
         title:      chart.title,
         option:     null,
         loading:    true,
         error:      null,
-      };
-      panels.value.push(panel);
+      });
       savePanels(panels.value.map(({ dataset_id, chart_id, title }) => ({ dataset_id, chart_id, title })));
       modalRef.value?.close();
-      await renderPanel(panel);
+      // Wait for Vue to render the new panel before rendering the chart into it.
+      await nextTick();
+      await renderPanel(panels.value.length - 1);
     }
 
     function removePanel(idx) {
@@ -120,8 +122,10 @@ export default {
         <div v-for="(panel, idx) in panels" :key="idx" class="col-12 col-lg-6 mb-4">
           <base-panel :title="panel.title" icon="fa-chart-bar" :no-padding="true">
             <template #tools>
-              <base-button icon="fas fa-times" color="outline-danger"
-                           title="Remove from dashboard" @click="removePanel(idx)" />
+              <base-button-group>
+                <base-button icon="fas fa-times" color="outline-danger"
+                             title="Remove from dashboard" @click="removePanel(idx)" />
+              </base-button-group>
             </template>
             <div style="height:300px;">
               <chart-widget :option="panel.option" :loading="panel.loading"
@@ -133,20 +137,22 @@ export default {
 
     </base-page>
 
-    <!-- Add chart modal -->
-    <base-modal ref="modalRef" title="Add Chart to Dashboard">
+    <base-modal ref="modalRef" title="Add Chart to Dashboard" size="sm">
 
-      <base-input label="Dataset ID" v-model="addDatasetId"
-                  placeholder="analytics/sales/monthly" />
+      <div class="form-group">
+        <label class="small font-weight-bold">Dataset ID</label>
+        <base-input v-model="addDatasetId" placeholder="analytics/sales/monthly" />
+      </div>
+
       <base-button label="Load charts" icon="fas fa-search" color="outline-secondary"
                    class="mb-3" :disabled="addLoading" @click="loadChartsForDataset" />
 
-      <div v-if="addError" class="alert alert-warning small">{{ addError }}</div>
+      <div v-if="addError" class="alert alert-warning small py-2">{{ addError }}</div>
 
       <div v-if="addCharts.length" class="form-group">
-        <label class="small font-weight-bold">Select chart</label>
+        <label class="small font-weight-bold">Chart</label>
         <select class="form-control form-control-sm" v-model="addChartId">
-          <option :value="null" disabled>— pick a chart —</option>
+          <option :value="null" disabled>— select a chart —</option>
           <option v-for="c in addCharts" :key="c.id" :value="c.id">
             {{ c.title }} ({{ c.spec?.type || 'bar' }})
           </option>
@@ -154,7 +160,7 @@ export default {
       </div>
 
       <template #footer>
-        <base-button label="Add" icon="fas fa-plus" color="primary"
+        <base-button label="Add to dashboard" icon="fas fa-plus" color="primary"
                      :disabled="!addChartId" @click="addPanel" />
         <base-button label="Cancel" color="secondary" class="ml-2"
                      @click="modalRef?.close()" />

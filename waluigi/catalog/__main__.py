@@ -693,7 +693,7 @@ async def add_chart(dataset_id: str, body: ChartCreateRequest):
 async def update_chart(dataset_id: str, chart_id: int, body: ChartUpdateRequest):
     if not db.exists_dataset(dataset_id):
         return ko("Dataset not found", 404)
-    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    updates = {k: v for k, v in _model_dump(body).items() if v is not None}
     if not db.update_chart(dataset_id, chart_id, **updates):
         return ko("Chart not found", 404)
     return ok(db.get_chart(dataset_id, chart_id))
@@ -758,6 +758,25 @@ async def get_dq_result(dataset_id: str, version: str):
     if not row:
         return ko("No DQ result for this version", 404)
     return ok(row)
+
+# Routes - Lineage
+
+@app.get("/datasets/{dataset_id:path}/lineage/{version}", tags=["Lineage"],
+         summary="Get upstream and downstream lineage")
+async def get_lineage(dataset_id: str,
+                      version: str):
+    record = (db.get_version(dataset_id, version) if version
+              else db.get_latest_version(dataset_id))
+    if not record:
+        return ko("Dataset version not found", 404)
+
+    ver = record["version"]
+    return ok({
+        "dataset_id": dataset_id,
+        "version":    ver,
+        "upstream":   db.get_upstream(dataset_id, ver),
+        "downstream": db.get_downstream(dataset_id, ver),
+    })
 
 
 # Routes - Data Quality
@@ -866,27 +885,6 @@ async def delete_source(id: str):
         return ko("Dataset not found", 404)
     return ok({"id": id, "deleted": True})
         
-######
-
-
-@app.get("/datasets/{dataset_id:path}/lineage/{version}", tags=["Lineage"],
-         summary="Get upstream and downstream lineage")
-async def get_lineage(dataset_id: str,
-                      version: str):
-    record = (db.get_version(dataset_id, version) if version
-              else db.get_latest_version(dataset_id))
-    if not record:
-        return ko("Dataset version not found", 404)
-
-    ver = record["version"]
-    return ok({
-        "dataset_id": dataset_id,
-        "version":    ver,
-        "upstream":   db.get_upstream(dataset_id, ver),
-        "downstream": db.get_downstream(dataset_id, ver),
-    })
-
-
 
 # Dataset Status
 

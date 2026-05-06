@@ -8,7 +8,7 @@ class GlobalReport(Task):
 
     def run(self):
         date = self.params.date
-        print(f"Building global report for {date} ...")
+        print(f"Building global report for {date} (var={self.attributes.var}) ...")
 
         catalog.create_source(SourceCreateRequest(
             id="analytics-local",
@@ -17,9 +17,9 @@ class GlobalReport(Task):
             description="Local storage for analytics pipeline",
         ))
 
-        sources = ["erp", "web", "social"]
-        frames  = []
-        lineage = []
+        sources  = ["erp", "web", "social"]
+        frames   = []
+        lineage  = []
 
         for source in sources:
             reader = catalog.resolve(f"analytics/{source}/clean/clean_{source}")
@@ -32,54 +32,8 @@ class GlobalReport(Task):
         report_df = pd.concat(frames, ignore_index=True)
         print(f"Total rows in report: {len(report_df)}")
 
-        report_id = "analytics/reports/global_report"
-
-        catalog.set_charts(report_id, [
-            {
-                "title": "Total value by source",
-                "spec": {
-                    "type": "bar",
-                    "x":   {"field": "pipeline_source", "label": "Source"},
-                    "y":   {"field": "value", "agg": "sum", "label": "Total Value"},
-                },
-            },
-            {
-                "title": "Value by metric",
-                "spec": {
-                    "type": "bar",
-                    "x":   {"field": "metric", "label": "Metric"},
-                    "y":   {"field": "value", "agg": "sum", "label": "Total Value"},
-                },
-            },
-            {
-                "title": "Value share by source",
-                "spec": {
-                    "type": "pie",
-                    "x":   {"field": "pipeline_source"},
-                    "y":   {"field": "value", "agg": "sum"},
-                },
-            },
-            {
-                "title": "Value distribution",
-                "spec": {
-                    "type": "histogram",
-                    "x":   {"field": "value", "label": "Value"},
-                    "bins": 10,
-                },
-            },
-            {
-                "title": "Value by category",
-                "spec": {
-                    "type": "bar",
-                    "x":   {"field": "category", "label": "Category"},
-                    "y":   {"field": "value", "agg": "sum", "label": "Total Value"},
-                },
-            },
-        ])
-        print(f"Charts set on {report_id}")
-
         dataset = DatasetCreateRequest(
-            id=report_id,
+            id="analytics/reports/global_report",
             format=DatasetFormat.PARQUET,
             description="Global consolidated report across all sources",
             source_id="analytics-local",

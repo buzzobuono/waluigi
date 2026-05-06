@@ -45,7 +45,7 @@ rows = [
 ]
 
 print("Writing dataset ...")
-with catalog.produce(dataset_req, {"period": "Q1-2026"}, force=True) as writer:
+with catalog.produce(dataset_req, {"period": "Q1-2026"}, force=False) as writer:
     writer.write(rows)
     version = writer.version
 print(f"  version : {version}")
@@ -80,12 +80,10 @@ for c in charts:
 # ── 6. Summary ────────────────────────────────────────────────────────────────
 
 versions = catalog.list_versions(DATASET_ID)
-lineage  = catalog.get_lineage(DATASET_ID, version)
 
 print(f"\n{'─'*55}")
 print(f"  Dataset  : {DATASET_ID}")
 print(f"  Versions : {len(versions)}")
-print(f"  Upstream : {len(lineage.get('upstream', []))} / Downstream: {len(lineage.get('downstream', []))}")
 print(f"  Charts   : {len(charts)}")
 print(f"{'─'*55}")
 print(f"\n  Frontend : /charts/{DATASET_ID}")
