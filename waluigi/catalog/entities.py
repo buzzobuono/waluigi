@@ -39,8 +39,6 @@ def _version(row) -> dict | None:
             "dataset_id":       d.get("dataset_id"),
             "version":          d.get("version"),
             "location":         d.get("location"),
-            "format":           d.get("format"),
-            "rows":             d.get("rows"),
             "produced_by_task": d.get("produced_by_task"),
             "produced_by_job":  d.get("produced_by_job"),
             "status":           d.get("status"),

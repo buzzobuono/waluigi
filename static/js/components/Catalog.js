@@ -25,7 +25,6 @@ export default {
     
     const columns_history = [
       { key: 'version', label: 'Version' },
-      { key: 'rows',    label: 'Rows' },
       { key: 'status',  label: 'Status' },
       { key: 'actions', label: 'Actions' }
     ];
@@ -353,10 +352,6 @@ export default {
                 :class="selectedVersion === item.version ? 'font-weight-bold text-primary' : ''">
                {{ item.version.slice(0, 19) }}
              </a>
-           </template>
-
-           <template #cell(rows)="{ item }">
-             {{ item.rows != null ? item.rows.toLocaleString() : '—' }}
            </template>
 
            <template #cell(status)="{ item }" >

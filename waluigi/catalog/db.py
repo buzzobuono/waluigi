@@ -72,8 +72,6 @@ class CatalogDB:
                     dataset_id       TEXT NOT NULL REFERENCES datasets(id),
                     version          TEXT NOT NULL,
                     location         TEXT NOT NULL,
-                    format           TEXT,
-                    rows             INTEGER,
                     produced_by_task TEXT,
                     produced_by_job  TEXT,
                     status           TEXT NOT NULL DEFAULT 'reserved',
@@ -371,32 +369,29 @@ class CatalogDB:
         return None
 
     def reserve_version(self, dataset_id: str, version: str, location: str,
-                        format: str = None, task_id: str = None,
-                        job_id: str = None) -> bool:
+                        task_id: str = None, job_id: str = None) -> bool:
         now = _now()
         try:
             with self.conn:
                 self.conn.execute("""
                     INSERT INTO versions
-                        (dataset_id, version, location, format,
+                        (dataset_id, version, location,
                          produced_by_task, produced_by_job,
                          status, username, createdate, updatedate)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (dataset_id, version, location, format,
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (dataset_id, version, location,
                       task_id, job_id, 'reserved', _user(), now, now))
             return True
         except sqlite3.IntegrityError:
             return False
 
-    def commit_version(self, dataset_id: str, version: str,
-                       rows: int = None) -> bool:
+    def commit_version(self, dataset_id: str, version: str) -> bool:
         now = _now()
         with self.conn:
             cur = self.conn.execute("""
-                UPDATE versions SET
-                    rows = COALESCE(?, rows), status = 'committed', updatedate = ?
+                UPDATE versions SET status = 'committed', updatedate = ?
                 WHERE dataset_id = ? AND version = ? AND status = 'reserved'
-            """, (rows, now, dataset_id, version))
+            """, (now, dataset_id, version))
             return cur.rowcount > 0
     
     def fail_version(self, dataset_id: str, version: str):
@@ -746,18 +741,17 @@ class CatalogDB:
             return cur.rowcount > 0
     
     def commit_virtual(self, dataset_id: str, version: str,
-                       location: str, fmt: str,
-                       task_id: str, job_id: str) -> dict:
+                       location: str, task_id: str, job_id: str) -> dict:
         """Register a virtual version (no local file)."""
         now = _now()
         with self.conn:
             self.conn.execute("""
                 INSERT OR REPLACE INTO versions
-                    (dataset_id, version, location, format,
+                    (dataset_id, version, location,
                      produced_by_task, produced_by_job,
                      status, username, createdate, updatedate)
-                VALUES (?, ?, ?, ?, ?, ?, 'committed', ?, ?, ?)
-            """, (dataset_id, version, location, fmt,
+                VALUES (?, ?, ?, ?, ?, 'committed', ?, ?, ?)
+            """, (dataset_id, version, location,
                   task_id, job_id, _user(), now, now))
         return {"skipped": False, "version": version}
 
@@ -793,7 +787,6 @@ class CatalogDB:
         cur = self.conn.execute("""
             SELECT l.input_dataset  AS dataset_id,
                    l.input_version  AS version,
-                   v.location, v.format, v.rows,
                    v.produced_by_task, v.produced_by_job
             FROM lineage l
             LEFT JOIN versions v
@@ -807,7 +800,6 @@ class CatalogDB:
         cur = self.conn.execute("""
             SELECT l.output_dataset AS dataset_id,
                    l.output_version AS version,
-                   v.location, v.format, v.rows,
                    v.produced_by_task, v.produced_by_job
             FROM lineage l
             LEFT JOIN versions v
