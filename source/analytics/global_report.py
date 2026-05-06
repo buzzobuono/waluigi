@@ -34,6 +34,21 @@ class GlobalReport(Task):
 
         report_id = "analytics/reports/global_report"
 
+        dataset = DatasetCreateRequest(
+            id=report_id,
+            format=DatasetFormat.PARQUET,
+            description="Global consolidated report across all sources",
+            source_id="analytics-local",
+        )
+
+        with catalog.produce(dataset, metadata={"date": date}, inputs=lineage) as writer:
+            writer.write(report_df)
+
+        if writer.skipped:
+            print(f"Skipped — same metadata, existing version: {writer.version}")
+        else:
+            print(f"Done: {writer.dataset_id} @ {writer.version} ({len(report_df)} rows)")
+
         catalog.set_charts(report_id, [
             {
                 "title": "Total value by source",
@@ -77,22 +92,6 @@ class GlobalReport(Task):
             },
         ])
         print(f"Charts set on {report_id}")
-
-        dataset = DatasetCreateRequest(
-            id=report_id,
-            format=DatasetFormat.PARQUET,
-            description="Global consolidated report across all sources",
-            source_id="analytics-local",
-        )
-
-        with catalog.produce(dataset, metadata={"date": date}, inputs=lineage) as writer:
-            writer.write(report_df)
-
-        if writer.skipped:
-            print(f"Skipped — same metadata, existing version: {writer.version}")
-            return
-
-        print(f"Done: {writer.dataset_id} @ {writer.version} ({len(report_df)} rows)")
 
 
 if __name__ == "__main__":
