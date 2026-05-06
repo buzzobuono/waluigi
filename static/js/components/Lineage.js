@@ -15,20 +15,18 @@ export default {
     const current    = Vue.ref(null);
     const loading    = Vue.ref(false);
     const error      = Vue.ref('');
-    
+
     const route = VueRouter.useRoute();
     Vue.onMounted(() => {
       if (route.query.id)  idInput.value  = route.query.id;
       if (route.query.ver) verInput.value = route.query.ver;
-      if (route.query.ns && route.query.id) search();
+      if (route.query.id)  search();
     });
-    
+
     async function search() {
       const id = idInput.value.trim();
-      if (!id) {
-        error.value = 'Dataset ID are required.';
-        return;
-      }
+      if (!id) { error.value = 'Dataset ID is required.'; return; }
+
       loading.value    = true;
       error.value      = '';
       upstream.value   = [];
@@ -37,49 +35,58 @@ export default {
 
       try {
         let ver = verInput.value.trim();
-        if (!ver) {
-          const res = await api.catalogDatasetVersions(id);
-          if (!res || !res.data || !res.data.versions || !res.data.versions.length) {
-            error.value = 'Dataset not found or no committed versions.';
-            return;
-          }
-          ver = res.data.versions[0].version;
-          current.value = res.data.versions[0];
-          verInput.value = ver;
-        } else {
-          current.value = { dataset_id: id, version: ver };
+        const versionsRes = await api.catalogDatasetVersions(id);
+        const versions    = versionsRes?.data || [];
+
+        if (!versions.length) {
+          error.value = 'Dataset not found or no committed versions.';
+          return;
         }
 
-        
-        const lineage = await api.catalogDatasetLineage(id, ver);
-        
-        upstream.value   = lineage.data.upstream || [];
+        if (!ver) {
+          ver = versions[0].version;
+          verInput.value = ver;
+        }
+
+        current.value = versions.find(v => v.version === ver) || { dataset_id: id, version: ver };
+
+        const lineage    = await api.catalogDatasetLineage(id, ver);
+        upstream.value   = lineage.data.upstream   || [];
         downstream.value = lineage.data.downstream || [];
 
-      } catch(e) {
+      } catch (e) {
         error.value = `Error: ${e.message}`;
       } finally {
         loading.value = false;
       }
     }
 
-    function navigateTo(id) {
+    function navigateTo(id, version) {
+      if (!id || id.startsWith('__external__/')) return;
       idInput.value  = id;
-      verInput.value = '';
+      verInput.value = (version && version !== 'live') ? version : '';
       search();
+    }
+
+    function isExternal(id) {
+      return id && id.startsWith('__external__/');
+    }
+
+    function displayId(id) {
+      return isExternal(id) ? id.replace('__external__/', '') : id;
     }
 
     return {
       idInput, verInput,
       upstream, downstream, current,
       loading, error,
-      search, navigateTo,
+      search, navigateTo, isExternal, displayId,
     };
   },
 
   template: `
-    <base-page 
-      title="Lineage" 
+    <base-page
+      title="Lineage"
       subtitle="Explore dataset lineage"
       icon="fas fa-project-diagram"
     >
@@ -91,7 +98,7 @@ export default {
             <label class="text-muted small">Dataset ID</label>
             <BaseInput
               v-model="idInput"
-              placeholder="e.g. sales_raw"
+              placeholder="e.g. sales/raw/transactions"
               @keyup.enter="search"
             />
           </div>
@@ -110,19 +117,25 @@ export default {
               label="Search"
               icon="fas fa-search"
               color="outline-primary"
+              :disabled="loading"
               @click="search"
             />
           </div>
 
-          <div v-if="error" class="col-12 text-danger small">
+          <div v-if="error" class="col-12 text-danger small mt-1">
             {{ error }}
           </div>
 
         </div>
       </template>
 
-      <div class="row">
+      <div v-if="loading" class="text-center py-4 text-muted">
+        <i class="fas fa-spinner fa-spin mr-2"></i> Loading...
+      </div>
 
+      <div v-else-if="current" class="row">
+
+        <!-- Upstream -->
         <div class="col-12 col-md-4 mb-3">
           <base-panel :no-padding="true">
             <template #title>
@@ -131,38 +144,37 @@ export default {
               <span class="badge badge-info ml-2">{{ upstream.length }}</span>
             </template>
 
-            <div v-if="!upstream.length" class="text-muted p-3 text-center">
+            <div v-if="!upstream.length" class="text-muted p-3 text-center small">
               No upstream — source dataset
             </div>
 
             <div
               v-for="u in upstream"
               :key="u.dataset_id + '/' + u.version"
-              class="p-3 border-bottom cursor-pointer"
-              @click="navigateTo(u.dataset_id)"
+              class="p-3 border-bottom"
+              :class="isExternal(u.dataset_id) ? 'text-muted' : 'cursor-pointer'"
+              @click="navigateTo(u.dataset_id, u.version)"
             >
-              <div class="text-info">
-                {{ u.dataset_id }}
+              <div :class="isExternal(u.dataset_id) ? 'text-muted small' : 'text-info'">
+                <i v-if="isExternal(u.dataset_id)" class="fas fa-external-link-alt mr-1"></i>
+                {{ displayId(u.dataset_id) }}
               </div>
 
-              <div class="text-secondary small">
-                {{ u.version ? u.version : 'live' }}
+              <div class="text-secondary small mt-1">
+                <span v-if="u.version === 'live'" class="badge badge-light">live</span>
+                <span v-else>{{ u.version ? u.version.slice(0, 19) : '—' }}</span>
               </div>
 
               <div class="mt-1">
-                <span v-if="u.format" class="badge badge-secondary mr-1">
-                  {{ u.format }}
-                </span>
-
-                <span v-if="u.rows != null" class="text-muted small">
-                  {{ u.rows.toLocaleString() }} rows
-                </span>
+                <span v-if="u.format" class="badge badge-secondary mr-1">{{ u.format }}</span>
+                <span v-if="u.rows != null" class="text-muted small">{{ u.rows.toLocaleString() }} rows</span>
               </div>
             </div>
 
           </base-panel>
         </div>
 
+        <!-- Current -->
         <div class="col-12 col-md-4 mb-3">
           <base-panel :no-padding="true">
             <template #title>
@@ -170,35 +182,25 @@ export default {
               Current
             </template>
 
-            <div v-if="current" class="p-3">
+            <div class="p-3">
+              <div class="text-info font-weight-bold">{{ current.dataset_id }}</div>
 
-              <div class="text-info font-weight-bold">
-                {{ current.dataset_id }}
-              </div>
-
-              <div class="text-secondary small mt-1">
-                {{ current.version }}
-              </div>
+              <div class="text-secondary small mt-1">{{ current.version ? current.version.slice(0, 19) : '' }}</div>
 
               <div class="mt-2">
-                <span v-if="current.format" class="badge badge-secondary mr-1">
-                  {{ current.format }}
-                </span>
-
-                <span v-if="current.rows != null" class="text-muted small">
-                  {{ current.rows.toLocaleString() }} rows
-                </span>
+                <span v-if="current.format" class="badge badge-secondary mr-1">{{ current.format }}</span>
+                <span v-if="current.rows != null" class="text-muted small">{{ current.rows.toLocaleString() }} rows</span>
               </div>
 
               <div v-if="current.produced_by_task" class="mt-2 text-muted small">
                 Task: <code>{{ current.produced_by_task }}</code>
               </div>
-
             </div>
 
           </base-panel>
         </div>
 
+        <!-- Downstream -->
         <div class="col-12 col-md-4 mb-3">
           <base-panel :no-padding="true">
             <template #title>
@@ -207,7 +209,7 @@ export default {
               <span class="badge badge-success ml-2">{{ downstream.length }}</span>
             </template>
 
-            <div v-if="!downstream.length" class="text-muted p-3 text-center">
+            <div v-if="!downstream.length" class="text-muted p-3 text-center small">
               No downstream — leaf dataset
             </div>
 
@@ -215,24 +217,17 @@ export default {
               v-for="d in downstream"
               :key="d.dataset_id + '/' + d.version"
               class="p-3 border-bottom cursor-pointer"
-              @click="navigateTo(d.dataset_id)"
+              @click="navigateTo(d.dataset_id, d.version)"
             >
-              <div class="text-info">
-                {{ d.dataset_id }}
-              </div>
+              <div class="text-info">{{ d.dataset_id }}</div>
 
-              <div class="text-secondary small">
-                {{ d.version }}
+              <div class="text-secondary small mt-1">
+                {{ d.version ? d.version.slice(0, 19) : '—' }}
               </div>
 
               <div class="mt-1">
-                <span v-if="d.format" class="badge badge-secondary mr-1">
-                  {{ d.format }}
-                </span>
-
-                <span v-if="d.rows != null" class="text-muted small">
-                  {{ d.rows.toLocaleString() }} rows
-                </span>
+                <span v-if="d.format" class="badge badge-secondary mr-1">{{ d.format }}</span>
+                <span v-if="d.rows != null" class="text-muted small">{{ d.rows.toLocaleString() }} rows</span>
               </div>
             </div>
 
