@@ -1,37 +1,88 @@
-import time
 import random
+import pandas as pd
 from waluigi.sdk.task import Task
 from waluigi.sdk.catalog import catalog
+from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
+
 
 class CleanDataTask(Task):
+
     def run(self):
-        source = self.params.source.lower()
-        input_id = f"raw_{source}"
-        output_id = f"clean_{source}"
+        source    = self.params.source.lower()
+        date      = self.params.date
+        fail_prob = float(self.attributes.fail_prob)
 
-        if random.random() < float(self.attributes.fail_prob):
-            raise Exception(f"💥 Errore durante la pulizia di {self.params.source}!")
+        if random.random() < fail_prob:
+            raise RuntimeError(f"Simulated failure while cleaning {source}")
 
-        # Risolviamo il path dell'input (ultima versione disponibile)
-        input_path = catalog.resolve(f"analytics/{source}/raw/{input_id}").path
-        input_ver = catalog.last_version(f"analytics/{source}/raw/{input_id}")
-        
-        print(f"🧹 Pulizia dati da: {input_path}")
+        catalog.create_source(SourceCreateRequest(
+            id="analytics-local",
+            type=SourceType.LOCAL,
+            config={},
+            description="Local storage for analytics pipeline",
+        ))
 
-        # Produciamo il dato pulito dichiarando l'input per la lineage
-        with catalog.produce(f"analytics/{source}/clean/{output_id}", 
-                             format="out",
-                             inputs=[catalog.ref(f"analytics/{source}/raw/{input_id}", input_ver)]) as ctx:
-            
-            with open(input_path, "r") as f_in:
-                data = f_in.read()
+        raw_id = f"analytics/{source}/raw/raw_{source}"
+        reader = catalog.resolve(raw_id)
+        df     = reader.read()
+        print(f"Read {len(df)} rows from {raw_id} @ {reader.version}")
 
-            time.sleep(2) # Simulazione lavoro
-            
-            with open(ctx.path, "w") as f_out:
-                f_out.write(f"PULITO: {data}")
-            
-            ctx.rows = 1
+        df = df.dropna()
+        df["metric"] = df["metric"].str.strip().str.lower()
+        df["value"]  = df["value"].astype(float)
+        print(f"After cleaning: {len(df)} rows")
+
+        clean_id = f"analytics/{source}/clean/clean_{source}"
+
+        catalog.set_expectations(clean_id, [
+            {
+                "rule_id":   "expect_column_values_to_not_be_null",
+                "inputs":    {"x": "this.metric"},
+                "tolerance": 1.0,
+            },
+            {
+                "rule_id":   "expect_column_values_to_not_be_null",
+                "inputs":    {"x": "this.value"},
+                "tolerance": 1.0,
+            },
+            {
+                "rule_id":   "expect_column_values_to_be_unique",
+                "inputs":    {"x": "this.metric"},
+                "tolerance": 1.0,
+            },
+            {
+                "rule_id":   "expect_column_values_to_be_between",
+                "inputs":    {"x": "this.value"},
+                "params":    {"min_val": 0, "max_val": 1_000_000},
+                "tolerance": 1.0,
+            },
+            {
+                "rule_id":   "expect_column_values_to_be_of_type",
+                "inputs":    {"x": "this.value"},
+                "params":    {"target_type": "float"},
+                "tolerance": 1.0,
+            },
+        ])
+        print(f"DQ expectations set on {clean_id}")
+
+        dataset = DatasetCreateRequest(
+            id=clean_id,
+            format=DatasetFormat.PARQUET,
+            description=f"Cleaned data for {source}",
+            source_id="analytics-local",
+        )
+        lineage = [{"dataset_id": reader.dataset_id, "version": reader.version}]
+
+        with catalog.produce(dataset, metadata={"date": date, "source": source},
+                             inputs=lineage) as writer:
+            writer.write(df)
+
+        if writer.skipped:
+            print(f"Skipped — same metadata, existing version: {writer.version}")
+            return
+
+        print(f"Done: {writer.dataset_id} @ {writer.version} ({len(df)} rows)")
+
 
 if __name__ == "__main__":
     CleanDataTask().start()
