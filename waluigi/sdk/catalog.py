@@ -124,13 +124,13 @@ class CatalogClient:
         })
 
     def set_expectations(self, dataset_id: str, expectations: List[dict]) -> List[dict]:
-        """Replace all expectations for a dataset (bulk reset).
+        """Replace all expectations for a dataset (bulk reset) and re-run DQ on the latest version.
 
         Each item: {"rule_id": str, "inputs": dict, "params": dict, "tolerance": float}
         """
         for exp in self.list_expectations(dataset_id):
             self._delete(f"/datasets/{dataset_id}/expectations/{exp['id']}")
-        return [
+        result = [
             self.add_expectation(
                 dataset_id,
                 rule_id=exp["rule_id"],
@@ -141,6 +141,11 @@ class CatalogClient:
             )
             for i, exp in enumerate(expectations)
         ]
+        try:
+            self._post(f"/datasets/{dataset_id}/dq/_rerun", json={})
+        except Exception:
+            pass
+        return result
 
     # ── CHARTS ────────────────────────────────────────────────────────────────
 
