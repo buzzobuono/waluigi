@@ -3,7 +3,7 @@ import { api, clearToken, getToken } from './api.js';
 import SideBar     from './components/SideBar.js';
 import NavBar      from './components/NavBar.js';
 
-const { createApp, ref, computed, onMounted, watch } = Vue;
+const { createApp, ref, computed, onMounted } = Vue;
 
 function decodeToken(token) {
   try { return JSON.parse(atob(token.split('.')[1])); } catch { return null; }
@@ -92,7 +92,7 @@ const App = {
     const isLogin = computed(() => router.currentRoute.value.path === '/login');
 
     onMounted(() => loadUser());
-    watch(isLogin, (val) => { if (!val) loadUser(); });
+    router.afterEach(() => loadUser());
 
     return {
       loading, counts, navItems, refreshAll, isGroupActive,
