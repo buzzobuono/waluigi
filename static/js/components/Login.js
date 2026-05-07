@@ -1,12 +1,11 @@
 import { api, setToken } from '../api.js';
 import BaseButton from './BaseButton.js';
-import BasePanel  from './BasePanel.js';
 
 const { ref } = Vue;
 
 export default {
   name: 'Login',
-  components: { BaseButton, BasePanel },
+  components: { BaseButton },
 
   setup() {
     const router   = VueRouter.useRouter();
@@ -33,50 +32,52 @@ export default {
   },
 
   template: `
-    <div class="wl-login-wrapper">
-      <div class="wl-login-box">
+    <div class="login-page d-flex align-items-center justify-content-center min-vh-100">
+      <div class="login-box">
 
-        <div class="wl-login-logo">
-          <i class="fas fa-wave-square mr-2"></i>Waluigi
+        <div class="login-logo">
+          <i class="fas fa-wave-square mr-2"></i><b>Waluigi</b>
         </div>
 
-        <base-panel title="Accedi alla console" icon="fas fa-sign-in-alt">
+        <div class="card">
+          <div class="card-body login-card-body">
 
-          <form @submit.prevent="submit" class="p-2">
+            <p class="login-box-msg">Accedi alla console</p>
 
-            <div v-if="error" class="alert alert-danger py-2 small mb-3">{{ error }}</div>
+            <div v-if="error" class="alert alert-danger py-2 small">{{ error }}</div>
 
-            <div class="input-group mb-3">
-              <input v-model="username" type="text" class="form-control"
-                     placeholder="Username" autocomplete="username" required />
-              <div class="input-group-append">
-                <div class="input-group-text"><i class="fas fa-user"></i></div>
+            <form @submit.prevent="submit">
+              <div class="input-group mb-3">
+                <input v-model="username" type="text" class="form-control"
+                       placeholder="Username" autocomplete="username" required />
+                <div class="input-group-append">
+                  <div class="input-group-text"><i class="fas fa-user"></i></div>
+                </div>
               </div>
-            </div>
 
-            <div class="input-group mb-4">
-              <input v-model="password" type="password" class="form-control"
-                     placeholder="Password" autocomplete="current-password" required />
-              <div class="input-group-append">
-                <div class="input-group-text"><i class="fas fa-lock"></i></div>
+              <div class="input-group mb-4">
+                <input v-model="password" type="password" class="form-control"
+                       placeholder="Password" autocomplete="current-password" required />
+                <div class="input-group-append">
+                  <div class="input-group-text"><i class="fas fa-lock"></i></div>
+                </div>
               </div>
-            </div>
 
-            <base-button
-              type="submit"
-              label="Accedi"
-              icon="fas fa-sign-in-alt"
-              color="primary"
-              size="md"
-              :loading="loading"
-              :disabled="loading"
-              class="btn-block"
-              @click="submit"
-            />
+              <base-button
+                label="Accedi"
+                icon="fas fa-sign-in-alt"
+                color="primary"
+                size="md"
+                :loading="loading"
+                :disabled="loading"
+                class="btn-block"
+                @click="submit"
+              />
+            </form>
 
-          </form>
+          </div>
+        </div>
 
-        </base-panel>
       </div>
     </div>
   `,
