@@ -89,9 +89,10 @@ const App = {
       } finally { loading.value = false; }
     }
 
-    onMounted(() => loadUser());
-
     const isLogin = computed(() => router.currentRoute.value.path === '/login');
+
+    onMounted(() => loadUser());
+    router.afterEach(() => loadUser());
 
     return {
       loading, counts, navItems, refreshAll, isGroupActive,
