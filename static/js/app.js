@@ -91,8 +91,13 @@ const App = {
 
     const isLogin = computed(() => router.currentRoute.value.path === '/login');
 
+    const LIVE_PATHS = new Set(['/jobs', '/tasks', '/workers', '/resources', '/namespaces', '/dashboard']);
+
     onMounted(() => loadUser());
-    router.afterEach(() => loadUser());
+    router.afterEach((to) => {
+      loadUser();
+      if (LIVE_PATHS.has(to.path) || to.path.startsWith('/tasks/')) refreshAll();
+    });
 
     return {
       loading, counts, navItems, refreshAll, isGroupActive,
