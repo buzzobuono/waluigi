@@ -1,3 +1,4 @@
+import { api }        from '../api.js';
 import BasePage       from './BasePage.js';
 import BasePanel      from './BasePanel.js';
 import BaseTable      from './BaseTable.js';
@@ -85,10 +86,8 @@ export default {
       loading.value   = true;
       pageError.value = null;
       try {
-        const r    = await fetch('/catalog/sources');
-        const json = await r.json();
-        if (!r.ok) throw new Error(json.diagnostic?.messages?.[0] || `HTTP ${r.status}`);
-        sources.value = json.data || [];
+        const res     = await api.catalogSources();
+        sources.value = res.data || [];
       } catch (e) {
         pageError.value = e.message;
       } finally {
@@ -116,21 +115,12 @@ export default {
 
       saving.value = true;
       try {
-        const r = await fetch('/catalog/sources', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({
-            id,
-            type:        form.value.type,
-            description: form.value.description || '',
-            config:      buildConfig(form.value.config, form.value.type),
-          }),
+        await api.catalogCreateSource({
+          id,
+          type:        form.value.type,
+          description: form.value.description || '',
+          config:      buildConfig(form.value.config, form.value.type),
         });
-        const json = await r.json();
-        if (json.diagnostic?.result === 'KO') {
-          formError.value = json.diagnostic?.messages?.[0] || `Error ${r.status}`;
-          return;
-        }
         modalRef.value?.close();
         await loadSources();
       } catch (e) {
@@ -161,19 +151,10 @@ export default {
       formError.value = null;
       saving.value    = true;
       try {
-        const r = await fetch(`/catalog/sources/${encodeURIComponent(form.value.id)}`, {
-          method:  'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({
-            description: form.value.description || '',
-            config:      buildConfig(form.value.config, form.value.type),
-          }),
+        await api.catalogUpdateSource(form.value.id, {
+          description: form.value.description || '',
+          config:      buildConfig(form.value.config, form.value.type),
         });
-        const json = await r.json();
-        if (json.diagnostic?.result === 'KO') {
-          formError.value = json.diagnostic?.messages?.[0] || `Error ${r.status}`;
-          return;
-        }
         modalRef.value?.close();
         await loadSources();
       } catch (e) {
@@ -195,7 +176,7 @@ export default {
         async (ok) => {
           if (!ok) return;
           try {
-            await fetch(`/catalog/sources/${encodeURIComponent(src.id)}`, { method: 'DELETE' });
+            await api.catalogDeleteSource(src.id);
           } catch { /* best-effort */ }
           await loadSources();
         }
