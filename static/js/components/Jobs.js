@@ -7,20 +7,20 @@ import BaseButton from './BaseButton.js';
 import BaseButtonGroup from './BaseButtonGroup.js';
 import ConfirmDialog from './ConfirmDialog.js';
 
+const { ref, computed, onMounted } = Vue;
+
 export default {
   name: 'Jobs',
-  props: { 
-    jobs: { type: Array, default: () => [] },
-    loading: { type: Boolean, default: false }
-  },
-  components: { 
-    BasePage, BasePanel, BaseTable, BaseInfoBox, 
+  components: {
+    BasePage, BasePanel, BaseTable, BaseInfoBox,
     BaseButton, BaseButtonGroup, ConfirmDialog
   },
-  emits: ['refresh'],
 
-  setup(props, { emit }) {
-    const confirmRef = Vue.ref(null);
+  setup() {
+    const jobs       = ref([]);
+    const loading    = ref(false);
+    const error      = ref(null);
+    const confirmRef = ref(null);
 
     const columns = [
       { key: 'job_id', label: 'Job ID' },
@@ -37,64 +37,75 @@ export default {
       PENDING: { color: 'secondary', icon: 'fas fa-clock' }
     };
 
-    const deleteJob = async (jobId) => {
+    async function load() {
+      loading.value = true;
+      error.value   = null;
+      try {
+        jobs.value = await api.jobs();
+      } catch (e) {
+        error.value = e.message;
+      } finally {
+        loading.value = false;
+      }
+    }
+
+    const counts = computed(() => {
+      const c = { RUNNING: 0, SUCCESS: 0, FAILED: 0, PENDING: 0 };
+      jobs.value.forEach(j => { if (c[j.status] !== undefined) c[j.status]++; });
+      return c;
+    });
+
+    async function deleteJob(jobId) {
       confirmRef.value.ask(
         `Delete job "${jobId}"?`,
         async (ok) => {
-          if (ok) {
-            await api.deleteJob(jobId);
-            emit('refresh');
-          }
+          if (!ok) return;
+          await api.deleteJob(jobId);
+          await load();
         }
       );
     }
-    
-    return { columns, STATUS_MAP, deleteJob, confirmRef };
+
+    onMounted(load);
+
+    return { jobs, loading, error, columns, STATUS_MAP, counts, confirmRef, load, deleteJob };
   },
 
-  computed: {
-    counts() {
-      const c = { RUNNING: 0, SUCCESS: 0, FAILED: 0, PENDING: 0 };
-      this.jobs.forEach(j => { if (c[j.status] !== undefined) c[j.status]++; });
-      return c;
-    }
-  },
-  
   template: `
-    <base-page 
-      title="Jobs" 
+    <base-page
+      title="Jobs"
       subtitle="Job monitoring and managememt"
       icon="fas fa-briefcase"
-      :loading="loading && !jobs.length">
-      
+      :loading="loading && !jobs.length"
+      :error="error">
+
       <template #actions>
         <div class="row w-100 m-0">
           <div class="col-6 col-md-3 px-1" v-for="(val, key) in counts" :key="key">
-            <base-info-box 
-              :label="key" 
-              :value="val" 
-              :icon="STATUS_MAP[key].icon" 
-              :color="STATUS_MAP[key].color" 
+            <base-info-box
+              :label="key"
+              :value="val"
+              :icon="STATUS_MAP[key].icon"
+              :color="STATUS_MAP[key].color"
             />
           </div>
         </div>
-        
-         <base-button 
-            label="Update"
-            icon="fas fa-sync-alt" 
-            color="outline-primary" 
-            class="ml-auto"
-            :loading="loading"
-            @click="$emit('refresh')"
-          />
-  
+
+        <base-button
+          label="Update"
+          icon="fas fa-sync-alt"
+          color="outline-primary"
+          class="ml-auto"
+          :loading="loading"
+          @click="load"
+        />
       </template>
 
       <base-panel :no-padding="true">
-        <base-table 
-          :columns="columns" 
+        <base-table
+          :columns="columns"
           :items="jobs">
-          
+
           <template #cell(job_id)="{ item }">
             <div>
               <i class="fas fa-project-diagram mr-2 mr-2 opacity-75"></i>
@@ -110,11 +121,10 @@ export default {
             </span>
           </template>
 
-
           <template #cell(actions)="{ item }">
-            <base-button 
-              icon="fas fa-trash" 
-              color="outline-danger" 
+            <base-button
+              icon="fas fa-trash"
+              color="outline-danger"
               title="Delete Job"
               @click.stop="deleteJob(item.job_id)"
             />
@@ -124,7 +134,7 @@ export default {
       </base-panel>
 
       <confirm-dialog title="Confirm" ref="confirmRef" />
-  
+
     </base-page>
   `
 };
