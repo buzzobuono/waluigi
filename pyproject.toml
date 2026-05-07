@@ -12,8 +12,7 @@ dependencies = [
     "pyyaml",
     "fastapi",
     "uvicorn",
-    "httpx",
-    "pyjwt"
+    "httpx"
 ]
 
 [tool.setuptools.packages.find]

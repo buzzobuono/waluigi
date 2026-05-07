@@ -1,20 +1,37 @@
 import { router }  from './router.js';
-import { api }     from './api.js';
+import { api, clearToken, getToken } from './api.js';
 import SideBar     from './components/SideBar.js';
-import NavBar      from './components/NavBar.js'; // Nuovo import
+import NavBar      from './components/NavBar.js';
 
 const { createApp, ref, computed, onMounted } = Vue;
 
+function decodeToken(token) {
+  try { return JSON.parse(atob(token.split('.')[1])); } catch { return null; }
+}
+
 const App = {
   name: 'App',
-  components: { 
-    SideBar, 
-    NavBar 
-  },
-  
+  components: { SideBar, NavBar },
+
   setup() {
     const jobs = ref([]), tasks = ref([]), workers = ref([]), resources = ref([]);
     const loading = ref(false);
+    const user    = ref(null);
+
+    function loadUser() {
+      const token = getToken();
+      if (!token) { user.value = null; return; }
+      const payload = decodeToken(token);
+      user.value = payload
+        ? { name: payload.sub, role: 'Administrator' }
+        : null;
+    }
+
+    function logout() {
+      clearToken();
+      user.value = null;
+      router.push('/login');
+    }
 
     const counts = computed(() => ({
       jobs: jobs.value.length,
@@ -25,16 +42,16 @@ const App = {
 
     const navItems = [
       { path: '/dashboard',  label: 'Dashboard',  icon: 'fa-th-large', key: null },
-      { 
-        label: 'Operations', icon: 'fa-cogs', 
+      {
+        label: 'Operations', icon: 'fa-cogs',
         children: [
           { path: '/namespaces', label: 'Namespaces', icon: 'fa-layer-group', key: 'namespaces' },
           { path: '/jobs',  label: 'Jobs',  icon: 'fa-briefcase', key: 'jobs' },
           { path: '/tasks', label: 'Tasks', icon: 'fa-tasks',     key: 'tasks' }
         ]
       },
-      { 
-        label: 'Cluster', icon: 'fa-microchip', 
+      {
+        label: 'Cluster', icon: 'fa-microchip',
         children: [
           { path: '/workers',   label: 'Workers',   icon: 'fa-server',    key: 'workers' },
           { path: '/resources', label: 'Resources', icon: 'fa-chart-bar', key: null }
@@ -43,10 +60,10 @@ const App = {
       {
         label: 'Data Management', icon: 'fa-database',
         children: [
-          { path: '/catalog',    label: 'Catalog',    icon: 'fa-table',           key: null },
-          { path: '/sources',    label: 'Sources',    icon: 'fa-plug',            key: null },
-          { path: '/lineage',    label: 'Lineage',    icon: 'fa-project-diagram', key: null },
-          { path: '/dq/rules',   label: 'Expectations',   icon: 'fa-shield-alt',      key: null },
+          { path: '/catalog',    label: 'Catalog',      icon: 'fa-table',           key: null },
+          { path: '/sources',    label: 'Sources',      icon: 'fa-plug',            key: null },
+          { path: '/lineage',    label: 'Lineage',      icon: 'fa-project-diagram', key: null },
+          { path: '/dq/rules',   label: 'Expectations', icon: 'fa-shield-alt',      key: null },
         ]
       }
     ];
@@ -65,45 +82,49 @@ const App = {
         ]);
       } finally { loading.value = false; }
     }
-    
-    /*onMounted(() => {
-      refreshAll();
-      setInterval(refreshAll, 10000);
-    });*/
 
-    return { 
-      loading, counts, navItems, refreshAll, isGroupActive, 
+    onMounted(() => loadUser());
+
+    const isLogin = computed(() => router.currentRoute.value.path === '/login');
+
+    return {
+      loading, counts, navItems, refreshAll, isGroupActive,
       currentTitle: computed(() => router.currentRoute.value.meta?.title || 'Console'),
-      jobs, tasks, workers, resources 
+      jobs, tasks, workers, resources,
+      user, logout, isLogin,
     };
   },
-  
+
   template: `
-    <div class="wrapper">
-      
-      <NavBar 
-        :title="currentTitle"
-        :loading="loading" 
-        @refresh="refreshAll" 
-      />
-
-      <SideBar 
-        :navItems="navItems" 
-        :counts="counts" 
-        :isGroupActive="isGroupActive" 
-      />
-
-      <div class="content-wrapper wl-content">
-        <section class="content pt-3">
-          <div class="container-fluid">
-            <router-view 
-              :jobs="jobs" :tasks="tasks" :workers="workers" :resources="resources" 
-              @refresh="refreshAll" 
-            />
-          </div>
-        </section>
+    <template v-if="isLogin">
+      <router-view />
+    </template>
+    <template v-else>
+      <div class="wrapper">
+        <NavBar
+          :title="currentTitle"
+          :loading="loading"
+          :user="user"
+          @refresh="refreshAll"
+          @logout="logout"
+        />
+        <SideBar
+          :navItems="navItems"
+          :counts="counts"
+          :isGroupActive="isGroupActive"
+        />
+        <div class="content-wrapper wl-content">
+          <section class="content pt-3">
+            <div class="container-fluid">
+              <router-view
+                :jobs="jobs" :tasks="tasks" :workers="workers" :resources="resources"
+                @refresh="refreshAll"
+              />
+            </div>
+          </section>
+        </div>
       </div>
-    </div>
+    </template>
   `
 };
 
