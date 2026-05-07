@@ -78,3 +78,8 @@ body,
 
 /* Namespace header */
 .ns-header-yellow                 { color: #ffcc00 !important; }
+
+/* Login page */
+.wl-login-wrapper                 { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: var(--wl-dark); }
+.wl-login-box                     { width: 360px; }
+.wl-login-logo                    { text-align: center; margin-bottom: 1.25rem; font-size: 1.8rem; font-weight: 700; letter-spacing: 2px; color: var(--wl-light); }
