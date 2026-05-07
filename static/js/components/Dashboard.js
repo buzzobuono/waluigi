@@ -9,33 +9,42 @@ import ChartWidget    from './ChartWidget.js';
 
 const { ref, onMounted, nextTick } = Vue;
 
-const LS_KEY = 'waluigi_dashboard_panels';
+const LS_KEY = 'waluigi_dashboard_panels_v2';
 
 function loadPanels()  { try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { return []; } }
 function savePanels(p) { localStorage.setItem(LS_KEY, JSON.stringify(p)); }
+
+function fmtVersion(ver) {
+  if (!ver) return '';
+  return ver.slice(0, 19).replace('T', ' ');
+}
 
 export default {
   name: 'Dashboard',
   components: { BasePage, BasePanel, BaseButton, BaseButtonGroup, BaseModal, BaseInput, ChartWidget },
 
   setup() {
-    const panels       = ref([]);  // [{ dataset_id, chart_id, title, option, loading, error }]
+    // panel shape: { dataset_id, chart_key, title, version (null=latest), option, renderedVersion, isLatest, loading, error }
+    const panels       = ref([]);
     const modalRef     = ref(null);
     const addDatasetId = ref('');
     const addCharts    = ref([]);
-    const addChartId   = ref(null);
+    const addChartKey  = ref(null);
+    const addVersion   = ref('');
+    const addVersions  = ref([]);
     const addLoading   = ref(false);
     const addError     = ref(null);
 
-    // Always access panels through the reactive array by index so Vue tracks mutations.
     async function renderPanel(idx) {
-      const p    = panels.value[idx];
-      p.loading  = true;
-      p.error    = null;
-      p.option   = null;
+      const p   = panels.value[idx];
+      p.loading = true;
+      p.error   = null;
+      p.option  = null;
       try {
-        const res = await api.renderChart(p.dataset_id, p.chart_id);
-        p.option  = res.data?.option ?? null;
+        const res = await api.renderChartByKey(p.dataset_id, p.chart_key, p.version || null);
+        p.option          = res.data?.option          ?? null;
+        p.renderedVersion = res.data?.version         ?? null;
+        p.isLatest        = res.data?.is_latest       ?? true;
       } catch (e) {
         p.error = e.message;
       } finally {
@@ -45,19 +54,25 @@ export default {
 
     async function init() {
       const saved  = loadPanels();
-      panels.value = saved.map(s => ({ ...s, option: null, loading: false, error: null }));
+      panels.value = saved.map(s => ({ ...s, option: null, renderedVersion: null, isLatest: true, loading: false, error: null }));
       await Promise.all(panels.value.map((_, idx) => renderPanel(idx)));
     }
 
     async function loadChartsForDataset() {
-      addCharts.value  = [];
-      addChartId.value = null;
-      addError.value   = null;
+      addCharts.value   = [];
+      addChartKey.value = null;
+      addVersions.value = [];
+      addVersion.value  = '';
+      addError.value    = null;
       if (!addDatasetId.value.trim()) return;
       addLoading.value = true;
       try {
-        const res = await api.datasetCharts(addDatasetId.value.trim());
-        addCharts.value = res.data ?? [];
+        const [chartsRes, versionsRes] = await Promise.all([
+          api.datasetCharts(addDatasetId.value.trim()),
+          api.catalogDatasetVersions(addDatasetId.value.trim()),
+        ]);
+        addCharts.value   = chartsRes.data  ?? [];
+        addVersions.value = versionsRes.data ?? [];
         if (!addCharts.value.length) addError.value = 'No charts defined for this dataset.';
       } catch (e) {
         addError.value = e.message;
@@ -67,32 +82,42 @@ export default {
     }
 
     async function addPanel() {
-      const chart = addCharts.value.find(c => c.id === Number(addChartId.value));
+      const chart = addCharts.value.find(c => c.key === addChartKey.value);
       if (!chart) return;
+      const pinned = addVersion.value.trim() || null;
       panels.value.push({
-        dataset_id: addDatasetId.value.trim(),
-        chart_id:   chart.id,
-        title:      chart.title,
-        option:     null,
-        loading:    true,
-        error:      null,
+        dataset_id:      addDatasetId.value.trim(),
+        chart_key:       chart.key,
+        title:           chart.title,
+        version:         pinned,
+        option:          null,
+        renderedVersion: null,
+        isLatest:        true,
+        loading:         true,
+        error:           null,
       });
-      savePanels(panels.value.map(({ dataset_id, chart_id, title }) => ({ dataset_id, chart_id, title })));
+      _save();
       modalRef.value?.close();
-      // Wait for Vue to render the new panel before rendering the chart into it.
       await nextTick();
       await renderPanel(panels.value.length - 1);
     }
 
     function removePanel(idx) {
       panels.value.splice(idx, 1);
-      savePanels(panels.value.map(({ dataset_id, chart_id, title }) => ({ dataset_id, chart_id, title })));
+      _save();
+    }
+
+    function _save() {
+      savePanels(panels.value.map(({ dataset_id, chart_key, title, version }) =>
+        ({ dataset_id, chart_key, title, version })));
     }
 
     function openAdd() {
       addDatasetId.value = '';
       addCharts.value    = [];
-      addChartId.value   = null;
+      addChartKey.value  = null;
+      addVersions.value  = [];
+      addVersion.value   = '';
       addError.value     = null;
       modalRef.value?.open();
     }
@@ -101,8 +126,8 @@ export default {
 
     return {
       panels, modalRef,
-      addDatasetId, addCharts, addChartId, addLoading, addError,
-      loadChartsForDataset, addPanel, removePanel, openAdd,
+      addDatasetId, addCharts, addChartKey, addVersion, addVersions, addLoading, addError,
+      loadChartsForDataset, addPanel, removePanel, openAdd, fmtVersion,
     };
   },
 
@@ -131,6 +156,12 @@ export default {
               <chart-widget :option="panel.option" :loading="panel.loading"
                             :error="panel.error" height="300px" />
             </div>
+            <div v-if="panel.renderedVersion" class="px-3 pb-2 pt-1 d-flex align-items-center small text-muted border-top">
+              <i class="fas fa-clock mr-1"></i>
+              <span>{{ fmtVersion(panel.renderedVersion) }}</span>
+              <span v-if="panel.version" class="badge badge-warning ml-2">pinned</span>
+              <span v-else class="badge badge-success ml-2">latest</span>
+            </div>
           </base-panel>
         </div>
       </div>
@@ -141,7 +172,7 @@ export default {
 
       <div class="form-group">
         <label class="small font-weight-bold">Dataset ID</label>
-        <base-input v-model="addDatasetId" placeholder="analytics/sales/monthly" />
+        <base-input v-model="addDatasetId" placeholder="analytics/reports/global_report" />
       </div>
 
       <base-button label="Load charts" icon="fas fa-search" color="outline-secondary"
@@ -149,19 +180,31 @@ export default {
 
       <div v-if="addError" class="alert alert-warning small py-2">{{ addError }}</div>
 
-      <div v-if="addCharts.length" class="form-group">
-        <label class="small font-weight-bold">Chart</label>
-        <select class="form-control form-control-sm" v-model="addChartId">
-          <option :value="null" disabled>— select a chart —</option>
-          <option v-for="c in addCharts" :key="c.id" :value="c.id">
-            {{ c.title }} ({{ c.spec?.type || 'bar' }})
-          </option>
-        </select>
+      <div v-if="addCharts.length">
+        <div class="form-group">
+          <label class="small font-weight-bold">Chart</label>
+          <select class="form-control form-control-sm" v-model="addChartKey">
+            <option :value="null" disabled>— select a chart —</option>
+            <option v-for="c in addCharts" :key="c.key" :value="c.key">
+              {{ c.title }} ({{ c.spec?.type || 'bar' }})
+            </option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="small font-weight-bold">Version <span class="text-muted font-weight-normal">(leave empty for latest)</span></label>
+          <select class="form-control form-control-sm" v-model="addVersion">
+            <option value="">Latest (auto-update)</option>
+            <option v-for="v in addVersions" :key="v.version" :value="v.version">
+              {{ fmtVersion(v.version) }}
+            </option>
+          </select>
+        </div>
       </div>
 
       <template #footer>
         <base-button label="Add to dashboard" icon="fas fa-plus" color="primary"
-                     :disabled="!addChartId" @click="addPanel" />
+                     :disabled="!addChartKey" @click="addPanel" />
         <base-button label="Cancel" color="secondary" class="ml-2"
                      @click="modalRef?.close()" />
       </template>

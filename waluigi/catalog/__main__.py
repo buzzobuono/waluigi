@@ -684,7 +684,7 @@ async def list_charts(dataset_id: str):
 async def add_chart(dataset_id: str, body: ChartCreateRequest):
     if not db.exists_dataset(dataset_id):
         return ko("Dataset not found", 404)
-    chart = db.add_chart(dataset_id, body.title, body.spec, body.position)
+    chart = db.add_chart(dataset_id, body.key, body.title, body.spec, body.position)
     return ok(chart)
 
 
@@ -709,34 +709,51 @@ async def delete_chart(dataset_id: str, chart_id: int):
     return ok({"deleted": chart_id})
 
 
+def _render_chart_impl(chart: dict, dataset_id: str,
+                       version: str | None) -> dict:
+    """Shared logic: read data, build ECharts option. Returns response dict."""
+    dataset = db.get_dataset(dataset_id)
+    if not dataset:
+        raise ValueError("Dataset not found")
+    ver = db.get_version(dataset_id, version) if version else db.get_latest_version(dataset_id)
+    if not ver:
+        raise ValueError("No committed version available")
+    source    = db.get_source(dataset["source_id"])
+    connector = ConnectorFactory.get(source["type"], source["config"])
+    df = connector.read(ver["location"], dataset["format"])
+    option = _build_echarts_option(df, chart["spec"])
+    return {"option": option, "version": ver["version"], "rows": len(df), "is_latest": version is None}
+
+
 @app.get("/datasets/{dataset_id:path}/charts/{chart_id}/render", tags=["Charts"],
-         summary="Render a chart — returns an ECharts option object with aggregated data")
+         summary="Render a chart by ID — returns an ECharts option object")
 async def render_chart(dataset_id: str, chart_id: int,
-                       version: str = Query(None, description="Dataset version; defaults to latest")):
+                       version: str = Query(None)):
     chart = db.get_chart(dataset_id, chart_id)
     if not chart:
         return ko("Chart not found", 404)
-    dataset = db.get_dataset(dataset_id)
-    if not dataset:
-        return ko("Dataset not found", 404)
-
-    ver = db.get_version(dataset_id, version) if version else db.get_latest_version(dataset_id)
-    if not ver:
-        return ko("No committed version available", 404)
-
-    source    = db.get_source(dataset["source_id"])
-    connector = ConnectorFactory.get(source["type"], source["config"])
     try:
-        df = connector.read(ver["location"], dataset["format"])
+        return ok(_render_chart_impl(chart, dataset_id, version))
+    except ValueError as e:
+        return ko(str(e), 404)
     except Exception as e:
-        return ko(f"Cannot read dataset: {e}", 500)
+        return ko(str(e), 500)
 
+
+@app.get("/datasets/{dataset_id:path}/charts/_render", tags=["Charts"],
+         summary="Render a chart by key — returns an ECharts option object")
+async def render_chart_by_key(dataset_id: str,
+                               key:     str = Query(...),
+                               version: str = Query(None)):
+    chart = db.get_chart_by_key(dataset_id, key)
+    if not chart:
+        return ko("Chart not found", 404)
     try:
-        option = _build_echarts_option(df, chart["spec"])
+        return ok(_render_chart_impl(chart, dataset_id, version))
+    except ValueError as e:
+        return ko(str(e), 404)
     except Exception as e:
-        return ko(f"Cannot build chart: {e}", 422)
-
-    return ok({"option": option, "version": ver["version"], "rows": len(df)})
+        return ko(str(e), 500)
 
 
 # Routes - DQ Results

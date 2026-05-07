@@ -117,12 +117,14 @@ class CatalogDB:
                 CREATE TABLE IF NOT EXISTS charts (
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
                     dataset_id  TEXT NOT NULL REFERENCES datasets(id),
+                    key         TEXT NOT NULL,
                     title       TEXT NOT NULL,
                     spec        TEXT NOT NULL DEFAULT '{}',  -- JSON chart spec
                     position    INTEGER NOT NULL DEFAULT 0,
                     username    TEXT NOT NULL,
                     createdate  TEXT NOT NULL,
-                    updatedate  TEXT NOT NULL
+                    updatedate  TEXT NOT NULL,
+                    UNIQUE(dataset_id, key)
                 );
 
                 -- DQ run results: one row per committed version.
@@ -646,14 +648,14 @@ class CatalogDB:
             r["spec"] = json.loads(r.get("spec") or "{}")
         return rows
 
-    def add_chart(self, dataset_id: str, title: str, spec: dict,
+    def add_chart(self, dataset_id: str, key: str, title: str, spec: dict,
                   position: int = 0) -> dict:
         now = _now()
         with self.conn:
             cur = self.conn.execute("""
-                INSERT INTO charts (dataset_id, title, spec, position, username, createdate, updatedate)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (dataset_id, title, json.dumps(spec), position, _user(), now, now))
+                INSERT INTO charts (dataset_id, key, title, spec, position, username, createdate, updatedate)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (dataset_id, key, title, json.dumps(spec), position, _user(), now, now))
             row_id = cur.lastrowid
         return self.get_chart(dataset_id, row_id)
 
@@ -666,8 +668,17 @@ class CatalogDB:
             row["spec"] = json.loads(row.get("spec") or "{}")
         return row
 
+    def get_chart_by_key(self, dataset_id: str, key: str) -> dict | None:
+        cur = self.conn.execute("""
+            SELECT * FROM charts WHERE dataset_id = ? AND key = ?
+        """, (dataset_id, key))
+        row = self._row(cur.fetchone())
+        if row:
+            row["spec"] = json.loads(row.get("spec") or "{}")
+        return row
+
     def update_chart(self, dataset_id: str, chart_id: int, **kwargs) -> bool:
-        allowed = {"title", "spec", "position"}
+        allowed = {"key", "title", "spec", "position"}
         updates = {k: v for k, v in kwargs.items() if k in allowed}
         if not updates:
             return False

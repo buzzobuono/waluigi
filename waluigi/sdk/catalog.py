@@ -150,28 +150,32 @@ class CatalogClient:
     # ── CHARTS ────────────────────────────────────────────────────────────────
 
     def set_charts(self, dataset_id: str, charts: List[dict]) -> List[dict]:
-        """Replace all chart definitions for a dataset (idempotent).
+        """Replace all chart definitions for a dataset (idempotent, upsert by key).
 
-        Updates existing charts in-place by position to preserve their IDs
-        (so dashboard panels stay valid across pipeline re-runs). Adds new
-        charts if the new list is longer; deletes extras if shorter.
+        Upserts by ``key`` — existing charts keep their DB id so dashboard
+        panels that reference a (dataset_id, chart_key) pair stay valid across
+        pipeline re-runs. Charts not present in the new list are deleted.
 
-        Each item: {"title": str, "spec": dict, "position": int (optional)}
+        Each item: {"key": str, "title": str, "spec": dict, "position": int (optional)}
         """
-        existing = self._get(f"/datasets/{dataset_id}/charts")
-        result = []
+        existing = {c["key"]: c for c in self._get(f"/datasets/{dataset_id}/charts")}
+        new_keys = set()
+        result   = []
         for i, c in enumerate(charts):
-            pos = c.get("position", i)
-            body = {"title": c["title"], "spec": c["spec"], "position": pos}
-            if i < len(existing):
+            key  = c["key"]
+            body = {"key": key, "title": c["title"], "spec": c["spec"],
+                    "position": c.get("position", i)}
+            new_keys.add(key)
+            if key in existing:
                 updated = self._patch(
-                    f"/datasets/{dataset_id}/charts/{existing[i]['id']}", json=body
+                    f"/datasets/{dataset_id}/charts/{existing[key]['id']}", json=body
                 )
                 result.append(updated)
             else:
                 result.append(self._post(f"/datasets/{dataset_id}/charts", json=body))
-        for extra in existing[len(charts):]:
-            self._delete(f"/datasets/{dataset_id}/charts/{extra['id']}")
+        for key, c in existing.items():
+            if key not in new_keys:
+                self._delete(f"/datasets/{dataset_id}/charts/{c['id']}")
         return result
 
     # ── DATA OPS ──────────────────────────────────────────────────────────────

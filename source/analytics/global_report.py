@@ -51,6 +51,7 @@ class GlobalReport(Task):
 
         catalog.set_charts(report_id, [
             {
+                "key":   "value_by_source",
                 "title": "Total value by source",
                 "spec": {
                     "type": "bar",
@@ -59,6 +60,7 @@ class GlobalReport(Task):
                 },
             },
             {
+                "key":   "value_by_metric",
                 "title": "Value by metric",
                 "spec": {
                     "type": "bar",
@@ -67,6 +69,7 @@ class GlobalReport(Task):
                 },
             },
             {
+                "key":   "value_share_by_source",
                 "title": "Value share by source",
                 "spec": {
                     "type": "pie",
@@ -75,6 +78,7 @@ class GlobalReport(Task):
                 },
             },
             {
+                "key":   "value_distribution",
                 "title": "Value distribution",
                 "spec": {
                     "type": "histogram",
@@ -83,6 +87,7 @@ class GlobalReport(Task):
                 },
             },
             {
+                "key":   "value_by_category",
                 "title": "Value by category",
                 "spec": {
                     "type": "bar",
