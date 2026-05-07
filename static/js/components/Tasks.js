@@ -8,16 +8,19 @@ import BaseModal from './BaseModal.js';
 import LogModal from './LogModal.js';
 import ConfirmDialog from './ConfirmDialog.js';
 
+const { ref, computed, onMounted } = Vue;
+
 export default {
   name: 'Tasks',
-  props: { tasks: Array, loading: Boolean },
   components: { BasePage, BasePanel, BaseTable, LogModal, BaseButton, BaseButtonGroup, BaseModal, ConfirmDialog },
-  emits: ['refresh'],
 
-  setup(props, { emit }) {
-    const route = VueRouter.useRoute();
-    const logModalRef = Vue.ref(null);
-    const confirmRef = Vue.ref(null);
+  setup() {
+    const route        = VueRouter.useRoute();
+    const tasks        = ref([]);
+    const loading      = ref(false);
+    const error        = ref(null);
+    const logModalRef  = ref(null);
+    const confirmRef   = ref(null);
 
     const STATUS_COLOR = {
       SUCCESS: '#28a745',
@@ -35,109 +38,106 @@ export default {
       { key: 'actions', label: 'Actions', class: 'text-right pr-3' }
     ];
 
-    const resetTask = async (id) => {
-      confirmRef.value.ask(
-        `Reset task "${id}"?`,
-        async (ok) => {
-          if (ok) {
-            await api.resetTask(id);
-            emit('refresh');
-          }
-        }
-      );
-    };
-    
-    const deleteTask = async (id) => {
-      confirmRef.value.ask(
-        `Delete task "${id}"?`,
-        async (ok) => {
-          if (ok) {
-            await api.deleteTask(id);
-            emit('refresh');
-          }
-        }
-      );
-    };
-    
-    const resetNs = (ns) => {
-      confirmRef.value.ask(
-        `Reset all in "${ns}"?`,
-        async (ok) => {
-          if (ok) {
-            await api.resetNamespace(ns);
-            emit('refresh');
-          }
-        }
-      );
-    };
-    
-    const deleteNs = async (ns) => {
-      confirmRef.value.ask(
-        `Delete all in "${ns}"?`,
-        async (ok) => {
-          if (ok) {
-            await api.deleteNamespace(ns);
-            emit('refresh');
-          }
-        }
-      );
-    };
+    async function load() {
+      loading.value = true;
+      error.value   = null;
+      try {
+        tasks.value = await api.tasks();
+      } catch (e) {
+        error.value = e.message;
+      } finally {
+        loading.value = false;
+      }
+    }
 
-    const openLogs = (id) => {
-      if (logModalRef.value) logModalRef.value.show(id);
-    };
-
-    return { 
-      columns, STATUS_COLOR, route, logModalRef, confirmRef,
-      resetTask, deleteTask, resetNs, deleteNs, openLogs 
-    };
-  },
-
-  computed: {
-    filterNs() {
-      const p = this.route.params.namespace;
+    const filterNs = computed(() => {
+      const p = route.params.namespace;
       return p ? (Array.isArray(p) ? p.join('/') : p) : null;
-    },
+    });
 
-    byNamespace() {
+    const byNamespace = computed(() => {
       const map = {};
-      const filtered = this.filterNs
-        ? (this.tasks || []).filter(t => t.namespace === this.filterNs)
-        : (this.tasks || []);
-
+      const filtered = filterNs.value
+        ? tasks.value.filter(t => t.namespace === filterNs.value)
+        : tasks.value;
       filtered.forEach(t => {
         const ns = t.namespace || '(none)';
         if (!map[ns]) map[ns] = [];
         map[ns].push(t);
       });
       return map;
+    });
+
+    async function resetTask(id) {
+      confirmRef.value.ask(`Reset task "${id}"?`, async (ok) => {
+        if (!ok) return;
+        await api.resetTask(id);
+        await load();
+      });
     }
+
+    async function deleteTask(id) {
+      confirmRef.value.ask(`Delete task "${id}"?`, async (ok) => {
+        if (!ok) return;
+        await api.deleteTask(id);
+        await load();
+      });
+    }
+
+    async function resetNs(ns) {
+      confirmRef.value.ask(`Reset all in "${ns}"?`, async (ok) => {
+        if (!ok) return;
+        await api.resetNamespace(ns);
+        await load();
+      });
+    }
+
+    async function deleteNs(ns) {
+      confirmRef.value.ask(`Delete all in "${ns}"?`, async (ok) => {
+        if (!ok) return;
+        await api.deleteNamespace(ns);
+        await load();
+      });
+    }
+
+    function openLogs(id) {
+      if (logModalRef.value) logModalRef.value.show(id);
+    }
+
+    onMounted(load);
+
+    return {
+      tasks, loading, error, columns, STATUS_COLOR,
+      filterNs, byNamespace, logModalRef, confirmRef,
+      load, resetTask, deleteTask, resetNs, deleteNs, openLogs
+    };
   },
 
   template: `
-    <base-page 
+    <base-page
       :title="filterNs ? 'Tasks in ' + filterNs : 'All Tasks'"
       :subtitle="filterNs ? 'Namespace View' : 'Global View'"
-      icon="fas fa-tasks">
-      
+      icon="fas fa-tasks"
+      :loading="loading && !tasks.length"
+      :error="error">
+
       <template #actions>
-         <base-button 
-            v-if="filterNs" 
-            label="Back" 
-            icon="fas fa-arrow-left" 
-            color="outline-secondary"
-            @click="$router.push('/namespaces')"
-          />
-          
-          <base-button 
-            label="Update" 
-            class="ml-auto"
-            icon="fas fa-sync-alt" 
-            color="outline-primary" 
-            :loading="loading"
-            @click="$emit('refresh')"
-          />
-  
+        <base-button
+          v-if="filterNs"
+          label="Back"
+          icon="fas fa-arrow-left"
+          color="outline-secondary"
+          @click="$router.push('/namespaces')"
+        />
+
+        <base-button
+          label="Update"
+          class="ml-auto"
+          icon="fas fa-sync-alt"
+          color="outline-primary"
+          :loading="loading"
+          @click="load"
+        />
       </template>
 
       <div v-if="!Object.keys(byNamespace).length" class="text-center py-5 text-muted">
@@ -145,9 +145,9 @@ export default {
         <p>No tasks found for this selection.</p>
       </div>
 
-      <base-panel 
-        v-for="(taskList, ns) in byNamespace" 
-        :key="ns" 
+      <base-panel
+        v-for="(taskList, ns) in byNamespace"
+        :key="ns"
         :no-padding="true">
 
         <template #title>
@@ -158,23 +158,23 @@ export default {
 
         <template #tools>
           <base-button-group class="ml-auto">
-            <base-button 
+            <base-button
               label="Reset"
-              icon="fas fa-history" 
-              color="outline-warning" 
+              icon="fas fa-history"
+              color="outline-warning"
               @click="resetNs(ns)"
             />
-            <base-button 
+            <base-button
               label="Delete"
-              icon="fas fa-trash-alt" 
-              color="outline-danger" 
+              icon="fas fa-trash-alt"
+              color="outline-danger"
               @click="deleteNs(ns)"
             />
           </base-button-group>
         </template>
 
         <base-table :columns="columns" :items="taskList">
-          
+
           <template #cell(id)="{ item }">
             <a href="#" @click.prevent="openLogs(item.id)">
               {{ item.id }}
@@ -193,15 +193,15 @@ export default {
 
           <template #cell(actions)="{ item }">
             <base-button-group>
-              <base-button 
-                icon="fas fa-undo" 
-                color="outline-warning" 
+              <base-button
+                icon="fas fa-undo"
+                color="outline-warning"
                 title="Reset Task"
                 @click="resetTask(item.id)"
               />
-              <base-button 
-                icon="fas fa-trash" 
-                color="outline-danger" 
+              <base-button
+                icon="fas fa-trash"
+                color="outline-danger"
                 title="Delete Task"
                 @click="deleteTask(item.id)"
               />
@@ -213,7 +213,7 @@ export default {
 
       <log-modal ref="logModalRef" />
       <confirm-dialog title="Confirm" ref="confirmRef" />
-  
+
     </base-page>
   `
 };

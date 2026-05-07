@@ -5,10 +5,9 @@ export default {
   components: { UserBadge },
   props: {
     title: String,
-    loading: Boolean,
-    user: Object // Es: { name: 'Admin', role: 'Dev', avatar: '' }
+    user:  Object,
   },
-  emits: ['refresh', 'logout'],
+  emits: ['logout'],
   template: `
     <nav class="main-header navbar navbar-expand navbar-white navbar-light">
       <ul class="navbar-nav">
@@ -23,13 +22,6 @@ export default {
       </ul>
 
       <ul class="navbar-nav ml-auto align-items-center">
-        
-        <li class="nav-item mr-2">
-          <a class="nav-link" href="#" @click.prevent="$emit('refresh')" title="Refresh Data">
-            <i class="fas fa-sync-alt wl-accent" :class="{ 'fa-spin': loading }"></i>
-          </a>
-        </li>
-
         <UserBadge
           :username="user?.name"
           :role="user?.role"

@@ -1,44 +1,62 @@
+import { api } from '../api.js';
 import BasePage from './BasePage.js';
 import BasePanel from './BasePanel.js';
 import BaseButton from './BaseButton.js';
 
+const { ref, onMounted } = Vue;
+
 export default {
   name: 'Resources',
-  props: { 
-    resources: Array,
-    loading: Boolean 
-  },
   components: { BasePage, BasePanel, BaseButton },
-  emits: ['refresh'],
-  
-  methods: {
-    pct(r) {
-      return r.amount > 0 ? Math.round(r.usage / r.amount * 100) : 0;
-    },
-    color(r) {
-      const p = this.pct(r);
+
+  setup() {
+    const resources = ref([]);
+    const loading   = ref(false);
+    const error     = ref(null);
+
+    async function load() {
+      loading.value = true;
+      error.value   = null;
+      try {
+        resources.value = await api.resources();
+      } catch (e) {
+        error.value = e.message;
+      } finally {
+        loading.value = false;
+      }
+    }
+
+    function pct(r)   { return r.amount > 0 ? Math.round(r.usage / r.amount * 100) : 0; }
+    function color(r) {
+      const p = pct(r);
       return p > 80 ? 'danger' : p > 50 ? 'warning' : 'success';
     }
+
+    onMounted(load);
+
+    return { resources, loading, error, load, pct, color };
   },
 
   template: `
-    <base-page 
+    <base-page
       title="Resources"
       subtitle="Cluster resources consumption"
-      icon="fas fa-microchip">
-      
+      icon="fas fa-microchip"
+      :loading="loading && !resources.length"
+      :error="error">
+
       <template #actions>
-          <base-button 
-            icon="fas fa-sync-alt" 
-            color="outline-primary" 
-            label="Update"
-            :loading="loading"
-            class="ml-auto"
-            @click="$emit('refresh')"
-          />
+        <base-button
+          icon="fas fa-sync-alt"
+          color="outline-primary"
+          label="Update"
+          :loading="loading"
+          class="ml-auto"
+          @click="load"
+        />
       </template>
 
-      <div v-if="!resources || !resources.length" class="text-muted mt-3 text-center">
+      <div v-if="!resources.length" class="text-muted mt-3 text-center">
         No resources configured.
       </div>
 
@@ -48,7 +66,7 @@ export default {
             <template #title>
               <h3 class="card-title">{{ r.name }}</h3>
             </template>
-            
+
             <template #tools>
               <span :class="['badge', 'bg-'+color(r), 'ml-auto']">{{ pct(r) }}%</span>
             </template>
@@ -59,8 +77,8 @@ export default {
                 <span>Available: <b>{{ r.amount - r.usage }}</b></span>
               </div>
               <div class="progress shadow">
-                <div 
-                  class="progress-bar" 
+                <div
+                  class="progress-bar"
                   :class="'bg-'+color(r)"
                   :style="'width:'+pct(r)+'%'"
                 ></div>
