@@ -1,46 +1,74 @@
 
-async function _get(url, params) {
-  const qs = params ? '?' + new URLSearchParams(params).toString() : '';
-  const r = await fetch(url + qs);
-  if (!r.ok) throw new Error(`GET ${url} → ${r.status}`);
+const AUTH_KEY = 'waluigi_auth_token';
+
+export function getToken()    { return localStorage.getItem(AUTH_KEY); }
+export function setToken(t)   { localStorage.setItem(AUTH_KEY, t); }
+export function clearToken()  { localStorage.removeItem(AUTH_KEY); }
+
+function _authHeaders(extra = {}) {
+  const token = getToken();
+  return token
+    ? { 'Authorization': `Bearer ${token}`, ...extra }
+    : { ...extra };
+}
+
+async function _handle(r, url) {
+  if (r.status === 401) {
+    clearToken();
+    window.location.href = '/login';
+    throw new Error(`Unauthorized`);
+  }
+  if (!r.ok) throw new Error(`${r.method || '?'} ${url} → ${r.status}`);
   return r.json();
 }
 
+async function _get(url, params) {
+  const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+  const r = await fetch(url + qs, { headers: _authHeaders() });
+  return _handle(r, url);
+}
+
 async function _post(url) {
-  const r = await fetch(url, { method: 'POST' });
-  if (!r.ok) throw new Error(`POST ${url} → ${r.status}`);
-  return r.json();
+  const r = await fetch(url, { method: 'POST', headers: _authHeaders() });
+  return _handle(r, url);
 }
 
 async function _postJson(url, data) {
   const r = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: _authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(data),
   });
-  if (!r.ok) throw new Error(`POST ${url} → ${r.status}`);
-  return r.json();
+  return _handle(r, url);
 }
 
 async function _patchJson(url, data) {
   const r = await fetch(url, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: _authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(data),
   });
-  if (!r.ok) throw new Error(`PATCH ${url} → ${r.status}`);
-  return r.json();
+  return _handle(r, url);
 }
 
 async function _delete(url) {
-  const r = await fetch(url, { method: 'DELETE' });
-  if (!r.ok) throw new Error(`DELETE ${url} → ${r.status}`);
-  return r.json();
+  const r = await fetch(url, { method: 'DELETE', headers: _authHeaders() });
+  return _handle(r, url);
 }
 
 function _enc(s)  { return encodeURIComponent(s); }
 
 export const api = {
+  login: async (username, password) => {
+    const r = await fetch('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!r.ok) throw new Error('Invalid credentials');
+    return r.json();
+  },
+
   jobs:      () => _get('/boss/api/jobs'),
   deleteJob: (jobId) => _delete(`/boss/api/jobs/${_enc(jobId)}`),
   jobTasks: (jobId) => _get(`/boss/api/jobs/${_enc(jobId)}/tasks`),
@@ -57,7 +85,7 @@ export const api = {
   workers:   () => _get('/boss/api/workers'),
 
   resources: () => _get('/boss/api/resources'),
-  
+
   catalogSources:       ()      => _get('/catalog/sources'),
   catalogCreateSource:  (body)  => _postJson('/catalog/sources', body),
   catalogUpdateSource:  (id, body) => _patchJson(`/catalog/sources/${_enc(id)}`, body),
