@@ -59,6 +59,10 @@ async function _delete(url) {
 function _enc(s)  { return encodeURIComponent(s); }
 
 export const api = {
+  adminUsers:      ()            => _get('/auth/users'),
+  adminCreateUser: (body)        => _postJson('/auth/users', body),
+  adminDeleteUser: (userid)      => _delete(`/auth/users/${_enc(userid)}`),
+
   login: async (username, password) => {
     const r = await fetch('/auth/login', {
       method: 'POST',

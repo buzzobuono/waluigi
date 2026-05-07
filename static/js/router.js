@@ -1,4 +1,5 @@
 import Login         from './components/Login.js';
+import AdminUsers    from './components/AdminUsers.js';
 import Jobs          from './components/Jobs.js';
 import Tasks         from './components/Tasks.js';
 import Namespaces    from './components/Namespaces.js';
@@ -35,7 +36,8 @@ const routes = [
   { path: '/dashboard',              component: Dashboard,      meta: { title: 'Dashboard',       requiresAuth: true } },
   { path: '/dq/rules',  component: Expectations, meta: { title: 'DQ Rules', requiresAuth: true } },
   { path: '/lineage',   component: Lineage,   meta: { title: 'Lineage',    requiresAuth: true } },
-  { path: '/jobs/:jobId', component: JobDag,  meta: { title: 'Job DAG',    requiresAuth: true } },
+  { path: '/jobs/:jobId',   component: JobDag,    meta: { title: 'Job DAG',    requiresAuth: true } },
+  { path: '/admin/users',   component: AdminUsers, meta: { title: 'Users',      requiresAuth: true } },
 ];
 
 export const router = VueRouter.createRouter({
