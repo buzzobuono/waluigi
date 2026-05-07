@@ -23,7 +23,7 @@ const App = {
       if (!token) { user.value = null; return; }
       const payload = decodeToken(token);
       user.value = payload
-        ? { name: payload.sub, role: 'Administrator' }
+        ? { name: payload.sub, role: payload.is_admin ? 'Administrator' : 'User', isAdmin: !!payload.is_admin }
         : null;
     }
 
@@ -64,6 +64,12 @@ const App = {
           { path: '/sources',    label: 'Sources',      icon: 'fa-plug',            key: null },
           { path: '/lineage',    label: 'Lineage',      icon: 'fa-project-diagram', key: null },
           { path: '/dq/rules',   label: 'Expectations', icon: 'fa-shield-alt',      key: null },
+        ]
+      },
+      {
+        label: 'Administration', icon: 'fa-user-shield', adminOnly: true,
+        children: [
+          { path: '/admin/users', label: 'Users', icon: 'fa-users', key: null },
         ]
       }
     ];
@@ -109,7 +115,7 @@ const App = {
           @logout="logout"
         />
         <SideBar
-          :navItems="navItems"
+          :navItems="navItems.filter(i => !i.adminOnly || user?.isAdmin)"
           :counts="counts"
           :isGroupActive="isGroupActive"
         />

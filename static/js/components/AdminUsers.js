@@ -1,0 +1,176 @@
+import { api }        from '../api.js';
+import BasePage       from './BasePage.js';
+import BasePanel      from './BasePanel.js';
+import BaseTable      from './BaseTable.js';
+import BaseButton     from './BaseButton.js';
+import BaseButtonGroup from './BaseButtonGroup.js';
+import BaseModal      from './BaseModal.js';
+import BaseInput      from './BaseInput.js';
+import ConfirmDialog  from './ConfirmDialog.js';
+import { getToken }   from '../api.js';
+
+const { ref, onMounted } = Vue;
+
+function decodeToken(token) {
+  try { return JSON.parse(atob(token.split('.')[1])); } catch { return null; }
+}
+
+const COLUMNS = [
+  { key: 'userid',     label: 'User ID' },
+  { key: 'username',   label: 'Display Name' },
+  { key: 'createdate', label: 'Created' },
+  { key: 'actions',    label: '', class: 'text-right pr-3' },
+];
+
+export default {
+  name: 'AdminUsers',
+  components: { BasePage, BasePanel, BaseTable, BaseButton, BaseButtonGroup, BaseModal, BaseInput, ConfirmDialog },
+
+  setup() {
+    const payload   = decodeToken(getToken());
+    const isAdmin   = payload?.is_admin === true;
+
+    const users     = ref([]);
+    const loading   = ref(false);
+    const saving    = ref(false);
+    const pageError = ref(null);
+    const formError = ref(null);
+    const modalRef  = ref(null);
+    const confirmRef = ref(null);
+
+    const form = ref({ userid: '', username: '', password: '' });
+
+    function fmtDate(d) {
+      return d ? d.slice(0, 19).replace('T', ' ') : '—';
+    }
+
+    async function loadUsers() {
+      if (!isAdmin) return;
+      loading.value   = true;
+      pageError.value = null;
+      try {
+        const res   = await api.adminUsers();
+        users.value = res.data || [];
+      } catch (e) {
+        pageError.value = e.message;
+      } finally {
+        loading.value = false;
+      }
+    }
+
+    function openCreate() {
+      form.value      = { userid: '', username: '', password: '' };
+      formError.value = null;
+      modalRef.value?.open();
+    }
+
+    async function submitCreate() {
+      formError.value = null;
+      if (!form.value.userid.trim() || !form.value.password.trim()) {
+        formError.value = 'User ID and password are required.';
+        return;
+      }
+      saving.value = true;
+      try {
+        await api.adminCreateUser({
+          userid:   form.value.userid.trim(),
+          username: form.value.username.trim() || form.value.userid.trim(),
+          password: form.value.password,
+        });
+        modalRef.value?.close();
+        await loadUsers();
+      } catch (e) {
+        formError.value = e.message;
+      } finally {
+        saving.value = false;
+      }
+    }
+
+    function deleteUser(u) {
+      confirmRef.value.ask(
+        `Delete user <b>${u.userid}</b>?`,
+        async (ok) => {
+          if (!ok) return;
+          try { await api.adminDeleteUser(u.userid); } catch { /* best-effort */ }
+          await loadUsers();
+        }
+      );
+    }
+
+    onMounted(loadUsers);
+
+    return {
+      isAdmin, users, loading, saving, pageError, formError,
+      form, modalRef, confirmRef, columns: COLUMNS,
+      fmtDate, loadUsers, openCreate, submitCreate, deleteUser,
+    };
+  },
+
+  template: `
+    <base-page title="Users" subtitle="Console user management" icon="fas fa-users">
+
+      <template v-if="!isAdmin">
+        <div class="alert alert-danger">
+          <i class="fas fa-lock mr-2"></i>Access restricted to administrators.
+        </div>
+      </template>
+
+      <template v-else>
+        <template #actions>
+          <base-button icon="fas fa-plus" color="primary" label="New User"
+                       class="mr-2" :disabled="loading" @click="openCreate" />
+          <base-button icon="fas fa-sync-alt" color="outline-primary" label="Refresh"
+                       :loading="loading" @click="loadUsers" />
+        </template>
+
+        <base-panel :no-padding="true">
+          <base-table :columns="columns" :items="users">
+
+            <template #cell(userid)="{ item }">
+              <code>{{ item.userid }}</code>
+            </template>
+
+            <template #cell(createdate)="{ item }">
+              <span class="text-muted small">{{ fmtDate(item.createdate) }}</span>
+            </template>
+
+            <template #cell(actions)="{ item }">
+              <base-button-group>
+                <base-button icon="fas fa-trash" color="outline-danger"
+                             title="Delete user" @click="deleteUser(item)" />
+              </base-button-group>
+            </template>
+
+          </base-table>
+        </base-panel>
+
+        <base-modal ref="modalRef" title="New User" icon="fas fa-user-plus">
+          <div class="form-group">
+            <label class="small font-weight-bold">User ID <span class="text-danger">*</span></label>
+            <base-input v-model="form.userid" placeholder="e.g. john.doe" />
+            <small class="text-muted">Used for login.</small>
+          </div>
+          <div class="form-group">
+            <label class="small font-weight-bold">Display Name</label>
+            <base-input v-model="form.username" placeholder="e.g. John Doe (defaults to User ID)" />
+          </div>
+          <div class="form-group mb-0">
+            <label class="small font-weight-bold">Password <span class="text-danger">*</span></label>
+            <base-input v-model="form.password" placeholder="Password" />
+          </div>
+          <div v-if="formError" class="alert alert-danger mt-3 mb-0 py-2 small">
+            <i class="fas fa-exclamation-circle mr-1"></i>{{ formError }}
+          </div>
+          <template #footer>
+            <base-button label="Cancel" color="outline-secondary" @click="modalRef?.close()" />
+            <base-button label="Create" icon="fas fa-check" color="primary"
+                         :loading="saving" class="ml-2" @click="submitCreate" />
+          </template>
+        </base-modal>
+
+        <confirm-dialog title="Confirm" ref="confirmRef" />
+      </template>
+
+    </base-page>
+  `,
+};
