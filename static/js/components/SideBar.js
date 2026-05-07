@@ -1,9 +1,36 @@
+const { ref, watch } = Vue;
+const { useRoute }   = VueRouter;
+
 export default {
   name: 'SideBar',
   props: {
-    navItems: Array,
-    isGroupActive: Function
+    navItems:      Array,
+    isGroupActive: Function,
   },
+
+  setup(props) {
+    const route      = useRoute();
+    const openGroups = ref({});
+
+    function syncOpen() {
+      (props.navItems || []).forEach(item => {
+        if (item.children) {
+          // auto-open the group whose child matches the current route
+          // but don't forcibly close groups the user has manually opened
+          if (props.isGroupActive(item)) openGroups.value[item.label] = true;
+        }
+      });
+    }
+
+    function toggle(label) {
+      openGroups.value[label] = !openGroups.value[label];
+    }
+
+    watch(() => route.path, syncOpen, { immediate: true });
+
+    return { openGroups, toggle };
+  },
+
   template: `
     <aside class="main-sidebar sidebar-light-primary elevation-4">
 
@@ -15,10 +42,10 @@ export default {
 
       <div class="sidebar">
         <nav class="mt-2">
-          <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+          <ul class="nav nav-pills nav-sidebar flex-column" role="menu">
 
             <li v-for="item in navItems" :key="item.label"
-                :class="['nav-item', { 'menu-open': isGroupActive(item) }]">
+                :class="['nav-item', { 'menu-open': item.children && openGroups[item.label] }]">
 
               <router-link v-if="!item.children" :to="item.path"
                            class="nav-link"
@@ -29,7 +56,8 @@ export default {
 
               <template v-else>
                 <a href="#" class="nav-link"
-                   :class="{ 'active': isGroupActive(item) }">
+                   :class="{ active: isGroupActive(item) }"
+                   @click.prevent="toggle(item.label)">
                   <i :class="['nav-icon fas', item.icon]"></i>
                   <p>
                     {{ item.label }}
@@ -42,7 +70,7 @@ export default {
                     <router-link :to="sub.path"
                                  class="nav-link"
                                  active-class="active">
-                      <i :class="['nav-icon fas fa-circle fa-xs', sub.icon ? sub.icon : '']"></i>
+                      <i :class="['nav-icon fas fa-circle fa-xs', sub.icon || '']"></i>
                       <p>{{ sub.label }}</p>
                     </router-link>
                   </li>
