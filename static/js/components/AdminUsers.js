@@ -1,4 +1,4 @@
-import { api }        from '../api.js';
+import { api, getToken } from '../api.js';
 import BasePage       from './BasePage.js';
 import BasePanel      from './BasePanel.js';
 import BaseTable      from './BaseTable.js';
@@ -7,7 +7,6 @@ import BaseButtonGroup from './BaseButtonGroup.js';
 import BaseModal      from './BaseModal.js';
 import BaseInput      from './BaseInput.js';
 import ConfirmDialog  from './ConfirmDialog.js';
-import { getToken }   from '../api.js';
 
 const { ref, onMounted } = Vue;
 
@@ -30,12 +29,12 @@ export default {
     const payload   = decodeToken(getToken());
     const isAdmin   = payload?.is_admin === true;
 
-    const users     = ref([]);
-    const loading   = ref(false);
-    const saving    = ref(false);
-    const pageError = ref(null);
-    const formError = ref(null);
-    const modalRef  = ref(null);
+    const users      = ref([]);
+    const loading    = ref(false);
+    const saving     = ref(false);
+    const pageError  = ref(null);
+    const formError  = ref(null);
+    const modalRef   = ref(null);
     const confirmRef = ref(null);
 
     const form = ref({ userid: '', username: '', password: '' });
@@ -109,20 +108,20 @@ export default {
   template: `
     <base-page title="Users" subtitle="Console user management" icon="fas fa-users">
 
-      <template v-if="!isAdmin">
-        <div class="alert alert-danger">
-          <i class="fas fa-lock mr-2"></i>Access restricted to administrators.
-        </div>
-      </template>
-
-      <template v-else>
-        <template #actions>
+      <template #actions>
+        <template v-if="isAdmin">
           <base-button icon="fas fa-plus" color="primary" label="New User"
                        class="mr-2" :disabled="loading" @click="openCreate" />
           <base-button icon="fas fa-sync-alt" color="outline-primary" label="Refresh"
                        :loading="loading" @click="loadUsers" />
         </template>
+      </template>
 
+      <div v-if="!isAdmin" class="alert alert-danger">
+        <i class="fas fa-lock mr-2"></i>Access restricted to administrators.
+      </div>
+
+      <template v-if="isAdmin">
         <base-panel :no-padding="true">
           <base-table :columns="columns" :items="users">
 
@@ -156,7 +155,8 @@ export default {
           </div>
           <div class="form-group mb-0">
             <label class="small font-weight-bold">Password <span class="text-danger">*</span></label>
-            <base-input v-model="form.password" placeholder="Password" />
+            <input v-model="form.password" type="password"
+                   class="form-control form-control-sm" placeholder="Password" />
           </div>
           <div v-if="formError" class="alert alert-danger mt-3 mb-0 py-2 small">
             <i class="fas fa-exclamation-circle mr-1"></i>{{ formError }}
