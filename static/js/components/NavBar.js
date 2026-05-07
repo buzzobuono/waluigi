@@ -30,11 +30,10 @@ export default {
           </a>
         </li>
 
-        <UserBadge 
-          :username="user?.name" 
-          :role="user?.role" 
-          :avatarUrl="user?.avatar"
-          @logout="$emit('logout')" 
+        <UserBadge
+          :username="user?.name"
+          :role="user?.role"
+          @logout="$emit('logout')"
         />
       </ul>
     </nav>
