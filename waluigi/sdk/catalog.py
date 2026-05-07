@@ -150,30 +150,32 @@ class CatalogClient:
     # ── CHARTS ────────────────────────────────────────────────────────────────
 
     def set_charts(self, dataset_id: str, charts: List[dict]) -> List[dict]:
-        """Replace all chart definitions for a dataset (idempotent).
+        """Replace all chart definitions for a dataset (idempotent, upsert by key).
 
-        Deletes existing charts then recreates them from *charts*, so the
-        result always matches the provided list exactly — safe to call from
-        a pipeline job on every run.
+        Upserts by ``key`` — existing charts keep their DB id so dashboard
+        panels that reference a (dataset_id, chart_key) pair stay valid across
+        pipeline re-runs. Charts not present in the new list are deleted.
 
-        Each item: {"title": str, "spec": dict, "position": int (optional)}
-
-        Typical usage from a pipeline task::
-
-            with open("charts/sales.yaml") as f:
-                chart_defs = yaml.safe_load(f)
-            catalog.set_charts("analytics/sales/monthly", chart_defs)
+        Each item: {"key": str, "title": str, "spec": dict, "position": int (optional)}
         """
-        for c in self._get(f"/datasets/{dataset_id}/charts"):
-            self._delete(f"/datasets/{dataset_id}/charts/{c['id']}")
-        result = []
+        existing = {c["key"]: c for c in self._get(f"/datasets/{dataset_id}/charts")}
+        new_keys = set()
+        result   = []
         for i, c in enumerate(charts):
-            created = self._post(f"/datasets/{dataset_id}/charts", json={
-                "title":    c["title"],
-                "spec":     c["spec"],
-                "position": c.get("position", i),
-            })
-            result.append(created)
+            key  = c["key"]
+            body = {"key": key, "title": c["title"], "spec": c["spec"],
+                    "position": c.get("position", i)}
+            new_keys.add(key)
+            if key in existing:
+                updated = self._patch(
+                    f"/datasets/{dataset_id}/charts/{existing[key]['id']}", json=body
+                )
+                result.append(updated)
+            else:
+                result.append(self._post(f"/datasets/{dataset_id}/charts", json=body))
+        for key, c in existing.items():
+            if key not in new_keys:
+                self._delete(f"/datasets/{dataset_id}/charts/{c['id']}")
         return result
 
     # ── DATA OPS ──────────────────────────────────────────────────────────────

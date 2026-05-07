@@ -95,11 +95,13 @@ class SchemaPublishRequest(BaseModel):
 
 
 class ChartCreateRequest(BaseModel):
-    title: str                   = Field(...,  example="Revenue by Category")
-    spec:  Dict[str, Any]        = Field(...,  example={"type": "bar", "x": {"field": "category"}, "y": {"field": "revenue", "agg": "sum"}})
+    key:      str                = Field(...,  example="revenue_by_category")
+    title:    str                = Field(...,  example="Revenue by Category")
+    spec:     Dict[str, Any]     = Field(...,  example={"type": "bar", "x": {"field": "category"}, "y": {"field": "revenue", "agg": "sum"}})
     position: int                = Field(0)
 
 class ChartUpdateRequest(BaseModel):
+    key:      Optional[str]            = None
     title:    Optional[str]            = None
     spec:     Optional[Dict[str, Any]] = None
     position: Optional[int]            = None
