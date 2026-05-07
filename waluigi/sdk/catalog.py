@@ -152,28 +152,26 @@ class CatalogClient:
     def set_charts(self, dataset_id: str, charts: List[dict]) -> List[dict]:
         """Replace all chart definitions for a dataset (idempotent).
 
-        Deletes existing charts then recreates them from *charts*, so the
-        result always matches the provided list exactly — safe to call from
-        a pipeline job on every run.
+        Updates existing charts in-place by position to preserve their IDs
+        (so dashboard panels stay valid across pipeline re-runs). Adds new
+        charts if the new list is longer; deletes extras if shorter.
 
         Each item: {"title": str, "spec": dict, "position": int (optional)}
-
-        Typical usage from a pipeline task::
-
-            with open("charts/sales.yaml") as f:
-                chart_defs = yaml.safe_load(f)
-            catalog.set_charts("analytics/sales/monthly", chart_defs)
         """
-        for c in self._get(f"/datasets/{dataset_id}/charts"):
-            self._delete(f"/datasets/{dataset_id}/charts/{c['id']}")
+        existing = self._get(f"/datasets/{dataset_id}/charts")
         result = []
         for i, c in enumerate(charts):
-            created = self._post(f"/datasets/{dataset_id}/charts", json={
-                "title":    c["title"],
-                "spec":     c["spec"],
-                "position": c.get("position", i),
-            })
-            result.append(created)
+            pos = c.get("position", i)
+            body = {"title": c["title"], "spec": c["spec"], "position": pos}
+            if i < len(existing):
+                updated = self._patch(
+                    f"/datasets/{dataset_id}/charts/{existing[i]['id']}", json=body
+                )
+                result.append(updated)
+            else:
+                result.append(self._post(f"/datasets/{dataset_id}/charts", json=body))
+        for extra in existing[len(charts):]:
+            self._delete(f"/datasets/{dataset_id}/charts/{extra['id']}")
         return result
 
     # ── DATA OPS ──────────────────────────────────────────────────────────────
