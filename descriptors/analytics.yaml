@@ -7,7 +7,7 @@ spec:
     namespace: "analytics"
     command: "python ../source/analytics/global_report.py"
     params:
-      date: "2026-03-20"
+      date: "2026-03-22"
     attributes:
       var: "pippo"
     resources:
