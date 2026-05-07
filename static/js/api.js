@@ -117,6 +117,8 @@ export const api = {
   datasetDQResults:    (id)              => _get(`/catalog/datasets/${_enc(id)}/dq`),
   datasetDQResult:     (id, ver)         => _get(`/catalog/datasets/${_enc(id)}/dq/${_enc(ver)}`),
 
+  catalogMaterialize:  (id, body)        => _postJson(`/catalog/datasets/${_enc(id)}/materialize`, body),
+
   datasetExpectations: (id)              => _get(`/catalog/datasets/${_enc(id)}/expectations`),
   addExpectation:      (id, body)        => _postJson(`/catalog/datasets/${_enc(id)}/expectations`, body),
   updateExpectation:   (id, expId, body) => _patchJson(`/catalog/datasets/${_enc(id)}/expectations/${expId}`, body),
