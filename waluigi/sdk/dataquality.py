@@ -43,13 +43,15 @@ class SuiteResult(BaseModel):
 # ── Formula Safety ────────────────────────────────────────────────────────────
 
 _SAFE_BUILTINS = {
-    "int", "float", "str", "bool",
+    "int", "float", "str", "bool", "type",
     "abs", "round", "len", "min", "max",
 }
 
 _SAFE_AST_NODES = {
     # Struttura
     ast.Expression, ast.Expr,
+    # Lambda (usata in .apply/.map) — il corpo è comunque ispezionato
+    ast.Lambda, ast.arguments, ast.arg,
     # Operatori booleani e comparatori
     ast.BoolOp, ast.And, ast.Or, ast.Not,
     ast.Compare, ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE,
@@ -69,18 +71,30 @@ _SAFE_AST_NODES = {
     ast.Subscript, ast.Index, ast.Slice,
 }
 
+def _collect_lambda_params(tree) -> set:
+    params = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Lambda):
+            for arg in node.args.args:
+                params.add(arg.arg)
+    return params
+
+
 def _check_formula_safety(formula: str, allowed_names: set) -> None:
     try:
         tree = ast.parse(formula, mode="eval")
     except SyntaxError as e:
         raise ValueError(f"Sintassi non valida nella formula: {e}")
 
+    lambda_params = _collect_lambda_params(tree)
+    valid_names = allowed_names | _SAFE_BUILTINS | lambda_params
+
     for node in ast.walk(tree):
         if type(node) not in _SAFE_AST_NODES:
             raise ValueError(
                 f"Costrutto non permesso nella formula: {type(node).__name__}"
             )
-        if isinstance(node, ast.Name) and node.id not in allowed_names | _SAFE_BUILTINS:
+        if isinstance(node, ast.Name) and node.id not in valid_names:
             raise ValueError(
                 f"Nome '{node.id}' non dichiarato in inputs_schema o params_schema"
             )
