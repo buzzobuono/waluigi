@@ -267,8 +267,7 @@ class DQManager:
         _check_formula_safety(formula, declared_names)
     
         safe_env = {
-            # builtin sicuri resi disponibili all'eval
-            "int": int, "float": float, "str": str, "bool": bool,
+            "int": int, "float": float, "str": str, "bool": bool, "type": type,
             "abs": abs, "round": round, "len": len, "min": min, "max": max,
             **env,
         }
