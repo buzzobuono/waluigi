@@ -98,6 +98,13 @@ export default {
           class="ml-auto"
           @click="$router.push('/schema/' + params.id)"
         />
+        <base-button
+          label="Charts"
+          icon="fas fa-chart-bar"
+          color="outline-info"
+          class="ml-2"
+          @click="$router.push('/charts/' + params.id + '/' + params.version)"
+        />
       </template>
 
       <base-panel :no-padding="true">

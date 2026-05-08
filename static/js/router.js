@@ -32,7 +32,7 @@ const routes = [
   { path: '/datasets/:id+/:version', component: DatasetPreview, meta: { title: 'Dataset Preview', requiresAuth: true } },
   { path: '/schema/:id+',            component: DatasetSchema,  meta: { title: 'Schema',          requiresAuth: true } },
   { path: '/dq/:id+/:version',       component: DatasetDQ,      meta: { title: 'Data Quality',    requiresAuth: true } },
-  { path: '/chart/:id+/:cid(\\d+)',  component: DatasetCharts,  meta: { title: 'Chart',           requiresAuth: true } },
+  { path: '/charts/:id+/:version',   component: DatasetCharts,  meta: { title: 'Charts',          requiresAuth: true } },
   { path: '/dashboard',              component: Dashboard,      meta: { title: 'Dashboard',       requiresAuth: true } },
   { path: '/dq/rules',  component: Expectations, meta: { title: 'DQ Rules', requiresAuth: true } },
   { path: '/lineage',   component: Lineage,   meta: { title: 'Lineage',    requiresAuth: true } },
