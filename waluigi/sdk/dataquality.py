@@ -266,16 +266,16 @@ class DQManager:
         declared_names = set(definition.inputs_schema) | set(definition.params_schema or {})
         _check_formula_safety(formula, declared_names)
     
-        safe_env = {
+        safe_globals = {
+            "__builtins__": {},
             "int": int, "float": float, "str": str, "bool": bool, "type": type,
             "abs": abs, "round": round, "len": len, "min": min, "max": max,
             **env,
         }
-    
+
         return eval(
             compile(formula.strip(), "<dq_formula>", "eval"),
-            {"__builtins__": {}},
-            safe_env,
+            safe_globals,
         )
 
     def _execute(
