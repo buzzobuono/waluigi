@@ -41,17 +41,20 @@ def log(msg):
 @app.post('/execute')
 async def execute(request: Request):
     data = await request.json()
-    workdir = data.get("workdir", DEFAULT_WORKDIR)
-    command = data.get("command")
-    id = data.get("id")
-    job_id = data.get("job_id")
+    workdir   = data.get("workdir", DEFAULT_WORKDIR)
+    command   = data.get("command")
+    script    = data.get("script")
+    id        = data.get("id")
+    job_id    = data.get("job_id")
     namespace = data.get("namespace")
-    params = data.get("params", {})
+    params     = data.get("params", {})
     attributes = data.get("attributes", {})
-    resources = data.get("resources")
+    resources  = data.get("resources")
 
-    if not command:
-        return JSONResponse({"status": "error", "message": "No command provided"}, status_code=400)
+    if script:
+        command = "python -c \"import os; exec(os.environ['WALUIGI_SCRIPT'])\""
+    elif not command:
+        return JSONResponse({"status": "error", "message": "No command or script provided"}, status_code=400)
 
     log(f"Task recieved: {id}")
 
@@ -64,7 +67,7 @@ async def execute(request: Request):
 
     try:
         asyncio.create_task(
-            run_command_async(command, id, job_id, namespace, params, attributes, resources, workdir)
+            run_command_async(command, id, job_id, namespace, params, attributes, resources, workdir, script)
         )
         return JSONResponse({"status": "submitted", "id": id}, status_code=202)
 
@@ -74,7 +77,7 @@ async def execute(request: Request):
             active_tasks_count -= 1
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
-async def run_command_async(command, id, job_id, namespace, params, attributes, resources, workdir):
+async def run_command_async(command, id, job_id, namespace, params, attributes, resources, workdir, script=None):
     global active_tasks_count
 
     try:
@@ -88,7 +91,9 @@ async def run_command_async(command, id, job_id, namespace, params, attributes, 
             env[f"WALUIGI_ATTRIBUTE_{k.upper()}"] = str(v)
         env["WALUIGI_TASK_ID"] = id
         env["WALUIGI_JOB_ID"] = job_id
-        log(f"🚀 Forking: {command}")
+        if script:
+            env["WALUIGI_SCRIPT"] = script
+        log(f"🚀 Forking: {'<inline script>' if script else command}")
 
         process = await asyncio.create_subprocess_shell(
             command,

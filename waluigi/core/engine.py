@@ -49,6 +49,7 @@ class WaluigiEngine:
         payload = {
             "workdir": job_metadata['workdir'],
             "command": task.command,
+            "script":  task.script,
             "id": task.id,
             "job_id": job_metadata['job_id'],
             "params": vars(task.params),
