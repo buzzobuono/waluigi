@@ -1,4 +1,4 @@
 ARG VERSION
 FROM buzzobuono/waluigi-base:${VERSION:-latest}
 
-CMD ["wlworker"]
+CMD ["wlconsole"]

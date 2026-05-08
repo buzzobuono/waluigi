@@ -12,7 +12,11 @@ dependencies = [
     "pyyaml",
     "fastapi",
     "uvicorn",
-    "httpx"
+    "httpx",
+    "pandas",
+    "pyarrow",
+    "boto3",
+    "sqlalchemy"
 ]
 
 [tool.setuptools.packages.find]
