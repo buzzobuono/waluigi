@@ -43,13 +43,15 @@ class SuiteResult(BaseModel):
 # ── Formula Safety ────────────────────────────────────────────────────────────
 
 _SAFE_BUILTINS = {
-    "int", "float", "str", "bool",
+    "int", "float", "str", "bool", "type",
     "abs", "round", "len", "min", "max",
 }
 
 _SAFE_AST_NODES = {
     # Struttura
     ast.Expression, ast.Expr,
+    # Lambda (usata in .apply/.map) — il corpo è comunque ispezionato
+    ast.Lambda, ast.arguments, ast.arg,
     # Operatori booleani e comparatori
     ast.BoolOp, ast.And, ast.Or, ast.Not,
     ast.Compare, ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE,
@@ -61,13 +63,22 @@ _SAFE_AST_NODES = {
     ast.BitAnd, ast.BitOr, ast.BitXor, ast.Invert,
     # Literals e nomi
     ast.Constant, ast.Name, ast.Load,
-    # Accesso attributi e chiamate
-    ast.Attribute, ast.Call,
+    # Accesso attributi e chiamate (ast.keyword copre i named args es. regex=True)
+    ast.Attribute, ast.Call, ast.keyword,
     # Strutture dati
     ast.List, ast.Tuple, ast.Dict,
     # Subscript e slicing
     ast.Subscript, ast.Index, ast.Slice,
 }
+
+def _collect_lambda_params(tree) -> set:
+    params = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Lambda):
+            for arg in node.args.args:
+                params.add(arg.arg)
+    return params
+
 
 def _check_formula_safety(formula: str, allowed_names: set) -> None:
     try:
@@ -75,12 +86,15 @@ def _check_formula_safety(formula: str, allowed_names: set) -> None:
     except SyntaxError as e:
         raise ValueError(f"Sintassi non valida nella formula: {e}")
 
+    lambda_params = _collect_lambda_params(tree)
+    valid_names = allowed_names | _SAFE_BUILTINS | lambda_params
+
     for node in ast.walk(tree):
         if type(node) not in _SAFE_AST_NODES:
             raise ValueError(
                 f"Costrutto non permesso nella formula: {type(node).__name__}"
             )
-        if isinstance(node, ast.Name) and node.id not in allowed_names | _SAFE_BUILTINS:
+        if isinstance(node, ast.Name) and node.id not in valid_names:
             raise ValueError(
                 f"Nome '{node.id}' non dichiarato in inputs_schema o params_schema"
             )
@@ -132,6 +146,38 @@ class DQManager:
     
         return SuiteResult(
             suite_path=suite_path,
+            total=len(results),
+            passed=passed,
+            failed=len(results) - passed,
+            success=passed == len(results),
+            results=results,
+        )
+
+    def run_from_db(
+        self,
+        expectations: list,
+        datasets: Dict[str, pd.DataFrame],
+    ) -> SuiteResult:
+        """Run DQ from a list of expectation dicts (from the DB, not a YAML file)."""
+        results = []
+        for item in expectations:
+            try:
+                exec_r = RuleExecution(
+                    rule_id=item["rule_id"],
+                    inputs=item.get("inputs") or {},
+                    params=item.get("params") or {},
+                    tolerance=item.get("tolerance", 1.0),
+                )
+            except Exception as e:
+                results.append(
+                    RuleResult(rule_id=item.get("rule_id", "?"), success=False, error=str(e))
+                )
+                continue
+            results.append(self._execute(exec_r, datasets))
+
+        passed = sum(1 for r in results if r.success)
+        return SuiteResult(
+            suite_path="<db>",
             total=len(results),
             passed=passed,
             failed=len(results) - passed,
@@ -220,17 +266,16 @@ class DQManager:
         declared_names = set(definition.inputs_schema) | set(definition.params_schema or {})
         _check_formula_safety(formula, declared_names)
     
-        safe_env = {
-            # builtin sicuri resi disponibili all'eval
-            "int": int, "float": float, "str": str, "bool": bool,
+        safe_globals = {
+            "__builtins__": {},
+            "int": int, "float": float, "str": str, "bool": bool, "type": type,
             "abs": abs, "round": round, "len": len, "min": min, "max": max,
             **env,
         }
-    
+
         return eval(
             compile(formula.strip(), "<dq_formula>", "eval"),
-            {"__builtins__": {}},
-            safe_env,
+            safe_globals,
         )
 
     def _execute(
