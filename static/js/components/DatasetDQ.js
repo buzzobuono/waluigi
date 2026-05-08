@@ -119,7 +119,7 @@ export default {
     return {
       datasetId, version, result,
       loading, error, noResult, gaugeOpt, barOpt,
-      DQ_COLUMNS,
+      DQ_COLUMNS, load,
       goBack: () => router.go(-1),
     };
   },
@@ -128,10 +128,9 @@ export default {
     <base-page title="Data Quality" :subtitle="datasetId" icon="fas fa-shield-alt" :loading="loading">
 
       <template #actions>
-        <base-button label="Back" icon="fas fa-arrow-left"
-                     color="outline-secondary" @click="goBack" />
-        <base-button label="History" icon="fas fa-chart-line"
-                     color="outline-primary" class="ml-2"
+        <base-button label="Back"    icon="fas fa-arrow-left"  color="outline-secondary" @click="goBack" />
+        <base-button label="Refresh" icon="fas fa-sync-alt"   color="outline-primary"   class="ml-2" :loading="loading" @click="load" />
+        <base-button label="History" icon="fas fa-chart-line" color="outline-secondary" class="ml-auto"
                      @click="$router.push('/dq-history/' + datasetId)" />
       </template>
 
