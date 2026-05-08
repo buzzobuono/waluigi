@@ -13,6 +13,8 @@ import DatasetPreview  from './components/DatasetPreview.js';
 import DatasetSchema   from './components/DatasetSchema.js';
 import DatasetDQ       from './components/DatasetDQ.js';
 import Expectations    from './components/Expectations.js';
+import DatasetExpectations from './components/DatasetExpectations.js';
+import DatasetChartDefs    from './components/DatasetChartDefs.js';
 import DatasetCharts   from './components/DatasetCharts.js';
 import Dashboard       from './components/Dashboard.js';
 
@@ -30,8 +32,10 @@ const routes = [
   { path: '/catalog',   component: Catalog,   meta: { title: 'Catalog',    requiresAuth: true } },
   { path: '/sources',   component: Sources,   meta: { title: 'Sources',    requiresAuth: true } },
   { path: '/datasets/:id+/:version', component: DatasetPreview, meta: { title: 'Dataset Preview', requiresAuth: true } },
-  { path: '/schema/:id+',            component: DatasetSchema,  meta: { title: 'Schema',          requiresAuth: true } },
-  { path: '/dq/:id+/:version',       component: DatasetDQ,      meta: { title: 'Data Quality',    requiresAuth: true } },
+  { path: '/schema/:id+',            component: DatasetSchema,       meta: { title: 'Schema',          requiresAuth: true } },
+  { path: '/expectations/:id+',      component: DatasetExpectations, meta: { title: 'DQ Expectations', requiresAuth: true } },
+  { path: '/chart-defs/:id+',        component: DatasetChartDefs,    meta: { title: 'Chart Defs',      requiresAuth: true } },
+  { path: '/dq/:id+/:version',       component: DatasetDQ,           meta: { title: 'Data Quality',    requiresAuth: true } },
   { path: '/charts/:id+/:version',   component: DatasetCharts,  meta: { title: 'Charts',          requiresAuth: true } },
   { path: '/dashboard',              component: Dashboard,      meta: { title: 'Dashboard',       requiresAuth: true } },
   { path: '/dq/rules',  component: Expectations, meta: { title: 'DQ Rules', requiresAuth: true } },
