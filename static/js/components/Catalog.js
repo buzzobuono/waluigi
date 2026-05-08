@@ -362,6 +362,12 @@ export default {
                 @click="$router.push('/dq/' + selDataset + '/' + item.version)"
               />
               <base-button
+                icon="fas fa-chart-bar"
+                color="outline-warning"
+                title="Charts"
+                @click="$router.push('/charts/' + selDataset + '/' + item.version)"
+              />
+              <base-button
                 icon="fas fa-sitemap"
                 color="outline-primary"
                 title="Lineage"
