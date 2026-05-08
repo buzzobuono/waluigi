@@ -52,7 +52,7 @@ export default {
       }
     }
 
-    function goBack() { router.push(`/datasets/${datasetId.value}/${version.value}`); }
+    function goBack() { router.go(-1); }
 
     onMounted(loadCharts);
 
