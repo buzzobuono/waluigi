@@ -358,6 +358,7 @@ export default {
              <base-button-group v-if="item.type !== 'folder'">
               <base-button icon="fas fa-columns"    color="outline-warning" title="Schema columns"    @click="$router.push('/schema/'       + item.id)" />
               <base-button icon="fas fa-shield-alt" color="outline-success" title="DQ Expectations"  @click="$router.push('/expectations/' + item.id)" />
+              <base-button icon="fas fa-chart-line" color="outline-primary" title="DQ History"       @click="$router.push('/dq-history/'   + item.id)" />
               <base-button icon="fas fa-chart-bar"  color="outline-info"    title="Chart definitions" @click="$router.push('/chart-defs/'   + item.id)" />
              </base-button-group>
            </template>

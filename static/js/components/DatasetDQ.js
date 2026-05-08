@@ -69,33 +69,6 @@ function barOption(details) {
   };
 }
 
-function trendOption(results) {
-  const sorted = [...results].sort((a, b) => a.version.localeCompare(b.version));
-  return {
-    tooltip: { trigger: 'axis', formatter: (p) => `${p[0].name.slice(0,19)}<br/>Score: ${p[0].value}%` },
-    grid:    { left: '8%', right: '4%', top: '10%', bottom: '15%' },
-    xAxis: {
-      type: 'category',
-      data: sorted.map(r => r.version.slice(0, 16)),
-      axisLabel: { rotate: 30, fontSize: 10 },
-    },
-    yAxis:  { type: 'value', min: 0, max: 100, axisLabel: { formatter: '{value}%' } },
-    series: [{
-      type: 'line',
-      data: sorted.map(r => +(r.score * 100).toFixed(1)),
-      smooth: true,
-      symbol: 'circle',
-      symbolSize: 6,
-      lineStyle: { width: 2 },
-      itemStyle: { color: '#007bff' },
-      areaStyle: { opacity: 0.1, color: '#007bff' },
-      markLine: {
-        silent: true,
-        data: [{ type: 'average', label: { formatter: 'avg {c}%' } }],
-      },
-    }],
-  };
-}
 
 const DQ_COLUMNS = [
   { key: 'rule_id',   label: 'Rule' },
@@ -119,24 +92,18 @@ export default {
     const version = computed(() => route.params.version);
 
     const result   = ref(null);
-    const history  = ref([]);
     const loading  = ref(false);
     const error    = ref(null);
 
     const gaugeOpt = computed(() => result.value ? gaugeOption(result.value.score, result.value.success) : null);
     const barOpt   = computed(() => result.value?.details?.length ? barOption(result.value.details) : null);
-    const trendOpt = computed(() => history.value.length > 1 ? trendOption(history.value) : null);
 
     async function load() {
       loading.value = true;
       error.value   = null;
       try {
-        const [resR, histR] = await Promise.allSettled([
-          api.datasetDQResult(datasetId.value, version.value),
-          api.datasetDQResults(datasetId.value),
-        ]);
-        result.value  = resR.status  === 'fulfilled' ? (resR.value?.data  ?? null) : null;
-        history.value = histR.status === 'fulfilled' ? (histR.value?.data ?? [])   : [];
+        const res    = await api.datasetDQResult(datasetId.value, version.value);
+        result.value = res.data ?? null;
         if (!result.value) error.value = 'No DQ result found for this version.';
       } catch (e) {
         error.value = e.message;
@@ -148,8 +115,8 @@ export default {
     onMounted(load);
 
     return {
-      datasetId, version, result, history,
-      loading, error, gaugeOpt, barOpt, trendOpt,
+      datasetId, version, result,
+      loading, error, gaugeOpt, barOpt,
       DQ_COLUMNS,
       goBack: () => router.go(-1),
     };
@@ -161,9 +128,9 @@ export default {
       <template #actions>
         <base-button label="Back" icon="fas fa-arrow-left"
                      color="outline-secondary" @click="goBack" />
-        <base-button label="Schema" icon="fas fa-project-diagram"
-                     color="outline-warning" class="ml-2"
-                     @click="$router.push('/schema/' + datasetId)" />
+        <base-button label="History" icon="fas fa-chart-line"
+                     color="outline-primary" class="ml-2"
+                     @click="$router.push('/dq-history/' + datasetId)" />
       </template>
 
       <div v-if="error" class="alert alert-warning">
@@ -220,13 +187,6 @@ export default {
           </div>
 
         </div>
-
-        <!-- Trend (only if multiple versions) -->
-        <base-panel v-if="trendOpt" title="Score Trend" icon="fa-chart-line" :no-padding="true" class="mb-4">
-          <div style="height:200px;">
-            <chart-widget :option="trendOpt" height="200px" />
-          </div>
-        </base-panel>
 
         <!-- Detail table -->
         <base-panel v-if="result.details && result.details.length"
