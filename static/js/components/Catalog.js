@@ -147,10 +147,6 @@ export default {
       router.push({ path: '/catalog', query: { folder, dataset } });
     }
 
-    function openSchema(item) {
-      router.push('/schema/' + item.id);
-    }
-
     function navigateTo(path) {
       router.push({ path: '/catalog', query: { folder: path || undefined } });
     }
@@ -231,7 +227,7 @@ export default {
       columns, items, folderStack, children, datasets, loading,
       selFolder, selDataset, columns_history, history, metadata, detailOpen,
       selectedVersion, currentFolder,
-      navigateTo, navigateBreadcrumb, openDataset, openSchema, closeDetail, goBack,
+      navigateTo, navigateBreadcrumb, openDataset, closeDetail, goBack,
       selectVersion, materializeRef,
     };
   },
@@ -304,14 +300,10 @@ export default {
           </template>
           
           <template #cell(actions)="{ item }">
-             <base-button-group>
-              <base-button
-                  icon="fas fa-columns"
-                  color="outline-warning"
-                  title="Schema"
-                  :hidden="item.type === 'folder'"
-                  @click="openSchema(item)"
-              />
+             <base-button-group v-if="item.type !== 'folder'">
+              <base-button icon="fas fa-columns"    color="outline-warning" title="Schema columns"    @click="$router.push('/schema/'       + item.id)" />
+              <base-button icon="fas fa-shield-alt" color="outline-success" title="DQ Expectations"  @click="$router.push('/expectations/' + item.id)" />
+              <base-button icon="fas fa-chart-bar"  color="outline-info"    title="Chart definitions" @click="$router.push('/chart-defs/'   + item.id)" />
              </base-button-group>
            </template>
         </base-table>
