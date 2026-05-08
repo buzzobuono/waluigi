@@ -93,6 +93,7 @@ async def run_command_async(command, id, job_id, namespace, params, attributes, 
         env["WALUIGI_JOB_ID"] = job_id
         if script:
             env["WALUIGI_SCRIPT"] = script
+        os.makedirs(workdir, exist_ok=True)
         log(f"🚀 Forking: {'<inline script>' if script else command}")
 
         process = await asyncio.create_subprocess_shell(

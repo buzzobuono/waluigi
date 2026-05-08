@@ -94,19 +94,21 @@ export default {
     const result   = ref(null);
     const loading  = ref(false);
     const error    = ref(null);
+    const noResult = ref(false);
 
     const gaugeOpt = computed(() => result.value ? gaugeOption(result.value.score, result.value.success) : null);
     const barOpt   = computed(() => result.value?.details?.length ? barOption(result.value.details) : null);
 
     async function load() {
-      loading.value = true;
-      error.value   = null;
+      loading.value  = true;
+      error.value    = null;
+      noResult.value = false;
       try {
         const res    = await api.datasetDQResult(datasetId.value, version.value);
         result.value = res.data ?? null;
-        if (!result.value) error.value = 'No DQ result found for this version.';
       } catch (e) {
-        error.value = e.message;
+        if (e.message.includes('404')) noResult.value = true;
+        else error.value = e.message;
       } finally {
         loading.value = false;
       }
@@ -116,7 +118,7 @@ export default {
 
     return {
       datasetId, version, result,
-      loading, error, gaugeOpt, barOpt,
+      loading, error, noResult, gaugeOpt, barOpt,
       DQ_COLUMNS,
       goBack: () => router.go(-1),
     };
@@ -133,8 +135,14 @@ export default {
                      @click="$router.push('/dq-history/' + datasetId)" />
       </template>
 
-      <div v-if="error" class="alert alert-warning">
+      <div v-if="error" class="alert alert-danger">
         <i class="fas fa-exclamation-triangle mr-1"></i>{{ error }}
+      </div>
+
+      <div v-if="noResult" class="text-center text-muted p-5">
+        <i class="fas fa-shield-alt fa-3x mb-3"></i>
+        <p>No DQ result for this version yet.</p>
+        <p class="small">DQ runs automatically on commit if expectations are configured.</p>
       </div>
 
       <template v-if="result">
