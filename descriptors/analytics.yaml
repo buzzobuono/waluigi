@@ -1,6 +1,6 @@
 kind: Job
 metadata:
-    workdir: "work"
+    workdir: "/work"
 spec:
     name: "GlobalReport"
     id: "final_report"

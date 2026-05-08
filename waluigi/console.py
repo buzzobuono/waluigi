@@ -264,7 +264,6 @@ async def proxy_catalog(request: Request, path: str):
 
 
 app.mount("/js",  StaticFiles(directory=os.path.join(STATIC_DIR, "js")),  name="js")
-app.mount("/css", StaticFiles(directory=os.path.join(STATIC_DIR, "css")), name="css")
 
 
 @app.get("/{full_path:path}")
