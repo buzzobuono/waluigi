@@ -4,6 +4,8 @@ import BasePanel from './BasePanel.js';
 import BaseButton from './BaseButton.js';
 import BaseButtonGroup from './BaseButtonGroup.js';
 import BaseTable from './BaseTable.js';
+import BaseModal from './BaseModal.js';
+import BaseInput from './BaseInput.js';
 import Materialize from './Materialize.js';
 
 const { computed, watch, onMounted } = Vue;
@@ -11,7 +13,7 @@ const { computed, watch, onMounted } = Vue;
 export default {
   name: 'Catalog',
 
-  components: { BasePage, BasePanel, BaseButton, BaseButtonGroup, BaseTable, Materialize },
+  components: { BasePage, BasePanel, BaseButton, BaseButtonGroup, BaseTable, BaseModal, BaseInput, Materialize },
 
   setup() {
     const columns = [
@@ -38,6 +40,50 @@ export default {
     const items   = Vue.ref([]);
     const loading    = Vue.ref(false);
     const materializeRef = Vue.ref(null);
+
+    // create dataset modal
+    const newDatasetModalRef = Vue.ref(null);
+    const newDatasetSaving   = Vue.ref(false);
+    const newDatasetError    = Vue.ref(null);
+    const newDatasetSources  = Vue.ref([]);
+    const FORMATS = ['parquet', 'csv', 'tsv', 'json', 'sql'];
+    const newDatasetForm = Vue.ref({ id: '', format: 'parquet', description: '', source_id: '' });
+
+    function openNewDataset() {
+      const prefix = currentFolder.value ? currentFolder.value + '/' : '';
+      newDatasetForm.value = { id: prefix, format: 'parquet', description: '', source_id: '' };
+      newDatasetError.value = null;
+      api.catalogSources().then(r => { newDatasetSources.value = r.data || []; }).catch(() => {});
+      newDatasetModalRef.value?.open();
+    }
+
+    async function submitNewDataset() {
+      newDatasetError.value  = null;
+      newDatasetSaving.value = true;
+      try {
+        const body = {
+          id:          newDatasetForm.value.id.trim(),
+          format:      newDatasetForm.value.format,
+          description: newDatasetForm.value.description.trim(),
+          source_id:   newDatasetForm.value.source_id || null,
+        };
+        if (!body.id || !body.description) {
+          newDatasetError.value = 'ID and description are required.';
+          return;
+        }
+        const res = await api.catalogCreateDataset(body);
+        if (res.diagnostic?.result === 'KO') {
+          newDatasetError.value = res.diagnostic?.messages?.[0] || 'Error creating dataset';
+          return;
+        }
+        newDatasetModalRef.value?.close();
+        await loadFolders(currentFolder.value);
+      } catch (e) {
+        newDatasetError.value = e.message;
+      } finally {
+        newDatasetSaving.value = false;
+      }
+    }
 
     // detail panel
     const selFolder      = Vue.ref(null);
@@ -229,6 +275,8 @@ export default {
       selectedVersion, currentFolder,
       navigateTo, navigateBreadcrumb, openDataset, closeDetail, goBack,
       selectVersion, materializeRef,
+      newDatasetModalRef, newDatasetSaving, newDatasetError, newDatasetSources,
+      newDatasetForm, FORMATS, openNewDataset, submitNewDataset,
     };
   },
 
@@ -245,11 +293,18 @@ export default {
             color="outline-secondary"
             @click="goBack"
           />
-          <base-button 
-            label="Materialize" 
-            icon="fas fa-cloud-download-alt" 
-            color="outline-primary" 
+          <base-button
+            label="New Dataset"
+            icon="fas fa-plus"
+            color="outline-success"
             class="ml-auto"
+            @click="openNewDataset"
+          />
+          <base-button
+            label="Materialize"
+            icon="fas fa-cloud-download-alt"
+            color="outline-primary"
+            class="ml-2"
             @click="materializeRef && materializeRef.open(currentFolder || '')"
           />
       </template>
@@ -390,7 +445,50 @@ export default {
      </base-panel>
      
      <materialize ref="materializeRef" @done="loadFolders(currentFolder)"></materialize>
-    
+
+     <!-- create dataset modal -->
+     <base-modal ref="newDatasetModalRef" size="md" icon="fas fa-plus"
+                 title="New Dataset" :scrollable="false">
+
+       <div v-if="newDatasetError" class="alert alert-danger mb-3">{{ newDatasetError }}</div>
+
+       <div class="form-group">
+         <label class="small text-muted">ID <span class="text-secondary">(path, e.g. sales/raw/transactions)</span></label>
+         <base-input v-model="newDatasetForm.id" placeholder="folder/subfolder/dataset_name" />
+       </div>
+
+       <div class="form-group">
+         <label class="small text-muted">Format</label>
+         <select class="form-control form-control-sm" v-model="newDatasetForm.format">
+           <option v-for="f in FORMATS" :key="f" :value="f">{{ f }}</option>
+         </select>
+       </div>
+
+       <div class="form-group">
+         <label class="small text-muted">Description</label>
+         <textarea class="form-control form-control-sm" rows="3"
+                   v-model="newDatasetForm.description" placeholder="Human-readable description"></textarea>
+       </div>
+
+       <div class="form-group">
+         <label class="small text-muted">Source <span class="text-secondary">(optional)</span></label>
+         <select class="form-control form-control-sm" v-model="newDatasetForm.source_id">
+           <option value="">— none —</option>
+           <option v-for="s in newDatasetSources" :key="s.id" :value="s.id">{{ s.id }}</option>
+         </select>
+       </div>
+
+       <template #footer>
+         <base-button label="Create" icon="fas fa-plus" color="primary"
+                      :disabled="newDatasetSaving || !newDatasetForm.id || !newDatasetForm.description"
+                      :loading="newDatasetSaving"
+                      @click="submitNewDataset" />
+         <base-button label="Close" icon="fas fa-times" color="outline-secondary"
+                      class="ml-auto"
+                      @click="newDatasetModalRef && newDatasetModalRef.close()" />
+       </template>
+     </base-modal>
+
     </base-page>
   `
 };
