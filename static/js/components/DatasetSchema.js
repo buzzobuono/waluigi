@@ -398,7 +398,6 @@ export default {
       openAddExpectation, openEditExpectation, submitExpectation, askDeleteExpectation,
       goBack:      () => router.go(-1),
       goToRules:   () => router.push('/dq/rules'),
-      viewChart:   (chart) => router.push(`/chart/${datasetId.value}/${chart.id}`),
       CHART_COLUMNS, CHART_TYPES, AGG_TYPES,
       charts, chartModalRef, confirmChartDel, chartEditId,
       chartSaving, chartError, chartForm,
@@ -544,8 +543,6 @@ export default {
 
           <template #cell(actions)="{ item }">
             <base-button-group>
-              <base-button icon="fas fa-eye" color="outline-info"
-                           title="View chart" @click="viewChart(item)" />
               <base-button icon="fas fa-pencil-alt" color="outline-primary"
                            title="Edit" @click="openEditChart(item)" />
               <base-button icon="fas fa-trash" color="outline-danger"
