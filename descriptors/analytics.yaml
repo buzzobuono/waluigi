@@ -5,20 +5,69 @@ spec:
     name: "GlobalReport"
     id: "final_report"
     namespace: "analytics"
-    command: "python ../source/analytics/global_report.py"
+    script: |
+        import pandas as pd
+        from waluigi.sdk.task import Task
+        from waluigi.sdk.catalog import catalog
+
+        task  = Task()
+        date  = task.params.date
+
+        sources = ["erp", "web", "social"]
+        frames, lineage = [], []
+        for source in sources:
+            reader = catalog.resolve(f"analytics/{source}/clean/clean_{source}")
+            df = reader.read()
+            df["pipeline_source"] = source
+            frames.append(df)
+            lineage.append({"dataset_id": reader.dataset_id, "version": reader.version})
+            print(f"  {source}: {len(df)} rows @ {reader.version}")
+
+        report_df = pd.concat(frames, ignore_index=True)
+        with catalog.produce("analytics/reports/global_report",
+                             format="parquet",
+                             description="Global consolidated report",
+                             metadata={"date": date}, inputs=lineage) as w:
+            w.write(report_df)
+        print(f"Done: {w.dataset_id} @ {w.version}" if not w.skipped else f"Skipped: {w.version}")
     params:
       date: "2026-03-22"
-    attributes:
-      var: "pippo"
     resources:
       coin: 1
     affinity:
       - python
     requires:
-      - name: "CleanDataTask"
+
+      - &clean_task
+        name: "CleanDataTask"
         namespace: "analytics"
         id: "clean_erp"
-        command: "python ../source/analytics/clean_data.py"
+        script: &clean_script |
+            import random, pandas as pd
+            from waluigi.sdk.task import Task
+            from waluigi.sdk.catalog import catalog
+
+            task      = Task()
+            source    = task.params.source.lower()
+            date      = task.params.date
+            fail_prob = float(task.attributes.get("fail_prob", 0))
+
+            if random.random() < fail_prob:
+                raise RuntimeError(f"Simulated failure: {source}")
+
+            reader = catalog.resolve(f"analytics/{source}/raw/raw_{source}")
+            df = reader.read().dropna()
+            df["metric"] = df["metric"].str.strip().str.lower()
+            df["value"]  = df["value"].astype(float)
+            print(f"Cleaned: {len(df)} rows")
+
+            with catalog.produce(f"analytics/{source}/clean/clean_{source}",
+                                 format="parquet",
+                                 description=f"Cleaned {source}",
+                                 metadata={"date": date, "source": source},
+                                 inputs=[{"dataset_id": reader.dataset_id, "version": reader.version}]) as w:
+                w.write(df)
+            print(f"Done: {w.dataset_id} @ {w.version}" if not w.skipped else f"Skipped: {w.version}")
         params:
           source: "ERP"
           date: "${parent.params.date}"
@@ -29,10 +78,38 @@ spec:
         affinity:
           - python
         requires:
-          - name: "RawDataExtract"
+          - &extract_task
+            name: "RawDataExtract"
             namespace: "analytics"
             id: "extract_erp"
-            command: "python ../source/analytics/raw_data_exctact.py"
+            script: &extract_script |
+                import random, pandas as pd
+                from waluigi.sdk.task import Task
+                from waluigi.sdk.catalog import catalog
+
+                METRICS = {
+                    "erp":    [("revenue","finance"),("costs","finance"),
+                               ("orders","operations"),("refunds","finance")],
+                    "web":    [("sessions","traffic"),("pageviews","traffic"),
+                               ("conversions","acquisition"),("bounce_rate","engagement")],
+                    "social": [("followers","audience"),("impressions","reach"),
+                               ("engagements","interaction"),("shares","viral")],
+                }
+
+                task   = Task()
+                source = task.params.source.lower()
+                date   = task.params.date
+
+                rows = [{"date": date, "source": source, "metric": m,
+                         "value": round(random.uniform(100, 10_000), 2), "category": c}
+                        for m, c in METRICS[source]]
+
+                with catalog.produce(f"analytics/{source}/raw/raw_{source}",
+                                     format="parquet",
+                                     description=f"Raw {source}",
+                                     metadata={"date": date, "source": source}) as w:
+                    w.write(pd.DataFrame(rows))
+                print(f"Done: {w.dataset_id} @ {w.version}" if not w.skipped else f"Skipped: {w.version}")
             params:
               source: "${parent.params.source}"
               date: "${parent.params.date}"
@@ -40,53 +117,31 @@ spec:
               coin: 1
             affinity:
               - python
-      - name: "CleanDataTask"
-        namespace: "analytics"
+
+      - <<: *clean_task
         id: "clean_web"
-        command: "python ../source/analytics/clean_data.py"
+        script: *clean_script
         params:
           source: "WEB"
           date: "${parent.params.date}"
-        attributes:
-          fail_prob: "0.0"
-        resources:
-          pdc: 1
-        affinity:
-          - python
         requires:
-          - name: "RawDataExtract"
-            namespace: "analytics"
+          - <<: *extract_task
             id: "extract_web"
-            command: "python ../source/analytics/raw_data_exctact.py"
+            script: *extract_script
             params:
               source: "${parent.params.source}"
               date: "${parent.params.date}"
-            resources:
-              coin: 1
-            affinity:
-              - python
-      - name: "CleanDataTask"
-        namespace: "analytics"
+
+      - <<: *clean_task
         id: "clean_social"
-        command: "python ../source/analytics/clean_data.py"
+        script: *clean_script
         params:
           source: "SOCIAL"
           date: "${parent.params.date}"
-        attributes:
-          fail_prob: "0.0"
-        resources:
-          pdc: 1
-        affinity:
-          - python
         requires:
-          - name: "RawDataExtract"
-            namespace: "analytics"
+          - <<: *extract_task
             id: "extract_social"
-            command: "python ../source/analytics/raw_data_exctact.py"
+            script: *extract_script
             params:
               source: "${parent.params.source}"
               date: "${parent.params.date}"
-            resources:
-              coin: 1
-            affinity:
-              - python

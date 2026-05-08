@@ -8,6 +8,7 @@ class DynamicTask:
         self.id = data.get('id', self.name)
         self.namespace = data.get('namespace', 'default')
         self.command = data.get('command', '')
+        self.script  = data.get('script')          # inline Python — alternative to command
         self.resources = data.get('resources', {'coin': 1.0})
         self.params = SimpleNamespace(**self._resolve_params(data.get('params', {}), parent))
         self.attributes = SimpleNamespace(**data.get('attributes', {}))
