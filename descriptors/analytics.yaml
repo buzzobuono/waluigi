@@ -1,93 +1,256 @@
-kind: Job
-metadata:
-    workdir: "/work"
-spec:
-    name: "GlobalReport"
-    id: "final_report"
-    namespace: "analytics"
-    script: |
+q.scripts:
+    report: &report_script | 
         import pandas as pd
-        from waluigi.sdk.task import Task
+        from waluigi.sdk.context import context
         from waluigi.sdk.catalog import catalog
         from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
 
-        task = Task()
-        date = task.params.date
+        date = context.params.date
+        print(context)
+      
+        print(f"Building global report for {date} ...")
 
         catalog.create_source(SourceCreateRequest(
-            id="analytics-local", type=SourceType.LOCAL, config={},
+            id="analytics-local",
+            type=SourceType.LOCAL,
+            config={},
             description="Local storage for analytics pipeline",
         ))
 
         sources = ["erp", "web", "social"]
-        frames, lineage = [], []
+        frames  = []
+        lineage = []
+
         for source in sources:
             reader = catalog.resolve(f"analytics/{source}/clean/clean_{source}")
-            df = reader.read()
+            df     = reader.read()
             df["pipeline_source"] = source
             frames.append(df)
             lineage.append({"dataset_id": reader.dataset_id, "version": reader.version})
             print(f"  {source}: {len(df)} rows @ {reader.version}")
 
         report_df = pd.concat(frames, ignore_index=True)
+        print(f"Total rows in report: {len(report_df)}")
+
+        report_id = "analytics/reports/global_report"
+
         dataset = DatasetCreateRequest(
-            id="analytics/reports/global_report",
+            id=report_id,
             format=DatasetFormat.PARQUET,
             description="Global consolidated report across all sources",
             source_id="analytics-local",
         )
-        with catalog.produce(dataset, metadata={"date": date}, inputs=lineage) as w:
-            w.write(report_df)
-        print(f"Done: {w.dataset_id} @ {w.version}" if not w.skipped else f"Skipped: {w.version}")
+
+        with catalog.produce(dataset, metadata={"date": date}, inputs=lineage) as writer:
+            writer.write(report_df)
+
+        if writer.skipped:
+            print(f"Skipped — same metadata, existing version: {writer.version}")
+        else:
+            print(f"Done: {writer.dataset_id} @ {writer.version} ({len(report_df)} rows)")
+
+        catalog.set_charts(report_id, [
+            {
+                "key":   "value_by_source",
+                "title": "Total value by source",
+                "spec": {
+                    "type": "bar",
+                    "x":   {"field": "pipeline_source", "label": "Source"},
+                    "y":   {"field": "value", "agg": "sum", "label": "Total Value"},
+                },
+            },
+            {
+                "key":   "value_by_metric",
+                "title": "Value by metric",
+                "spec": {
+                    "type": "bar",
+                    "x":   {"field": "metric", "label": "Metric"},
+                    "y":   {"field": "value", "agg": "sum", "label": "Total Value"},
+                },
+            },
+            {
+                "key":   "value_share_by_source",
+                "title": "Value share by source",
+                "spec": {
+                    "type": "pie",
+                    "x":   {"field": "pipeline_source"},
+                    "y":   {"field": "value", "agg": "sum"},
+                },
+            },
+            {
+                "key":   "value_distribution",
+                "title": "Value distribution",
+                "spec": {
+                    "type": "histogram",
+                    "x":   {"field": "value", "label": "Value"},
+                    "bins": 10,
+                },
+            },
+            {
+                "key":   "value_by_category",
+                "title": "Value by category",
+                "spec": {
+                    "type": "bar",
+                    "x":   {"field": "category", "label": "Category"},
+                    "y":   {"field": "value", "agg": "sum", "label": "Total Value"},
+                },
+            },
+        ])
+        print(f"Charts set on {report_id}")
+    
+    clean: &clean_script |
+        import random
+        import pandas as pd
+        from waluigi.sdk.context import context
+        from waluigi.sdk.catalog import catalog
+        from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
+
+        source    = context.params.source.lower()
+        date      = context.params.date
+        fail_prob = float(context.attributes.fail_prob)
+
+        if random.random() < fail_prob:
+            raise RuntimeError(f"Simulated failure while cleaning {source}")
+
+        catalog.create_source(SourceCreateRequest(
+            id="analytics-local",
+            type=SourceType.LOCAL,
+            config={},
+            description="Local storage for analytics pipeline",
+        ))
+
+        raw_id = f"analytics/{source}/raw/raw_{source}"
+        reader = catalog.resolve(raw_id)
+        df     = reader.read()
+        print(f"Read {len(df)} rows from {raw_id} @ {reader.version}")
+
+        df = df.dropna()
+        df["metric"] = df["metric"].str.strip().str.lower()
+        df["value"]  = df["value"].astype(float)
+        print(f"After cleaning: {len(df)} rows")
+
+        clean_id = f"analytics/{source}/clean/clean_{source}"
+
+        dataset = DatasetCreateRequest(
+            id=clean_id,
+            format=DatasetFormat.PARQUET,
+            description=f"Cleaned data for {source}",
+            source_id="analytics-local",
+        )
+        lineage = [{"dataset_id": reader.dataset_id, "version": reader.version}]
+
+        with catalog.produce(dataset, metadata={"date": date, "source": source},
+                             inputs=lineage) as writer:
+            writer.write(df)
+
+        if writer.skipped:
+            print(f"Skipped — same metadata, existing version: {writer.version}")
+        else:
+            print(f"Done: {writer.dataset_id} @ {writer.version} ({len(df)} rows)")
+
+        catalog.set_expectations(clean_id, [
+            {
+                "rule_id":   "expect_column_values_to_not_be_null",
+                "inputs":    {"x": "this.metric"},
+                "tolerance": 1.0,
+            },
+            {
+                "rule_id":   "expect_column_values_to_not_be_null",
+                "inputs":    {"x": "this.value"},
+                "tolerance": 1.0,
+            },
+            {
+                "rule_id":   "expect_column_values_to_be_unique",
+                "inputs":    {"x": "this.metric"},
+                "tolerance": 1.0,
+            },
+            {
+                "rule_id":   "expect_column_values_to_be_between",
+                "inputs":    {"x": "this.value"},
+                "params":    {"min_val": 0, "max_val": 1_000_000},
+                "tolerance": 1.0,
+            },
+            {
+                "rule_id":   "expect_column_values_to_be_of_type",
+                "inputs":    {"x": "this.value"},
+                "params":    {"target_type": "float"},
+                "tolerance": 1.0,
+            },
+        ])
+        print(f"DQ expectations set on {clean_id}")
+
+    extract: &extract_script | 
+        import random
+        import pandas as pd
+        from waluigi.sdk.context import context
+        from waluigi.sdk.catalog import catalog
+        from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
+
+        METRICS = {
+            "erp":    [("revenue",     "finance"),     ("costs",       "finance"),
+                       ("orders",      "operations"),  ("refunds",     "finance")],
+            "web":    [("sessions",    "traffic"),     ("pageviews",   "traffic"),
+                      ("conversions", "acquisition"), ("bounce_rate", "engagement")],
+            "social": [("followers",   "audience"),    ("impressions", "reach"),
+                       ("engagements", "interaction"), ("shares",      "viral")],
+        }
+
+        source = context.params.source.lower()
+        date   = context.params.date
+
+        catalog.create_source(SourceCreateRequest(
+            id="analytics-local",
+            type=SourceType.LOCAL,
+            config={},
+            description="Local storage for analytics pipeline",
+        ))
+
+        print(f"Extracting raw data for source: {source}, date: {date}")
+
+        rows = [
+            {"date": date, "source": source, "metric": metric,
+             "value": round(random.uniform(100, 10_000), 2), "category": category}
+            for metric, category in METRICS[source]
+        ]
+        df = pd.DataFrame(rows)
+
+        dataset = DatasetCreateRequest(
+            id=f"analytics/{source}/raw/raw_{source}",
+            format=DatasetFormat.PARQUET,
+            description=f"Raw extracted data for {source}",
+            source_id="analytics-local",
+        )
+
+        with catalog.produce(dataset, metadata={"date": date, "source": source}) as writer:
+            writer.write(df)
+
+        if writer.skipped:
+            print(f"Skipped — same metadata, existing version: {writer.version}")
+        else:    
+            print(f"Done: {writer.dataset_id} @ {writer.version} ({len(df)} rows)")
+
+
+kind: Job
+metadata:
+    workdir: "work"
+spec:
+    name: "GlobalReport"
+    id: "final_report"
+    namespace: "analytics"
+    script: *report_script
     params:
-      date: "2026-03-22"
+      date: "2026-05-15"
+    attributes:
+      var: "pippo"
     resources:
       coin: 1
     affinity:
       - python
     requires:
-
-      - &clean_task
-        name: "CleanDataTask"
+      - name: "CleanDataTask"
         namespace: "analytics"
         id: "clean_erp"
-        script: &clean_script |
-            import random
-            import pandas as pd
-            from waluigi.sdk.task import Task
-            from waluigi.sdk.catalog import catalog
-            from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
-
-            task      = Task()
-            source    = task.params.source.lower()
-            date      = task.params.date
-            fail_prob = float(task.attributes.fail_prob)
-
-            if random.random() < fail_prob:
-                raise RuntimeError(f"Simulated failure: {source}")
-
-            catalog.create_source(SourceCreateRequest(
-                id="analytics-local", type=SourceType.LOCAL, config={},
-                description="Local storage for analytics pipeline",
-            ))
-
-            reader = catalog.resolve(f"analytics/{source}/raw/raw_{source}")
-            df = reader.read().dropna()
-            df["metric"] = df["metric"].str.strip().str.lower()
-            df["value"]  = df["value"].astype(float)
-            print(f"Cleaned: {len(df)} rows")
-
-            dataset = DatasetCreateRequest(
-                id=f"analytics/{source}/clean/clean_{source}",
-                format=DatasetFormat.PARQUET,
-                description=f"Cleaned data for {source}",
-                source_id="analytics-local",
-            )
-            with catalog.produce(dataset,
-                                 metadata={"date": date, "source": source},
-                                 inputs=[{"dataset_id": reader.dataset_id, "version": reader.version}]) as w:
-                w.write(df)
-            print(f"Done: {w.dataset_id} @ {w.version}" if not w.skipped else f"Skipped: {w.version}")
+        script: *clean_script
         params:
           source: "ERP"
           date: "${parent.params.date}"
@@ -98,48 +261,10 @@ spec:
         affinity:
           - python
         requires:
-          - &extract_task
-            name: "RawDataExtract"
+          - name: "RawDataExtract"
             namespace: "analytics"
             id: "extract_erp"
-            script: &extract_script |
-                import random
-                import pandas as pd
-                from waluigi.sdk.task import Task
-                from waluigi.sdk.catalog import catalog
-                from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
-
-                METRICS = {
-                    "erp":    [("revenue","finance"),("costs","finance"),
-                               ("orders","operations"),("refunds","finance")],
-                    "web":    [("sessions","traffic"),("pageviews","traffic"),
-                               ("conversions","acquisition"),("bounce_rate","engagement")],
-                    "social": [("followers","audience"),("impressions","reach"),
-                               ("engagements","interaction"),("shares","viral")],
-                }
-
-                task   = Task()
-                source = task.params.source.lower()
-                date   = task.params.date
-
-                catalog.create_source(SourceCreateRequest(
-                    id="analytics-local", type=SourceType.LOCAL, config={},
-                    description="Local storage for analytics pipeline",
-                ))
-
-                rows = [{"date": date, "source": source, "metric": m,
-                         "value": round(random.uniform(100, 10_000), 2), "category": c}
-                        for m, c in METRICS[source]]
-
-                dataset = DatasetCreateRequest(
-                    id=f"analytics/{source}/raw/raw_{source}",
-                    format=DatasetFormat.PARQUET,
-                    description=f"Raw extracted data for {source}",
-                    source_id="analytics-local",
-                )
-                with catalog.produce(dataset, metadata={"date": date, "source": source}) as w:
-                    w.write(pd.DataFrame(rows))
-                print(f"Done: {w.dataset_id} @ {w.version}" if not w.skipped else f"Skipped: {w.version}")
+            script: *extract_script
             params:
               source: "${parent.params.source}"
               date: "${parent.params.date}"
@@ -147,31 +272,53 @@ spec:
               coin: 1
             affinity:
               - python
-
-      - <<: *clean_task
+      - name: "CleanDataTask"
+        namespace: "analytics"
         id: "clean_web"
         script: *clean_script
         params:
           source: "WEB"
           date: "${parent.params.date}"
+        attributes:
+          fail_prob: "0.0"
+        resources:
+          pdc: 1
+        affinity:
+          - python
         requires:
-          - <<: *extract_task
+          - name: "RawDataExtract"
+            namespace: "analytics"
             id: "extract_web"
             script: *extract_script
             params:
               source: "${parent.params.source}"
               date: "${parent.params.date}"
-
-      - <<: *clean_task
+            resources:
+              coin: 1
+            affinity:
+              - python
+      - name: "CleanDataTask"
+        namespace: "analytics"
         id: "clean_social"
         script: *clean_script
         params:
           source: "SOCIAL"
           date: "${parent.params.date}"
+        attributes:
+          fail_prob: "0.0"
+        resources:
+          pdc: 1
+        affinity:
+          - python
         requires:
-          - <<: *extract_task
+          - name: "RawDataExtract"
+            namespace: "analytics"
             id: "extract_social"
             script: *extract_script
             params:
               source: "${parent.params.source}"
               date: "${parent.params.date}"
+            resources:
+              coin: 1
+            affinity:
+              - python

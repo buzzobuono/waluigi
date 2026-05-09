@@ -4,98 +4,116 @@ import requests
 import yaml
 import argparse
 import time
+import os
+from pathlib import Path
 from tabulate import tabulate
 
 class WaluigiCLI:
     def __init__(self, base_url):
         self.base_url = base_url.rstrip('/')
-        
+        self.config_dir = Path.home() / '.waluigi'
+        self.token_file = self.config_dir / 'token'
+        self._ensure_config_dir()
+
+    def _ensure_config_dir(self):
+        if not self.config_dir.exists():
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+
+    def _save_token(self, token):
+        with open(self.token_file, 'w') as f:
+            f.write(token)
+
+    def _get_token(self):
+        if self.token_file.exists():
+            with open(self.token_file, 'r') as f:
+                return f.read().strip()
+        return None
+
+    def _get_headers(self):
+        headers = {}
+        token = self._get_token()
+        if token:
+            headers['Authorization'] = f"Bearer {token}"
+        return headers
+
+    def login(self, username, password):
+        try:
+            payload = {
+                "username": username,
+                "password": password    
+            }
+            r = requests.post(f"{self.base_url}/auth/login", json=payload)
+            if r.status_code == 200:
+                data = r.json()
+                token = data.get("token")
+                if token:
+                    self._save_token(token)
+                    print("Login successful. Token saved.")
+                else:
+                    print("Error: No token received from server.")
+            else:
+                print(f"User not authorized: {r.status_code}")
+        except Exception as e:
+            print(f"Error: {e}")
+            
+    def logout(self):
+        try:
+            if self.token_file.exists():
+                os.remove(self.token_file)
+                print("Logout successful. Token removed.")
+            else:
+                print("No active session found.")
+        except Exception as e:
+            print(f"Error during logout: {e}")
+    
     def apply(self, descriptor_path):
-        with open(descriptor_path, 'r') as f:
-            doc = yaml.safe_load(f)
-          
-        kind = doc.get('kind')
-        spec = doc.get('spec')
-        
-        if kind == 'Job':
-            r = requests.post(f"{self.base_url}/submit", json=doc)
-            print(json.dumps(r.json(), indent=2))
-        elif kind == 'ClusterResources':
-            r = requests.post(f"{self.base_url}/api/resources", json=doc)
-            print(json.dumps(r.json(), indent=2))
-        else:
-            print(f"❌ Tipo '{kind}' non supportato")
-        return
+        try:
+            with open(descriptor_path, 'r') as f:
+                doc = yaml.safe_load(f)
+            
+            kind = doc.get('kind')
+            
+            if kind == 'Job':
+                r = requests.post(f"{self.base_url}/boss/submit", json=doc, headers=self._get_headers())
+                print(json.dumps(r.json(), indent=2))
+            elif kind == 'ClusterResources':
+                r = requests.post(f"{self.base_url}/boss/api/resources", json=doc, headers=self._get_headers())
+                print(json.dumps(r.json(), indent=2))
+            else:
+                print(f"Error: Type '{kind}' not supported")
+        except Exception as e:
+            print(f"Error during apply: {e}")
         
     def describe_job(self, key):
         try:
-            r = requests.get(f"{self.base_url}/api/active/describe/{key}")
+            r = requests.get(f"{self.base_url}/boss/api/active/describe/{key}", headers=self._get_headers())
             if r.status_code == 200:
                 data = r.json()
-                print(f"📋 Dettagli oggetto in memoria per: {key}")
-            
-                # Formattiamo i dettagli in una tabella verticale
+                print(f"Object details in memory for: {key}")
                 details = [[k, v] for k, v in data.items()]
                 print(tabulate(details, tablefmt="fancy_grid"))
             else:
-                print(f"❌ Key '{key}' non trovata in memoria.")
+                print(f"Error: Key '{key}' not found in memory.")
         except Exception as e:
-            print(f"🔌 Errore: {e}")
-    
-    
-    def get_namespaces(self):
-        try:
-            if r.status_code == 200:
-                all_tasks = r.json()
-                if not all_tasks:
-                    print("📭 Nessun namespace attivo nel database.")
-                    return
-
-                # Raggruppamento per Namespace
-                namespaces = {}
-                for t in all_tasks:
-                    ns = t['namespace']
-                    if ns not in namespaces:
-                        namespaces[ns] = {"tasks": 0, "completed": 0, "failed": 0, "running": 0}
-                
-                    namespaces[ns]["tasks"] += 1
-                    if t['status'] == 'SUCCESS': namespaces[ns]["completed"] += 1
-                    elif t['status'] == 'FAILED': namespaces[ns]["failed"] += 1
-                    elif t['status'] == 'RUNNING': namespaces[ns]["running"] += 1
-
-                # Preparazione tabella sintetica
-                table_data = []
-                for ns, stats in namespaces.items():
-                    progress = f"{stats['completed']}/{stats['tasks']}"
-                    status_str = "🟢 OK" if stats['failed'] == 0 else f"🔴 ERR ({stats['failed']})"
-                    if stats['running'] > 0: status_str = "🟡 RUNNING"
-                
-                    table_data.append([ns, stats['tasks'], progress, status_str])
-
-                headers = ["Namespace", "Total Tasks", "Progress", "State"]
-                print(tabulate(table_data, headers=headers, tablefmt="outline"))
-            else:
-                print(f"❌ Errore del server: {r.status_code}")
-        except Exception as e:
-            print(f"🔌 Errore di connessione: {e}")
+            print(f"Connection error: {e}")
             
     def reset(self, scope, target):
-        url = f"{self.base_url}/api/reset/{scope}/{target}"
-        r = requests.post(url)
-        print(f"Result {r.status_code}")
+        url = f"{self.base_url}/boss/api/reset/{scope}/{target}"
+        r = requests.post(url, headers=self._get_headers())
+        print(f"Result code: {r.status_code}")
 
     def delete(self, scope, target):
-        url = f"{self.base_url}/api/delete/{scope}/{target}"
-        r = requests.post(url)
-        print(f"Result {r.status_code}")
+        url = f"{self.base_url}/boss/api/delete/{scope}/{target}"
+        r = requests.post(url, headers=self._get_headers())
+        print(f"Result code: {r.status_code}")
         
     def get_namespaces(self):
         try:
-            r = requests.get(f"{self.base_url}/api/namespaces")
+            r = requests.get(f"{self.base_url}/boss/api/namespaces", headers=self._get_headers())
             if r.status_code == 200:
                 data = r.json()
                 if not data:
-                    print("⚠️ No namespace found")
+                    print("Warning: No namespace found")
                     return
                 table = []
                 for ns in data:
@@ -105,33 +123,33 @@ class WaluigiCLI:
                 headers = ["NAMESPACE", "TASK COUNT" ]
                 print(tabulate(table, headers=headers, tablefmt="plain"))
             else:
-                print(f"❌ Error: {r.status_code}")
+                print(f"Error: {r.status_code}")
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"Error: {e}")
         
     def get_jobs(self):
         try:
-            r = requests.get(f"{self.base_url}/api/jobs")
+            r = requests.get(f"{self.base_url}/boss/api/jobs", headers=self._get_headers())
             if r.status_code == 200:
                 data = r.json()
                 if not data:
-                    print("⚠️ No jobs found")
+                    print("Warning: No jobs found")
                     return
                 table = []
                 for job in data:
                     id = job.get("job_id")
                     status = job.get("status")
                     table.append([id, status])
-                headers = ["ID", "STATUS", "LOCKED_BY", "LOCKED_UNTIL" ]
+                headers = ["ID", "STATUS" ]
                 print(tabulate(table, headers=headers, tablefmt="plain"))
             else:
-                print(f"❌ Error: {r.status_code}")
+                print(f"Error: {r.status_code}")
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"Error: {e}")
     
     def get_tasks(self, job_id=None, namespace=None):
         try:
-            r = requests.get(f"{self.base_url}/api/tasks")
+            r = requests.get(f"{self.base_url}/boss/api/tasks", headers=self._get_headers())
             if r.status_code == 200:
                 data = r.json()
                 if job_id:
@@ -139,7 +157,7 @@ class WaluigiCLI:
                 if namespace:
                     data = [t for t in data if t.get("namespace") == namespace]
                 if not data:
-                    print("⚠️ No task found")
+                    print("Warning: No task found")
                     return
                     
                 headers = [ "ID", "JOB_ID", "PARAMS", "STATUS", "LAST UPDATE", "NAMESPACE" ]
@@ -153,21 +171,19 @@ class WaluigiCLI:
                         task["last_update"],
                         task['namespace']
                     ])
-
                 print(tabulate(table, headers=headers, tablefmt="plain"))
-                
             else:
-                print(f"❌ Error: {r.status_code}")
+                print(f"Error: {r.status_code}")
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"Error: {e}")
    
     def get_resources(self):
         try:
-            r = requests.get(f"{self.base_url}/api/resources")
+            r = requests.get(f"{self.base_url}/boss/api/resources", headers=self._get_headers())
             if r.status_code == 200:
                 data = r.json()
                 if not data:
-                    print("⚠️ No resources found")
+                    print("Warning: No resources found")
                     return
                 table = []
                 for res in data:
@@ -181,17 +197,17 @@ class WaluigiCLI:
                 headers = ["NAME", "AMOUNT", "USAGE", "AVAILABLE", "STATUS"]
                 print(tabulate(table, headers=headers, tablefmt="plain"))
             else:
-                print(f"❌ Error: {r.status_code}")
+                print(f"Error: {r.status_code}")
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"Error: {e}")
    
     def get_workers(self):
         try:
-            r = requests.get(f"{self.base_url}/api/workers")
+            r = requests.get(f"{self.base_url}/boss/api/workers", headers=self._get_headers())
             if r.status_code == 200:
                 data = r.json()
                 if not data:
-                    print("⚠️ No worker found")
+                    print("Warning: No worker found")
                     return
                 table = []
                 for worker in data:
@@ -205,13 +221,12 @@ class WaluigiCLI:
                 headers = ["URL", "STATUS", "MAX_SLOTS", "FREE_SLOTS", "LAST_SEEN",]
                 print(tabulate(table, headers=headers, tablefmt="plain"))
             else:
-                print(f"❌ Error: {r.status_code}")
+                print(f"Error: {r.status_code}")
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"Error: {e}")
 
     def get_logs(self, task_id, limit=20, follow=False):
         last_seen_id = 0
-        
         try:
             while True:
                 params = {}
@@ -219,9 +234,10 @@ class WaluigiCLI:
                     params = {'limit': 100, 'after_id': last_seen_id} 
                 else:
                     params = {'limit': limit}
-                r = requests.get(f"{self.base_url}/api/logs/{task_id}", params=params)
+                
+                r = requests.get(f"{self.base_url}/boss/api/logs/{task_id}", params=params, headers=self._get_headers())
                 if r.status_code != 200:
-                    print(f"❌ Errore: {r.status_code}")
+                    print(f"Error: {r.status_code}")
                     break
                 logs = r.json()
                 if not logs and not follow:
@@ -235,46 +251,54 @@ class WaluigiCLI:
                     last_seen_id = max(last_seen_id, entry.get('id', 0))
                 if not follow:
                     break
-                
                 time.sleep(1)
-                
         except KeyboardInterrupt:
-            print("\n👋 Follow interrotto.")
+            print("\nFollow interrupted.")
 
 def main():
     parser = argparse.ArgumentParser(description='Waluigi CLI Control Panel')
-    parser.add_argument('--url', default='http://localhost:8082', help='Boss URL')
-    subparsers = parser.add_subparsers(dest='command', help='Comandi disponibili')
+    parser.add_argument('--url', default='http://localhost:8080', help='Console URL')
+    subparsers = parser.add_subparsers(dest='command', help='Available commands')
 
-    apply_p = subparsers.add_parser('apply', help='Sottomette un job o risorse')
-    apply_p.add_argument('-f', '--file', required=True, help='Path del descrittore JSON')
+    login_p = subparsers.add_parser('login', help='Authorize user')
+    login_p.add_argument('-u', '--username', required=True, help='Username')
+    login_p.add_argument('-p', '--password', required=True, help='Password')
     
-    describe_p = subparsers.add_parser('describe', help='Descrive gli oggetti attivi')
+    logout_p = subparsers.add_parser('logout', help='Remove saved authentication token')
+
+    apply_p = subparsers.add_parser('apply', help='Submit a job or resources')
+    apply_p.add_argument('-f', '--file', required=True, help='Descriptor file path')
+    
+    describe_p = subparsers.add_parser('describe', help='Describe active objects')
     describe_p.add_argument('type', choices=['namespace', 'job'])
-    describe_p.add_argument('target', nargs='?', help='Oggetto target')
+    describe_p.add_argument('target', nargs='?', help='Target object')
     
-    get_p = subparsers.add_parser('get', help='Elenca gli oggetti attivi')
+    get_p = subparsers.add_parser('get', help='List active objects')
     get_p.add_argument('type', choices=['namespaces', 'jobs', 'tasks', 'resources', 'workers'])
     get_p.add_argument('-n', '--namespace', required=False, help='Namespace')
     get_p.add_argument('-j', '--job_id', required=False, help='Job ID')
     
-    logs_p = subparsers.add_parser('logs', help='Visualizza i log di un task')
-    logs_p.add_argument('task_id', help='ID del task di cui leggere i log')
-    logs_p.add_argument('-n', '--lines', type=int, default=20, help='Numero di righe da mostrare (default 20)')
-    logs_p.add_argument('-f', '--follow', action='store_true', help='Segui i log in tempo reale')
+    logs_p = subparsers.add_parser('logs', help='View task logs')
+    logs_p.add_argument('task_id', help='Task ID')
+    logs_p.add_argument('-n', '--lines', type=int, default=20, help='Lines to show (default 20)')
+    logs_p.add_argument('-f', '--follow', action='store_true', help='Follow logs in real time')
     
-    reset_p = subparsers.add_parser('reset', help='Resetta task o namespace')
+    reset_p = subparsers.add_parser('reset', help='Reset task or namespace')
     reset_p.add_argument('type', choices=['task', 'namespace'])
-    reset_p.add_argument('target', help='ID del task o nome del namespace')
+    reset_p.add_argument('target', help='Task ID or Namespace name')
 
-    del_p = subparsers.add_parser('delete', help='Elimina task o namespace')
+    del_p = subparsers.add_parser('delete', help='Delete task or namespace')
     del_p.add_argument('type', choices=['task', 'namespace'])
-    del_p.add_argument('target', help='ID del task o nome del namespace')
+    del_p.add_argument('target', help='Task ID or Namespace name')
 
     args = parser.parse_args()
     cli = WaluigiCLI(args.url)
 
-    if args.command == 'apply':
+    if args.command == 'login':
+        cli.login(args.username, args.password)
+    elif args.command == 'logout':
+        cli.logout()
+    elif args.command == 'apply':
         cli.apply(args.file)
     elif args.command == 'get':
         if args.type == 'namespaces':
@@ -294,20 +318,11 @@ def main():
             if args.target:
                 cli.describe_job(args.target)
     elif args.command == 'reset':
-        if args.type == 'namespace':
-            if args.target:
-                cli.reset('namespace', args.target)
-        if args.type == 'task':
-            if args.target:
-                cli.reset('task', args.target)
+        if args.target:
+            cli.reset(args.type, args.target)
     elif args.command == 'delete':
-        if args.type == 'namespace':
-            if args.target:
-                cli.delete('namespace', args.target)
-        if args.type == 'task':
-            if args.target:
-                cli.delete('task', args.target)
-                
+        if args.target:
+            cli.delete(args.type, args.target)
     else:
         parser.print_help()
 

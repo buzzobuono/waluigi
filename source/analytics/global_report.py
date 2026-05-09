@@ -1,55 +1,51 @@
 import pandas as pd
-from waluigi.sdk.task import Task
+from waluigi.sdk.context import context
 from waluigi.sdk.catalog import catalog
 from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
 
+date = context.params.date
+print(f"Building global report for {date} ...")
 
-class GlobalReport(Task):
+catalog.create_source(SourceCreateRequest(
+    id="analytics-local",
+    type=SourceType.LOCAL,
+    config={},
+    description="Local storage for analytics pipeline",
+))
 
-    def run(self):
-        date = self.params.date
-        print(f"Building global report for {date} ...")
+sources = ["erp", "web", "social"]
+frames  = []
+lineage = []
 
-        catalog.create_source(SourceCreateRequest(
-            id="analytics-local",
-            type=SourceType.LOCAL,
-            config={},
-            description="Local storage for analytics pipeline",
-        ))
+for source in sources:
+    reader = catalog.resolve(f"analytics/{source}/clean/clean_{source}")
+    df     = reader.read()
+    df["pipeline_source"] = source
+    frames.append(df)
+    lineage.append({"dataset_id": reader.dataset_id, "version": reader.version})
+    print(f"  {source}: {len(df)} rows @ {reader.version}")
 
-        sources = ["erp", "web", "social"]
-        frames  = []
-        lineage = []
+report_df = pd.concat(frames, ignore_index=True)
+print(f"Total rows in report: {len(report_df)}")
 
-        for source in sources:
-            reader = catalog.resolve(f"analytics/{source}/clean/clean_{source}")
-            df     = reader.read()
-            df["pipeline_source"] = source
-            frames.append(df)
-            lineage.append({"dataset_id": reader.dataset_id, "version": reader.version})
-            print(f"  {source}: {len(df)} rows @ {reader.version}")
+report_id = "analytics/reports/global_report"
 
-        report_df = pd.concat(frames, ignore_index=True)
-        print(f"Total rows in report: {len(report_df)}")
+dataset = DatasetCreateRequest(
+    id=report_id,
+    format=DatasetFormat.PARQUET,
+    description="Global consolidated report across all sources",
+    source_id="analytics-local",
+)
 
-        report_id = "analytics/reports/global_report"
+with catalog.produce(dataset, metadata={"date": date}, inputs=lineage) as writer:
+    writer.write(report_df)
 
-        dataset = DatasetCreateRequest(
-            id=report_id,
-            format=DatasetFormat.PARQUET,
-            description="Global consolidated report across all sources",
-            source_id="analytics-local",
-        )
+if writer.skipped:
+    print(f"Skipped — same metadata, existing version: {writer.version}")
+else:
+    print(f"Done: {writer.dataset_id} @ {writer.version} ({len(report_df)} rows)")
 
-        with catalog.produce(dataset, metadata={"date": date}, inputs=lineage) as writer:
-            writer.write(report_df)
-
-        if writer.skipped:
-            print(f"Skipped — same metadata, existing version: {writer.version}")
-        else:
-            print(f"Done: {writer.dataset_id} @ {writer.version} ({len(report_df)} rows)")
-
-        catalog.set_charts(report_id, [
+catalog.set_charts(report_id, [
             {
                 "key":   "value_by_source",
                 "title": "Total value by source",
@@ -96,8 +92,5 @@ class GlobalReport(Task):
                 },
             },
         ])
-        print(f"Charts set on {report_id}")
-
-
-if __name__ == "__main__":
-    GlobalReport().start()
+        
+print(f"Charts set on {report_id}")
