@@ -1,0 +1,17 @@
+kind: DAG
+metadata:
+    workdir: "work"
+spec:
+    name: "CreateReportDataset"
+    id:   "catalog_create_dataset_test"
+    namespace: "catalog"
+    type: "CatalogCreateDataset"
+    config:
+        dataset:     "analytics/reports/global_report"
+        source_id:   "analytics-local"
+        format:      "parquet"
+        description: "Global consolidated report across all sources"
+    resources:
+        coin: 1
+    affinity:
+        - python
