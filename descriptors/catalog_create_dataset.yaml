@@ -7,10 +7,10 @@ spec:
     namespace: "catalog"
     type: "CatalogCreateDataset"
     config:
-        dataset:     "analytics/reports/global_report"
-        source_id:   "analytics-local"
+        dataset:     "tests/test_dataset"
+        source_id:   "test-local"
         format:      "parquet"
-        description: "Global consolidated report across all sources"
+        description: "Test dataset"
     resources:
         coin: 1
     affinity:

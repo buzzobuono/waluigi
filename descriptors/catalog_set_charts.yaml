@@ -7,7 +7,7 @@ spec:
     namespace: "catalog"
     type: "CatalogSetCharts"
     config:
-        dataset: "analytics/reports/global_report"
+        dataset: "tests/test_dataset"
         charts:
             - key:   "value_by_source"
               title: "Total value by source"

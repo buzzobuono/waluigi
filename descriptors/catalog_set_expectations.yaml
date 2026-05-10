@@ -7,7 +7,7 @@ spec:
     namespace: "catalog"
     type: "CatalogSetExpectations"
     config:
-        dataset: "analytics/erp/clean/clean_erp"
+        dataset: "tests/test_dataset"
         expectations:
             - rule_id:   "expect_column_values_to_not_be_null"
               inputs:    {x: "this.metric"}

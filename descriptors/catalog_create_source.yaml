@@ -7,9 +7,9 @@ spec:
     namespace: "catalog"
     type: "CatalogCreateSource"
     config:
-        id:          "analytics-local"
+        id:          "test-local"
         type:        "LOCAL"
-        description: "Local storage for the analytics pipeline"
+        description: "Local storage for the test dataset"
         config:
             base_path: "data"
     resources:

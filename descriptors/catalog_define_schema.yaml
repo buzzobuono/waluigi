@@ -7,7 +7,7 @@ spec:
     namespace: "catalog"
     type: "CatalogDefineSchema"
     config:
-        dataset: "analytics/reports/global_report"
+        dataset: "tests/test_dataset"
         publish: true
         columns:
             - name:         "date"
