@@ -179,7 +179,7 @@ export default {
                 <div v-if="!isExternal(u.dataset_id)" class="d-flex flex-column gap-1" style="gap:4px">
                   <base-button
                     icon="fas fa-eye"
-                    color="outline-secondary"
+                    color="outline-info"
                     size="sm"
                     title="Preview"
                     v-if="hasVersion(u.version)"
@@ -195,7 +195,7 @@ export default {
                   />
                   <base-button
                     icon="fas fa-chart-bar"
-                    color="outline-info"
+                    color="outline-warning"
                     size="sm"
                     title="Charts"
                     v-if="hasVersion(u.version)"
@@ -225,7 +225,7 @@ export default {
                 <div class="d-flex flex-wrap" style="gap:6px">
                   <base-button icon="fas fa-columns"    color="outline-warning" size="sm" title="Schema columns"    @click="router.push('/schema/'       + current.dataset_id)" />
                   <base-button icon="fas fa-shield-alt" color="outline-success" size="sm" title="DQ Expectations"  @click="router.push('/expectations/' + current.dataset_id)" />
-                  <base-button icon="fas fa-history"    color="outline-primary" size="sm" title="DQ History"       @click="router.push('/dq-history/'   + current.dataset_id)" />
+                  <base-button icon="fas fa-chart-line" color="outline-primary" size="sm" title="DQ History"       @click="router.push('/dq-history/'   + current.dataset_id)" />
                   <base-button icon="fas fa-chart-bar"  color="outline-info"    size="sm" title="Chart definitions" @click="router.push('/chart-defs/'  + current.dataset_id)" />
                   <base-button icon="fas fa-book"       color="outline-secondary" size="sm" title="Catalog"        @click="router.push({ path: '/catalog', query: { dataset: current.dataset_id } })" />
                 </div>
@@ -234,9 +234,9 @@ export default {
               <div class="mt-3" v-if="current.version">
                 <div class="text-muted small mb-2 font-weight-bold text-uppercase" style="font-size:0.7rem;letter-spacing:.05em">This version</div>
                 <div class="d-flex flex-wrap" style="gap:6px">
-                  <base-button icon="fas fa-eye"         color="outline-secondary" size="sm" title="Preview"    @click="router.push('/datasets/' + current.dataset_id + '/' + current.version)" />
-                  <base-button icon="fas fa-check-circle" color="outline-success"  size="sm" title="DQ result"  @click="router.push('/dq/'       + current.dataset_id + '/' + current.version)" />
-                  <base-button icon="fas fa-chart-line"   color="outline-info"     size="sm" title="Charts"     @click="router.push('/charts/'   + current.dataset_id + '/' + current.version)" />
+                  <base-button icon="fas fa-eye"        color="outline-info"    size="sm" title="Preview"    @click="router.push('/datasets/' + current.dataset_id + '/' + current.version)" />
+                  <base-button icon="fas fa-shield-alt" color="outline-success" size="sm" title="DQ result"  @click="router.push('/dq/'       + current.dataset_id + '/' + current.version)" />
+                  <base-button icon="fas fa-chart-bar"  color="outline-warning" size="sm" title="Charts"     @click="router.push('/charts/'   + current.dataset_id + '/' + current.version)" />
                 </div>
               </div>
             </div>
@@ -278,7 +278,7 @@ export default {
                 <div class="d-flex flex-column" style="gap:4px">
                   <base-button
                     icon="fas fa-eye"
-                    color="outline-secondary"
+                    color="outline-info"
                     size="sm"
                     title="Preview"
                     v-if="hasVersion(d.version)"
@@ -294,7 +294,7 @@ export default {
                   />
                   <base-button
                     icon="fas fa-chart-bar"
-                    color="outline-info"
+                    color="outline-warning"
                     size="sm"
                     title="Charts"
                     v-if="hasVersion(d.version)"
