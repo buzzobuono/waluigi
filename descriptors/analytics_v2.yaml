@@ -218,7 +218,7 @@ spec:
     namespace: "analytics"
     script: *report_script
     params:
-        date: "2026-05-15"
+        date: "2026-05-16"
     attributes:
         var: "pippo"
     config:
