@@ -3,22 +3,56 @@ from types import SimpleNamespace
 
 
 def _expand_tasks(spec):
-    """Convert flat tasks list with requires:[id] refs into nested requires tree."""
+    """Convert flat tasks list to nested requires tree.
+
+    ${parent.params.X} in each task is resolved against the outer Pipeline params,
+    since in the flat format there is no task-level parent chain to walk.
+    The outer spec id/name/params are preserved as the job identity; only the
+    execution keys (type, command, script, config, resources, affinity, requires)
+    are taken from the terminal task (the one nothing else requires).
+    """
     if "tasks" not in spec:
         return spec
-    by_id = {t["id"]: dict(t) for t in spec["tasks"]}
+
+    outer_params = spec.get("params", {})
+
+    def resolve_params(params):
+        result = {}
+        for k, v in params.items():
+            if isinstance(v, str) and "${parent.params." in v:
+                key = v.split(".")[-1].rstrip("}")
+                result[k] = outer_params.get(key, v)
+            else:
+                result[k] = v
+        return result
+
+    tasks = []
+    for t in spec["tasks"]:
+        t = dict(t)
+        if "params" in t:
+            t["params"] = resolve_params(t["params"])
+        tasks.append(t)
+
+    by_id = {t["id"]: t for t in tasks}
     required = {r for t in by_id.values() for r in t.get("requires", [])}
     roots = [tid for tid in by_id if tid not in required]
     if len(roots) != 1:
-        raise ValueError(f"DAG must have exactly one root task, found: {roots}")
+        raise ValueError(f"Pipeline must have exactly one terminal task, found: {roots}")
+
     def build(task_id):
         node = dict(by_id[task_id])
         dep_ids = node.pop("requires", [])
         if dep_ids:
             node["requires"] = [build(dep) for dep in dep_ids]
         return node
+
+    # Outer spec keeps id/name/namespace/params (pipeline identity).
+    # Terminal task contributes type/command/script/config/resources/affinity/requires.
     result = {k: v for k, v in spec.items() if k != "tasks"}
-    result.update(build(roots[0]))
+    root = build(roots[0])
+    for key in ("type", "command", "script", "config", "resources", "affinity", "requires"):
+        if key in root:
+            result[key] = root[key]
     return result
 
 
