@@ -714,7 +714,9 @@ def _render_chart_impl(chart: dict, dataset_id: str,
     ver = db.get_version(dataset_id, version) if version else db.get_latest_version(dataset_id)
     if not ver:
         raise ValueError("No committed version available")
-    source    = db.get_source(dataset["source_id"])
+    source = db.get_source(dataset["source_id"])
+    if not source:
+        raise ValueError(f"Source '{dataset['source_id']}' not found — run CatalogCreateSource first")
     connector = ConnectorFactory.get(source["type"], source["config"])
     df = connector.read(ver["location"], dataset["format"])
     option = _build_echarts_option(df, chart["spec"])

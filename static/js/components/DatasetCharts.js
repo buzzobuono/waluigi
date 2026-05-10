@@ -43,12 +43,12 @@ export default {
     }
 
     async function renderOne(chart) {
-      renders.value[chart.id] = { option: null, loading: true, error: null };
+      renders.value[chart.key] = { option: null, loading: true, error: null };
       try {
-        const res = await api.renderChart(datasetId.value, chart.id, version.value || undefined);
-        renders.value[chart.id] = { option: res.data?.option ?? null, loading: false, error: null };
+        const res = await api.renderChartByKey(datasetId.value, chart.key, version.value || undefined);
+        renders.value[chart.key] = { option: res.data?.option ?? null, loading: false, error: null };
       } catch (e) {
-        renders.value[chart.id] = { option: null, loading: false, error: e.message };
+        renders.value[chart.key] = { option: null, loading: false, error: e.message };
       }
     }
 
@@ -90,13 +90,13 @@ export default {
       </div>
 
       <div class="row">
-        <div v-for="chart in charts" :key="chart.id" class="col-12 col-lg-6 mb-4">
-          <base-panel :title="chart.title || chart.id">
+        <div v-for="chart in charts" :key="chart.key" class="col-12 col-lg-6 mb-4">
+          <base-panel :title="chart.title || chart.key">
             <div style="height: 320px;">
               <chart-widget
-                :option="renders[chart.id]?.option"
-                :loading="renders[chart.id]?.loading ?? true"
-                :error="renders[chart.id]?.error"
+                :option="renders[chart.key]?.option"
+                :loading="renders[chart.key]?.loading ?? true"
+                :error="renders[chart.key]?.error"
                 height="320px"
               />
             </div>
