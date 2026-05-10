@@ -1,3 +1,9 @@
+q.sources:
+    local: &local
+        id:          "analytics-local"
+        type:        "LOCAL"
+        description: "Local storage for analytics pipeline"
+
 kind: Job
 metadata:
     workdir: "work"
@@ -9,17 +15,18 @@ spec:
     params:
         date: "2026-05-15"
     config:
-        catalog_source: "analytics-local"
         input:
             dataset: "analytics/erp/clean/clean_erp"
+            source:  *local
         output:
             dataset:     "analytics/erp/enriched/with_derived"
             format:      "parquet"
             description: "ERP with value_k (thousands) and value_pct"
+            source:      *local
         columns:
             - name: "value_k"
               expr: "value / 1000"
-            - name: "value_pct"         # references value_k computed above
+            - name: "value_pct"
               expr: "value_k / 10"
     resources:
         coin: 1

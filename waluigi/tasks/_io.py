@@ -1,19 +1,18 @@
 """
 Shared I/O helpers for all built-in task types.
 
-Source config — two forms accepted:
+Source is declared on each dataset individually — not at config root level.
+This allows inputs and output to live on different source systems.
 
-  Simple (LOCAL shorthand):
-    catalog_source: "my-source-id"
-
-  Full (any source type):
+Dataset config shape (used in input / output / left / right / inputs[*]):
+    dataset:     str
     source:
-      id:          "my-source-id"
-      type:        "S3"           # LOCAL | S3 | SQL | SFTP | API
-      description: "..."
-      config:                     # connector-specific keys
-        bucket: "my-bucket"
-        region: "eu-west-1"
+        id:          str
+        type:        str    # LOCAL | S3 | SQL | SFTP | API
+        description: str
+        config:      dict   # connector-specific (optional)
+    format:      str        # output only — parquet | csv  (default: parquet)
+    description: str        # output only
 """
 from types import SimpleNamespace
 
@@ -23,7 +22,7 @@ from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCr
 
 
 def _to_dict(obj):
-    """Recursively convert SimpleNamespace → plain dict (for connector config)."""
+    """Recursively convert SimpleNamespace → plain dict."""
     if isinstance(obj, SimpleNamespace):
         return {k: _to_dict(v) for k, v in vars(obj).items()}
     if isinstance(obj, list):
@@ -31,47 +30,42 @@ def _to_dict(obj):
     return obj
 
 
-def _source_id() -> str:
-    c = context.config
-    if hasattr(c, "source"):
-        return c.source.id
-    return c.catalog_source
-
-
-def create_source():
-    c = context.config
-    if hasattr(c, "source"):
-        src = c.source
-        catalog.create_source(SourceCreateRequest(
-            id=src.id,
-            type=SourceType[src.type.upper()],
-            config=_to_dict(getattr(src, "config", {})),
-            description=getattr(src, "description", "Waluigi managed source"),
-        ))
-    else:
-        catalog.create_source(SourceCreateRequest(
-            id=c.catalog_source,
-            type=SourceType.LOCAL,
-            config={},
-            description=getattr(c, "catalog_source_description", "Waluigi managed source"),
-        ))
+def _ensure_source(dataset_cfg: dict):
+    """Upsert the source declared on a dataset config dict.
+    No-op if 'source' key is absent.
+    Exported for use by multi-input tasks (merge, join)."""
+    src = dataset_cfg.get("source")
+    if not src:
+        return
+    catalog.create_source(SourceCreateRequest(
+        id=src["id"],
+        type=SourceType[src["type"].upper()],
+        config=src.get("config", {}),
+        description=src.get("description", "Waluigi managed source"),
+    ))
 
 
 def read_input():
-    reader = catalog.resolve(context.config.input.dataset)
+    inp = _to_dict(context.config.input)
+    _ensure_source(inp)
+    reader = catalog.resolve(inp["dataset"])
     df = reader.read()
-    print(f"  read {context.config.input.dataset}: {len(df)} rows @ {reader.version}")
+    print(f"  read {inp['dataset']}: {len(df)} rows @ {reader.version}")
     return reader, df
 
 
 def write_output(df, lineage):
-    out = context.config.output
-    fmt = getattr(out, "format", "parquet").upper()
+    out = _to_dict(context.config.output)
+    _ensure_source(out)
+    src = out.get("source")
+    if not src:
+        raise ValueError(f"output.source is required (dataset: {out.get('dataset')})")
+    fmt = out.get("format", "parquet").upper()
     dataset = DatasetCreateRequest(
-        id=out.dataset,
+        id=out["dataset"],
         format=DatasetFormat[fmt],
-        description=getattr(out, "description", ""),
-        source_id=_source_id(),
+        description=out.get("description", ""),
+        source_id=src["id"],
     )
     with catalog.produce(dataset, metadata=vars(context.params), inputs=lineage) as writer:
         writer.write(df)

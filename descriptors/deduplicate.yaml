@@ -1,3 +1,9 @@
+q.sources:
+    local: &local
+        id:          "analytics-local"
+        type:        "LOCAL"
+        description: "Local storage for analytics pipeline"
+
 kind: Job
 metadata:
     workdir: "work"
@@ -9,13 +15,14 @@ spec:
     params:
         date: "2026-05-15"
     config:
-        catalog_source: "analytics-local"
         input:
             dataset: "analytics/erp/clean/clean_erp"
+            source:  *local
         output:
             dataset:     "analytics/erp/dedup/unique_metrics"
             format:      "parquet"
             description: "ERP — one row per metric (first occurrence)"
+            source:      *local
         subset: ["metric"]
         keep:   "first"
     resources:

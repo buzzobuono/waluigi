@@ -2,21 +2,21 @@
 SelectColumns — projection: keeps only the specified columns.
 
 config:
-    catalog_source: str
     input:
         dataset: str
+        source:  {id, type, description, config}
     output:
         dataset: str
         format:      str   (default: parquet)
         description: str
+        source:  {id, type, description, config}   # required
     columns: list[str]
 """
 from waluigi.sdk.context import context
-from waluigi.tasks._io import create_source, read_input, write_output
+from waluigi.tasks._io import read_input, write_output
 
 
 def run():
-    create_source()
     reader, df = read_input()
     lineage = [{"dataset_id": reader.dataset_id, "version": reader.version}]
 

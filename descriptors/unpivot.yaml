@@ -1,3 +1,9 @@
+q.sources:
+    local: &local
+        id:          "analytics-local"
+        type:        "LOCAL"
+        description: "Local storage for analytics pipeline"
+
 kind: Job
 metadata:
     workdir: "work"
@@ -9,13 +15,14 @@ spec:
     params:
         date: "2026-05-15"
     config:
-        catalog_source: "analytics-local"
         input:
             dataset: "analytics/erp/pivot/metrics_by_category"
+            source:  *local
         output:
             dataset:     "analytics/erp/pivot/metrics_unpivoted"
             format:      "parquet"
             description: "ERP pivot table melted back to long form"
+            source:      *local
         mode:       "unpivot"
         id_vars:    ["category"]
         var_name:   "metric"

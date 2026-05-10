@@ -2,36 +2,42 @@
 JoinDatasets — joins two datasets horizontally (pd.merge).
 
 config:
-    # source — see _io.py for both forms (simple catalog_source or full source block)
     left:
         dataset: str
+        source:  {id, type, description, config}
     right:
         dataset: str
+        source:  {id, type, description, config}
     join:
-        columns:  str | list   # column(s) to join on
+        columns:  str | list
         how:      str          # inner | left | right | outer  (default: inner)
-        suffixes: list         # e.g. ["_left", "_right"]  (default: ["_x", "_y"])
+        suffixes: list         # (default: ["_x", "_y"])
     output:
         dataset:     str
-        format:      str       # parquet | csv  (default: parquet)
+        format:      str       (default: parquet)
         description: str
+        source:      {id, type, description, config}   # required
 """
 import pandas as pd
 from waluigi.sdk.catalog import catalog
 from waluigi.sdk.context import context
-from waluigi.tasks._io import create_source, write_output
+from waluigi.tasks._io import _ensure_source, _to_dict, write_output
 
 
 def run():
-    create_source()
+    left  = _to_dict(context.config.left)
+    right = _to_dict(context.config.right)
 
-    left_reader  = catalog.resolve(context.config.left.dataset)
-    right_reader = catalog.resolve(context.config.right.dataset)
+    _ensure_source(left)
+    _ensure_source(right)
+
+    left_reader  = catalog.resolve(left["dataset"])
+    right_reader = catalog.resolve(right["dataset"])
 
     df_left  = left_reader.read()
     df_right = right_reader.read()
-    print(f"  left  {context.config.left.dataset}: {len(df_left)} rows @ {left_reader.version}")
-    print(f"  right {context.config.right.dataset}: {len(df_right)} rows @ {right_reader.version}")
+    print(f"  left  {left['dataset']}: {len(df_left)} rows @ {left_reader.version}")
+    print(f"  right {right['dataset']}: {len(df_right)} rows @ {right_reader.version}")
 
     j = context.config.join
     joined = pd.merge(
