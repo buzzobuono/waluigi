@@ -4,6 +4,7 @@ import threading
 import time
 import socket
 import os
+import json
 import configargparse
 import uvicorn
 import httpx
@@ -49,6 +50,7 @@ async def execute(request: Request):
     namespace = data.get("namespace")
     params     = data.get("params", {})
     attributes = data.get("attributes", {})
+    config     = data.get("config", {})
     resources  = data.get("resources")
 
     if script:
@@ -67,7 +69,7 @@ async def execute(request: Request):
 
     try:
         asyncio.create_task(
-            run_command_async(command, id, job_id, namespace, params, attributes, resources, workdir, script)
+            run_command_async(command, id, job_id, namespace, params, attributes, config, resources, workdir, script)
         )
         return JSONResponse({"status": "submitted", "id": id}, status_code=202)
 
@@ -77,7 +79,7 @@ async def execute(request: Request):
             active_tasks_count -= 1
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
-async def run_command_async(command, id, job_id, namespace, params, attributes, resources, workdir, script=None):
+async def run_command_async(command, id, job_id, namespace, params, attributes, config, resources, workdir, script=None):
     global active_tasks_count
 
     try:
@@ -91,6 +93,7 @@ async def run_command_async(command, id, job_id, namespace, params, attributes, 
             env[f"WALUIGI_ATTRIBUTE_{k.upper()}"] = str(v)
         env["WALUIGI_TASK_ID"] = id
         env["WALUIGI_JOB_ID"] = job_id
+        env["WALUIGI_CONFIG"] = json.dumps(config)
         if script:
             env["WALUIGI_SCRIPT"] = script
         os.makedirs(workdir, exist_ok=True)

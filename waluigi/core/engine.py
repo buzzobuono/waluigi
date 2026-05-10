@@ -55,6 +55,7 @@ class WaluigiEngine:
             "params": vars(task.params),
             "params_hash": task.hash(task.params),
             "attributes": vars(task.attributes),
+            "config": task.config,
             "resources": task.resources,
             "namespace": task.namespace
         }

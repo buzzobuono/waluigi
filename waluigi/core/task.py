@@ -12,6 +12,7 @@ class DynamicTask:
         self.resources = data.get('resources', {'coin': 1.0})
         self.params = SimpleNamespace(**self._resolve_params(data.get('params', {}), parent))
         self.attributes = SimpleNamespace(**data.get('attributes', {}))
+        self.config = data.get('config', {})
         
         self._raw_requires = data.get('requires', [])
         self._parent = parent
