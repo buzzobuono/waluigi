@@ -16,7 +16,9 @@ export default {
     const loading    = Vue.ref(false);
     const error      = Vue.ref('');
 
-    const route = VueRouter.useRoute();
+    const route  = VueRouter.useRoute();
+    const router = VueRouter.useRouter();
+
     Vue.onMounted(() => {
       if (route.query.id)  idInput.value  = route.query.id;
       if (route.query.ver) verInput.value = route.query.ver;
@@ -76,11 +78,16 @@ export default {
       return isExternal(id) ? id.replace('__external__/', '') : id;
     }
 
+    function hasVersion(version) {
+      return version && version !== 'live';
+    }
+
     return {
       idInput, verInput,
       upstream, downstream, current,
       loading, error,
-      search, navigateTo, isExternal, displayId,
+      search, navigateTo, isExternal, displayId, hasVersion,
+      router,
     };
   },
 
@@ -152,19 +159,50 @@ export default {
               v-for="u in upstream"
               :key="u.dataset_id + '/' + u.version"
               class="p-3 border-bottom"
-              :class="isExternal(u.dataset_id) ? 'text-muted' : 'cursor-pointer'"
-              @click="navigateTo(u.dataset_id, u.version)"
             >
-              <div :class="isExternal(u.dataset_id) ? 'text-muted small' : 'text-info'">
-                <i v-if="isExternal(u.dataset_id)" class="fas fa-external-link-alt mr-1"></i>
-                {{ displayId(u.dataset_id) }}
-              </div>
+              <div class="d-flex justify-content-between align-items-start">
+                <div
+                  class="flex-grow-1 mr-2"
+                  :class="isExternal(u.dataset_id) ? 'text-muted' : 'text-info cursor-pointer'"
+                  style="word-break:break-all"
+                  @click="navigateTo(u.dataset_id, u.version)"
+                >
+                  <i v-if="isExternal(u.dataset_id)" class="fas fa-external-link-alt mr-1"></i>
+                  <i v-else class="fas fa-sitemap mr-1 small"></i>
+                  {{ displayId(u.dataset_id) }}
+                  <div class="text-secondary small mt-1">
+                    <span v-if="u.version === 'live'" class="badge badge-light">live</span>
+                    <span v-else>{{ u.version ? u.version.slice(0, 19) : '—' }}</span>
+                  </div>
+                </div>
 
-              <div class="text-secondary small mt-1">
-                <span v-if="u.version === 'live'" class="badge badge-light">live</span>
-                <span v-else>{{ u.version ? u.version.slice(0, 19) : '—' }}</span>
+                <div v-if="!isExternal(u.dataset_id)" class="d-flex flex-column gap-1" style="gap:4px">
+                  <base-button
+                    icon="fas fa-eye"
+                    color="outline-secondary"
+                    size="sm"
+                    title="Preview"
+                    v-if="hasVersion(u.version)"
+                    @click.stop="router.push('/datasets/' + u.dataset_id + '/' + u.version)"
+                  />
+                  <base-button
+                    icon="fas fa-shield-alt"
+                    color="outline-success"
+                    size="sm"
+                    title="DQ result"
+                    v-if="hasVersion(u.version)"
+                    @click.stop="router.push('/dq/' + u.dataset_id + '/' + u.version)"
+                  />
+                  <base-button
+                    icon="fas fa-chart-bar"
+                    color="outline-info"
+                    size="sm"
+                    title="Charts"
+                    v-if="hasVersion(u.version)"
+                    @click.stop="router.push('/charts/' + u.dataset_id + '/' + u.version)"
+                  />
+                </div>
               </div>
-
             </div>
 
           </base-panel>
@@ -179,9 +217,28 @@ export default {
             </template>
 
             <div class="p-3">
-              <div class="text-info font-weight-bold">{{ current.dataset_id }}</div>
-
+              <div class="text-info font-weight-bold" style="word-break:break-all">{{ current.dataset_id }}</div>
               <div class="text-secondary small mt-1">{{ current.version ? current.version.slice(0, 19) : '' }}</div>
+
+              <div class="mt-3">
+                <div class="text-muted small mb-2 font-weight-bold text-uppercase" style="font-size:0.7rem;letter-spacing:.05em">Dataset</div>
+                <div class="d-flex flex-wrap" style="gap:6px">
+                  <base-button icon="fas fa-columns"    color="outline-warning" size="sm" title="Schema columns"    @click="router.push('/schema/'       + current.dataset_id)" />
+                  <base-button icon="fas fa-shield-alt" color="outline-success" size="sm" title="DQ Expectations"  @click="router.push('/expectations/' + current.dataset_id)" />
+                  <base-button icon="fas fa-history"    color="outline-primary" size="sm" title="DQ History"       @click="router.push('/dq-history/'   + current.dataset_id)" />
+                  <base-button icon="fas fa-chart-bar"  color="outline-info"    size="sm" title="Chart definitions" @click="router.push('/chart-defs/'  + current.dataset_id)" />
+                  <base-button icon="fas fa-book"       color="outline-secondary" size="sm" title="Catalog"        @click="router.push({ path: '/catalog', query: { dataset: current.dataset_id } })" />
+                </div>
+              </div>
+
+              <div class="mt-3" v-if="current.version">
+                <div class="text-muted small mb-2 font-weight-bold text-uppercase" style="font-size:0.7rem;letter-spacing:.05em">This version</div>
+                <div class="d-flex flex-wrap" style="gap:6px">
+                  <base-button icon="fas fa-eye"         color="outline-secondary" size="sm" title="Preview"    @click="router.push('/datasets/' + current.dataset_id + '/' + current.version)" />
+                  <base-button icon="fas fa-check-circle" color="outline-success"  size="sm" title="DQ result"  @click="router.push('/dq/'       + current.dataset_id + '/' + current.version)" />
+                  <base-button icon="fas fa-chart-line"   color="outline-info"     size="sm" title="Charts"     @click="router.push('/charts/'   + current.dataset_id + '/' + current.version)" />
+                </div>
+              </div>
             </div>
 
           </base-panel>
@@ -203,13 +260,47 @@ export default {
             <div
               v-for="d in downstream"
               :key="d.dataset_id + '/' + d.version"
-              class="p-3 border-bottom cursor-pointer"
-              @click="navigateTo(d.dataset_id, d.version)"
+              class="p-3 border-bottom"
             >
-              <div class="text-info">{{ d.dataset_id }}</div>
+              <div class="d-flex justify-content-between align-items-start">
+                <div
+                  class="flex-grow-1 mr-2 text-info cursor-pointer"
+                  style="word-break:break-all"
+                  @click="navigateTo(d.dataset_id, d.version)"
+                >
+                  <i class="fas fa-sitemap mr-1 small"></i>
+                  {{ d.dataset_id }}
+                  <div class="text-secondary small mt-1">
+                    {{ d.version ? d.version.slice(0, 19) : '—' }}
+                  </div>
+                </div>
 
-              <div class="text-secondary small mt-1">
-                {{ d.version ? d.version.slice(0, 19) : '—' }}
+                <div class="d-flex flex-column" style="gap:4px">
+                  <base-button
+                    icon="fas fa-eye"
+                    color="outline-secondary"
+                    size="sm"
+                    title="Preview"
+                    v-if="hasVersion(d.version)"
+                    @click.stop="router.push('/datasets/' + d.dataset_id + '/' + d.version)"
+                  />
+                  <base-button
+                    icon="fas fa-shield-alt"
+                    color="outline-success"
+                    size="sm"
+                    title="DQ result"
+                    v-if="hasVersion(d.version)"
+                    @click.stop="router.push('/dq/' + d.dataset_id + '/' + d.version)"
+                  />
+                  <base-button
+                    icon="fas fa-chart-bar"
+                    color="outline-info"
+                    size="sm"
+                    title="Charts"
+                    v-if="hasVersion(d.version)"
+                    @click.stop="router.push('/charts/' + d.dataset_id + '/' + d.version)"
+                  />
+                </div>
               </div>
             </div>
 
