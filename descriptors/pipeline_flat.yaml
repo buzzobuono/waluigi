@@ -7,71 +7,64 @@ q.sources:
 kind: Pipeline
 metadata:
     workdir: "work"
+params:
+    date: "2026-05-15"
 spec:
-    name: "ERP Enrichment Pipeline"
-    id:   "erp_pipeline"
-    namespace: "analytics"
-    params:
-        date: "2026-05-15"
-    tasks:
-        - id:   "filter_high_value"
-          name: "Filter High-Value Rows"
-          type: "FilterDataset"
-          params:
-              date: ${parent.params.date}
-          config:
-              input:
-                  dataset: "analytics/erp/clean/clean_erp"
-                  source:  *local
-              output:
-                  dataset:     "analytics/erp/filtered/high_value"
-                  format:      "parquet"
-                  description: "ERP metrics with value > 1000"
-                  source:      *local
-              where: "value > 1000"
-          resources:
-              coin: 1
+    - id:        "filter_high_value"
+      name:      "Filter High-Value Rows"
+      namespace: "analytics"
+      type:      "FilterDataset"
+      config:
+          input:
+              dataset: "analytics/erp/clean/clean_erp"
+              source:  *local
+          output:
+              dataset:     "analytics/erp/filtered/high_value"
+              format:      "parquet"
+              description: "ERP metrics with value > 1000"
+              source:      *local
+          where: "value > 1000"
+      resources:
+          coin: 1
 
-        - id:       "add_derived"
-          name:     "Add Derived Metrics"
-          type:     "AddDerivedColumns"
-          requires: ["filter_high_value"]
-          params:
-              date: ${parent.params.date}
-          config:
-              input:
-                  dataset: "analytics/erp/filtered/high_value"
-                  source:  *local
-              output:
-                  dataset:     "analytics/erp/enriched/high_value_with_derived"
-                  format:      "parquet"
-                  description: "Filtered ERP with value_k and value_pct"
-                  source:      *local
-              columns:
-                  - name: "value_k"
-                    expr: "value / 1000"
-                  - name: "value_pct"
-                    expr: "value_k / 10"
-          resources:
-              coin: 1
+    - id:        "add_derived"
+      name:      "Add Derived Metrics"
+      namespace: "analytics"
+      type:      "AddDerivedColumns"
+      requires:  ["filter_high_value"]
+      config:
+          input:
+              dataset: "analytics/erp/filtered/high_value"
+              source:  *local
+          output:
+              dataset:     "analytics/erp/enriched/high_value_with_derived"
+              format:      "parquet"
+              description: "Filtered ERP with value_k and value_pct"
+              source:      *local
+          columns:
+              - name: "value_k"
+                expr: "value / 1000"
+              - name: "value_pct"
+                expr: "value_k / 10"
+      resources:
+          coin: 1
 
-        - id:       "aggregate_by_category"
-          name:     "Aggregate by Category"
-          type:     "AggregateDataset"
-          requires: ["add_derived"]
-          params:
-              date: ${parent.params.date}
-          config:
-              input:
-                  dataset: "analytics/erp/enriched/high_value_with_derived"
-                  source:  *local
-              output:
-                  dataset:     "analytics/erp/aggregated/high_value_by_category"
-                  format:      "parquet"
-                  description: "High-value ERP summed by category"
-                  source:      *local
-              group_by: ["category"]
-              agg:
-                  value_k: "sum"
-          resources:
-              coin: 1
+    - id:        "aggregate_by_category"
+      name:      "Aggregate by Category"
+      namespace: "analytics"
+      type:      "AggregateDataset"
+      requires:  ["add_derived"]
+      config:
+          input:
+              dataset: "analytics/erp/enriched/high_value_with_derived"
+              source:  *local
+          output:
+              dataset:     "analytics/erp/aggregated/high_value_by_category"
+              format:      "parquet"
+              description: "High-value ERP summed by category"
+              source:      *local
+          group_by: ["category"]
+          agg:
+              value_k: "sum"
+      resources:
+          coin: 1
