@@ -1,0 +1,80 @@
+x-scripts:
+    produce: &produce_script |
+        import random
+        import pandas as pd
+        from waluigi.sdk.context import context
+        from waluigi.sdk.catalog import catalog
+        from waluigi.catalog.models import SourceCreateRequest, SourceType
+
+        METRICS = [
+            ("revenue",      "finance"),
+            ("costs",        "finance"),
+            ("orders",       "operations"),
+            ("refunds",      "finance"),
+            ("sessions",     "traffic"),
+            ("pageviews",    "traffic"),
+            ("conversions",  "acquisition"),
+            ("bounce_rate",  "engagement"),
+            ("followers",    "audience"),
+            ("impressions",  "reach"),
+            ("engagements",  "interaction"),
+            ("shares",       "viral"),
+        ]
+
+        SOURCES = ["erp", "web", "social"]
+
+        date = context.params.date
+        rows_per_source = int(getattr(context.params, "rows_per_source", 4))
+
+        catalog.create_source(SourceCreateRequest(
+            id="test-local",
+            type=SourceType.LOCAL,
+            config={},
+            description="Local storage for the test dataset",
+        ))
+
+        rows = [
+            {
+                "date":     date,
+                "source":   source,
+                "metric":   metric,
+                "value":    round(random.uniform(100, 10_000), 2),
+                "category": category,
+            }
+            for source in SOURCES
+            for metric, category in random.sample(METRICS, rows_per_source)
+        ]
+        df = pd.DataFrame(rows)
+        print(f"Generated {len(df)} rows for date={date}")
+
+        handle = catalog.create_dataset(
+            "tests/test_dataset",
+            format="parquet",
+            source_id="test-local",
+            description="Test dataset",
+        )
+
+        with handle.create_version(metadata={"date": date}) as writer:
+            writer.write(df)
+
+        if writer.skipped:
+            print(f"Skipped — same metadata, existing version: {writer.version}")
+        else:
+            print(f"Done: {writer.dataset_id} @ {writer.version} ({len(df)} rows)")
+
+
+kind: DAG
+metadata:
+    workdir: "work"
+spec:
+    name: "ProduceTestDataset"
+    id:   "catalog_produce_test_dataset"
+    namespace: "catalog"
+    script: *produce_script
+    params:
+        date:            "2026-05-10"
+        rows_per_source: "4"
+    resources:
+        coin: 1
+    affinity:
+        - python
