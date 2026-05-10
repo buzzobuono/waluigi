@@ -1,4 +1,4 @@
-.scripts:
+x-scripts:
     report: &report_script |
         import pandas as pd
         from waluigi.sdk.context import context

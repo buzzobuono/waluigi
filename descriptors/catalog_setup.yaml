@@ -1,4 +1,4 @@
-q.config:
+x-config:
     local_source: &local_source
         id:          "analytics-local"
         type:        "LOCAL"

@@ -1,4 +1,4 @@
-q.sources:
+x-sources:
     local: &local
         id:          "simulation-local"
         type:        "LOCAL"
