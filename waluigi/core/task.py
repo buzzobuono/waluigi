@@ -2,35 +2,17 @@ import json
 from types import SimpleNamespace
 
 
-def _expand_tasks(spec):
-    """Convert flat tasks list to nested requires tree.
+def _expand_pipeline(task_list, pipeline_params):
+    """Expand a flat Pipeline task list into a nested DynamicTask spec.
 
-    ${parent.params.X} in each task is resolved against the outer Pipeline params,
-    since in the flat format there is no task-level parent chain to walk.
-    The outer spec id/name/params are preserved as the job identity; only the
-    execution keys (type, command, script, config, resources, affinity, requires)
-    are taken from the terminal task (the one nothing else requires).
+    Pipeline-level params are merged into every task (task-specific params win).
+    No interpolation syntax needed — params are injected directly.
+    The terminal task (the one nothing else requires) becomes the DAG root.
     """
-    if "tasks" not in spec:
-        return spec
-
-    outer_params = spec.get("params", {})
-
-    def resolve_params(params):
-        result = {}
-        for k, v in params.items():
-            if isinstance(v, str) and "${parent.params." in v:
-                key = v.split(".")[-1].rstrip("}")
-                result[k] = outer_params.get(key, v)
-            else:
-                result[k] = v
-        return result
-
     tasks = []
-    for t in spec["tasks"]:
+    for t in task_list:
         t = dict(t)
-        if "params" in t:
-            t["params"] = resolve_params(t["params"])
+        t["params"] = {**pipeline_params, **t.get("params", {})}
         tasks.append(t)
 
     by_id = {t["id"]: t for t in tasks}
@@ -46,14 +28,7 @@ def _expand_tasks(spec):
             node["requires"] = [build(dep) for dep in dep_ids]
         return node
 
-    # Outer spec keeps id/name/namespace/params (pipeline identity).
-    # Terminal task contributes type/command/script/config/resources/affinity/requires.
-    result = {k: v for k, v in spec.items() if k != "tasks"}
-    root = build(roots[0])
-    for key in ("type", "command", "script", "config", "resources", "affinity", "requires"):
-        if key in root:
-            result[key] = root[key]
-    return result
+    return build(roots[0])
 
 
 class DynamicTask:

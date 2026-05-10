@@ -116,13 +116,14 @@ async def submit(request: Request):
         return JSONResponse({"status": "error", "message": "Empty 'spec'"}, status_code=400)
 
     if kind == "Pipeline":
-        if "tasks" not in spec:
-            return JSONResponse({"status": "error", "message": "kind: Pipeline requires a 'tasks' list in spec."}, status_code=422)
-        from waluigi.core.task import _expand_tasks
-        spec = _expand_tasks(spec)
+        if not isinstance(spec, list):
+            return JSONResponse({"status": "error", "message": "kind: Pipeline requires spec to be a list of tasks."}, status_code=422)
+        from waluigi.core.task import _expand_pipeline
+        pipeline_params = data.get("params", {})
+        spec = _expand_pipeline(spec, pipeline_params)
     elif kind in ("DAG", "Job"):
-        if "tasks" in spec:
-            return JSONResponse({"status": "error", "message": "kind: DAG does not support 'tasks' list; use nested 'requires'."}, status_code=422)
+        if not isinstance(spec, dict):
+            return JSONResponse({"status": "error", "message": "kind: DAG requires spec to be a dict with nested requires."}, status_code=422)
 
     metadata = data.get("metadata", {})
     try:
