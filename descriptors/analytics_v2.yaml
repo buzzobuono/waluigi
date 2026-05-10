@@ -3,7 +3,7 @@ q.scripts:
         import pandas as pd
         from waluigi.sdk.context import context
         from waluigi.sdk.catalog import catalog
-        from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
+        from waluigi.catalog.models import SourceCreateRequest, SourceType
 
         date = context.params.date
         print(f"Building global report for {date} ...")
@@ -20,7 +20,7 @@ q.scripts:
         lineage = []
 
         for source in sources:
-            reader = catalog.resolve(f"analytics/{source}/clean/clean_{source}")
+            reader = catalog.read_dataset(f"analytics/{source}/clean/clean_{source}")
             df     = reader.read()
             df["pipeline_source"] = source
             frames.append(df)
@@ -32,14 +32,16 @@ q.scripts:
 
         report_id = "analytics/reports/global_report"
 
-        dataset = DatasetCreateRequest(
-            id=report_id,
-            format=DatasetFormat.PARQUET,
-            description="Global consolidated report across all sources",
+        handle = catalog.create_dataset(
+            report_id,
+            format="parquet",
             source_id=context.config.catalog_source,
+            description="Global consolidated report across all sources",
         )
+        for i, c in enumerate(context.config.charts):
+            handle.set_chart(c["key"], c["title"], c["spec"], position=i)
 
-        with catalog.produce(dataset, metadata={"date": date}, inputs=lineage) as writer:
+        with handle.create_version(metadata={"date": date}, inputs=lineage) as writer:
             writer.write(report_df)
 
         if writer.skipped:
@@ -47,15 +49,12 @@ q.scripts:
         else:
             print(f"Done: {writer.dataset_id} @ {writer.version} ({len(report_df)} rows)")
 
-        catalog.set_charts(report_id, context.config.charts)
-        print(f"Charts set on {report_id}")
-
     clean: &clean_script |
         import random
         import pandas as pd
         from waluigi.sdk.context import context
         from waluigi.sdk.catalog import catalog
-        from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
+        from waluigi.catalog.models import SourceCreateRequest, SourceType
 
         source    = context.params.source.lower()
         date      = context.params.date
@@ -74,7 +73,7 @@ q.scripts:
         raw_id   = f"analytics/{source}/raw/raw_{source}"
         clean_id = f"analytics/{source}/clean/clean_{source}"
 
-        reader = catalog.resolve(raw_id)
+        reader = catalog.read_dataset(raw_id)
         df     = reader.read()
         print(f"Read {len(df)} rows from {raw_id} @ {reader.version}")
 
@@ -83,16 +82,16 @@ q.scripts:
         df["value"]  = df["value"].astype(float)
         print(f"After cleaning: {len(df)} rows")
 
-        dataset = DatasetCreateRequest(
-            id=clean_id,
-            format=DatasetFormat.PARQUET,
-            description=f"Cleaned data for {source}",
+        handle = catalog.create_dataset(
+            clean_id,
+            format="parquet",
             source_id=context.config.catalog_source,
+            description=f"Cleaned data for {source}",
         )
-        lineage = [{"dataset_id": reader.dataset_id, "version": reader.version}]
+        handle.set_expectations(context.config.expectations)
 
-        with catalog.produce(dataset, metadata={"date": date, "source": source},
-                             inputs=lineage) as writer:
+        lineage = [{"dataset_id": reader.dataset_id, "version": reader.version}]
+        with handle.create_version(metadata={"date": date, "source": source}, inputs=lineage) as writer:
             writer.write(df)
 
         if writer.skipped:
@@ -100,15 +99,12 @@ q.scripts:
         else:
             print(f"Done: {writer.dataset_id} @ {writer.version} ({len(df)} rows)")
 
-        catalog.set_expectations(clean_id, context.config.expectations)
-        print(f"DQ expectations set on {clean_id}")
-
     extract: &extract_script |
         import random
         import pandas as pd
         from waluigi.sdk.context import context
         from waluigi.sdk.catalog import catalog
-        from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
+        from waluigi.catalog.models import SourceCreateRequest, SourceType
 
         METRICS = {
             "erp":    [("revenue",     "finance"),     ("costs",       "finance"),
@@ -138,14 +134,14 @@ q.scripts:
         ]
         df = pd.DataFrame(rows)
 
-        dataset = DatasetCreateRequest(
-            id=f"analytics/{source}/raw/raw_{source}",
-            format=DatasetFormat.PARQUET,
-            description=f"Raw extracted data for {source}",
+        handle = catalog.create_dataset(
+            f"analytics/{source}/raw/raw_{source}",
+            format="parquet",
             source_id=context.config.catalog_source,
+            description=f"Raw extracted data for {source}",
         )
 
-        with catalog.produce(dataset, metadata={"date": date, "source": source}) as writer:
+        with handle.create_version(metadata={"date": date, "source": source}) as writer:
             writer.write(df)
 
         if writer.skipped:
