@@ -2,7 +2,7 @@ kind: DAG
 metadata:
     workdir: "work"
 spec:
-    name: "DefineReportSchema"
+    name: "DefineTestSchema"
     id:   "catalog_define_schema_test"
     namespace: "catalog"
     type: "CatalogDefineSchema"
@@ -12,17 +12,12 @@ spec:
         columns:
             - name:         "date"
               logical_type: "date"
-              description:  "Reference date of the report"
+              description:  "Reference date of the record"
               nullable:     false
               pii:          false
             - name:         "source"
               logical_type: "string"
-              description:  "Origin system (erp, web, social)"
-              nullable:     false
-              pii:          false
-            - name:         "pipeline_source"
-              logical_type: "string"
-              description:  "Pipeline source label injected at merge time"
+              description:  "Origin system identifier"
               nullable:     false
               pii:          false
             - name:         "metric"
@@ -37,7 +32,7 @@ spec:
               pii:          false
             - name:         "category"
               logical_type: "string"
-              description:  "Metric category (finance, traffic, audience, …)"
+              description:  "Metric category"
               nullable:     true
               pii:          false
     resources:
