@@ -1,0 +1,318 @@
+q.scripts:
+    report: &report_script |
+        import pandas as pd
+        from waluigi.sdk.context import context
+        from waluigi.sdk.catalog import catalog
+        from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
+
+        date = context.params.date
+        print(f"Building global report for {date} ...")
+
+        catalog.create_source(SourceCreateRequest(
+            id=context.config.catalog_source,
+            type=SourceType.LOCAL,
+            config={},
+            description="Local storage for analytics pipeline",
+        ))
+
+        sources = ["erp", "web", "social"]
+        frames  = []
+        lineage = []
+
+        for source in sources:
+            reader = catalog.resolve(f"analytics/{source}/clean/clean_{source}")
+            df     = reader.read()
+            df["pipeline_source"] = source
+            frames.append(df)
+            lineage.append({"dataset_id": reader.dataset_id, "version": reader.version})
+            print(f"  {source}: {len(df)} rows @ {reader.version}")
+
+        report_df = pd.concat(frames, ignore_index=True)
+        print(f"Total rows in report: {len(report_df)}")
+
+        report_id = "analytics/reports/global_report"
+
+        dataset = DatasetCreateRequest(
+            id=report_id,
+            format=DatasetFormat.PARQUET,
+            description="Global consolidated report across all sources",
+            source_id=context.config.catalog_source,
+        )
+
+        with catalog.produce(dataset, metadata={"date": date}, inputs=lineage) as writer:
+            writer.write(report_df)
+
+        if writer.skipped:
+            print(f"Skipped — same metadata, existing version: {writer.version}")
+        else:
+            print(f"Done: {writer.dataset_id} @ {writer.version} ({len(report_df)} rows)")
+
+        catalog.set_charts(report_id, context.config.charts)
+        print(f"Charts set on {report_id}")
+
+    clean: &clean_script |
+        import random
+        import pandas as pd
+        from waluigi.sdk.context import context
+        from waluigi.sdk.catalog import catalog
+        from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
+
+        source    = context.params.source.lower()
+        date      = context.params.date
+        fail_prob = float(context.attributes.fail_prob)
+
+        if random.random() < fail_prob:
+            raise RuntimeError(f"Simulated failure while cleaning {source}")
+
+        catalog.create_source(SourceCreateRequest(
+            id=context.config.catalog_source,
+            type=SourceType.LOCAL,
+            config={},
+            description="Local storage for analytics pipeline",
+        ))
+
+        raw_id   = f"analytics/{source}/raw/raw_{source}"
+        clean_id = f"analytics/{source}/clean/clean_{source}"
+
+        reader = catalog.resolve(raw_id)
+        df     = reader.read()
+        print(f"Read {len(df)} rows from {raw_id} @ {reader.version}")
+
+        df = df.dropna()
+        df["metric"] = df["metric"].str.strip().str.lower()
+        df["value"]  = df["value"].astype(float)
+        print(f"After cleaning: {len(df)} rows")
+
+        dataset = DatasetCreateRequest(
+            id=clean_id,
+            format=DatasetFormat.PARQUET,
+            description=f"Cleaned data for {source}",
+            source_id=context.config.catalog_source,
+        )
+        lineage = [{"dataset_id": reader.dataset_id, "version": reader.version}]
+
+        with catalog.produce(dataset, metadata={"date": date, "source": source},
+                             inputs=lineage) as writer:
+            writer.write(df)
+
+        if writer.skipped:
+            print(f"Skipped — same metadata, existing version: {writer.version}")
+        else:
+            print(f"Done: {writer.dataset_id} @ {writer.version} ({len(df)} rows)")
+
+        catalog.set_expectations(clean_id, context.config.expectations)
+        print(f"DQ expectations set on {clean_id}")
+
+    extract: &extract_script |
+        import random
+        import pandas as pd
+        from waluigi.sdk.context import context
+        from waluigi.sdk.catalog import catalog
+        from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
+
+        METRICS = {
+            "erp":    [("revenue",     "finance"),     ("costs",       "finance"),
+                       ("orders",      "operations"),  ("refunds",     "finance")],
+            "web":    [("sessions",    "traffic"),     ("pageviews",   "traffic"),
+                      ("conversions", "acquisition"), ("bounce_rate", "engagement")],
+            "social": [("followers",   "audience"),    ("impressions", "reach"),
+                       ("engagements", "interaction"), ("shares",      "viral")],
+        }
+
+        source = context.params.source.lower()
+        date   = context.params.date
+
+        catalog.create_source(SourceCreateRequest(
+            id=context.config.catalog_source,
+            type=SourceType.LOCAL,
+            config={},
+            description="Local storage for analytics pipeline",
+        ))
+
+        print(f"Extracting raw data for source: {source}, date: {date}")
+
+        rows = [
+            {"date": date, "source": source, "metric": metric,
+             "value": round(random.uniform(100, 10_000), 2), "category": category}
+            for metric, category in METRICS[source]
+        ]
+        df = pd.DataFrame(rows)
+
+        dataset = DatasetCreateRequest(
+            id=f"analytics/{source}/raw/raw_{source}",
+            format=DatasetFormat.PARQUET,
+            description=f"Raw extracted data for {source}",
+            source_id=context.config.catalog_source,
+        )
+
+        with catalog.produce(dataset, metadata={"date": date, "source": source}) as writer:
+            writer.write(df)
+
+        if writer.skipped:
+            print(f"Skipped — same metadata, existing version: {writer.version}")
+        else:
+            print(f"Done: {writer.dataset_id} @ {writer.version} ({len(df)} rows)")
+
+q.config:
+    source: &cfg_source
+        catalog_source: "analytics-local"
+
+    clean_expectations: &cfg_clean_expectations
+        - rule_id: "expect_column_values_to_not_be_null"
+          inputs: {x: "this.metric"}
+          tolerance: 1.0
+        - rule_id: "expect_column_values_to_not_be_null"
+          inputs: {x: "this.value"}
+          tolerance: 1.0
+        - rule_id: "expect_column_values_to_be_unique"
+          inputs: {x: "this.metric"}
+          tolerance: 1.0
+        - rule_id: "expect_column_values_to_be_between"
+          inputs: {x: "this.value"}
+          params: {min_val: 0, max_val: 1000000}
+          tolerance: 1.0
+        - rule_id: "expect_column_values_to_be_of_type"
+          inputs: {x: "this.value"}
+          params: {target_type: "float"}
+          tolerance: 1.0
+
+    report_charts: &cfg_report_charts
+        - key:   "value_by_source"
+          title: "Total value by source"
+          spec:
+              type: "bar"
+              x:   {field: "pipeline_source", label: "Source"}
+              y:   {field: "value", agg: "sum", label: "Total Value"}
+        - key:   "value_by_metric"
+          title: "Value by metric"
+          spec:
+              type: "bar"
+              x:   {field: "metric", label: "Metric"}
+              y:   {field: "value", agg: "sum", label: "Total Value"}
+        - key:   "value_share_by_source"
+          title: "Value share by source"
+          spec:
+              type: "pie"
+              x:   {field: "pipeline_source"}
+              y:   {field: "value", agg: "sum"}
+        - key:   "value_distribution"
+          title: "Value distribution"
+          spec:
+              type: "histogram"
+              x:   {field: "value", label: "Value"}
+              bins: 10
+        - key:   "value_by_category"
+          title: "Value by category"
+          spec:
+              type: "bar"
+              x:   {field: "category", label: "Category"}
+              y:   {field: "value", agg: "sum", label: "Total Value"}
+
+
+kind: Job
+metadata:
+    workdir: "work"
+spec:
+    name: "GlobalReport"
+    id: "final_report_v2"
+    namespace: "analytics"
+    script: *report_script
+    params:
+        date: "2026-05-15"
+    attributes:
+        var: "pippo"
+    config:
+        <<: *cfg_source
+        charts: *cfg_report_charts
+    resources:
+        coin: 1
+    affinity:
+        - python
+    requires:
+        - name: "CleanDataTask"
+          namespace: "analytics"
+          id: "clean_erp_v2"
+          script: *clean_script
+          params:
+              source: "ERP"
+              date: "${parent.params.date}"
+          attributes:
+              fail_prob: "0.0"
+          config:
+              <<: *cfg_source
+              expectations: *cfg_clean_expectations
+          resources:
+              pdc: 1
+          affinity:
+              - python
+          requires:
+              - name: "RawDataExtract"
+                namespace: "analytics"
+                id: "extract_erp_v2"
+                script: *extract_script
+                params:
+                    source: "${parent.params.source}"
+                    date: "${parent.params.date}"
+                config: *cfg_source
+                resources:
+                    coin: 1
+                affinity:
+                    - python
+        - name: "CleanDataTask"
+          namespace: "analytics"
+          id: "clean_web_v2"
+          script: *clean_script
+          params:
+              source: "WEB"
+              date: "${parent.params.date}"
+          attributes:
+              fail_prob: "0.0"
+          config:
+              <<: *cfg_source
+              expectations: *cfg_clean_expectations
+          resources:
+              pdc: 1
+          affinity:
+              - python
+          requires:
+              - name: "RawDataExtract"
+                namespace: "analytics"
+                id: "extract_web_v2"
+                script: *extract_script
+                params:
+                    source: "${parent.params.source}"
+                    date: "${parent.params.date}"
+                config: *cfg_source
+                resources:
+                    coin: 1
+                affinity:
+                    - python
+        - name: "CleanDataTask"
+          namespace: "analytics"
+          id: "clean_social_v2"
+          script: *clean_script
+          params:
+              source: "SOCIAL"
+              date: "${parent.params.date}"
+          attributes:
+              fail_prob: "0.0"
+          config:
+              <<: *cfg_source
+              expectations: *cfg_clean_expectations
+          resources:
+              pdc: 1
+          affinity:
+              - python
+          requires:
+              - name: "RawDataExtract"
+                namespace: "analytics"
+                id: "extract_social_v2"
+                script: *extract_script
+                params:
+                    source: "${parent.params.source}"
+                    date: "${parent.params.date}"
+                config: *cfg_source
+                resources:
+                    coin: 1
+                affinity:
+                    - python
