@@ -777,26 +777,6 @@ async def get_dq_result(dataset_id: str, version: str):
     return ok(row)
 
 
-@app.post("/datasets/{dataset_id:path}/dq/_rerun", tags=["DQ Results"],
-          summary="Re-run DQ expectations on the latest committed version")
-async def rerun_dq(dataset_id: str):
-    if not db.exists_dataset(dataset_id):
-        return ko("Dataset not found", 404)
-    expectations = db.list_expectations(dataset_id)
-    if not expectations:
-        return ko("No expectations defined for this dataset", 404)
-    ver = db.get_latest_version(dataset_id)
-    if not ver:
-        return ko("No committed version found", 404)
-    dataset = db.get_dataset(dataset_id)
-    source  = db.get_source(dataset["source_id"])
-    connector = ConnectorFactory.get(source["type"], source["config"])
-    result = _run_dq_nonblocking(
-        dataset_id, ver["version"], connector, ver["location"],
-        dataset["format"], expectations,
-    )
-    return ok(result)
-
 
 # Routes - Lineage
 

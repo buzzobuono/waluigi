@@ -37,8 +37,21 @@ class CatalogWarning(UserWarning):
 class CatalogClient:
     """Client for pipeline tasks: read and write catalog datasets.
 
-    Admin operations (schema editing, chart management, approval, etc.)
-    are exposed via the Catalog REST API and the web console.
+    Typical usage::
+
+        catalog = CatalogClient()
+
+        # Define a dataset (idempotent), then work with it
+        handle = catalog.define("sales/raw", format="parquet", source_id="local")
+        handle.expect([{"rule_id": "expect_column_values_to_not_be_null", "inputs": {"x": "this.col"}}])
+        handle.add_chart("revenue_by_date", "Revenue by date", spec={...})
+
+        with handle.produce(metadata={"date": "2026-01-01"}) as writer:
+            writer.write(df)
+
+        # Read a dataset
+        reader = catalog.resolve("sales/raw")
+        df = reader.read()
     """
 
     def __init__(self, url: str = None):
@@ -58,22 +71,18 @@ class CatalogClient:
     # ── SOURCES ───────────────────────────────────────────────────────────────
 
     def list_sources(self) -> List[dict]:
-        """Return all registered data sources."""
         return self._get("/sources")
 
     def get_source(self, id: str) -> dict:
-        """Return a single source by ID."""
         return self._get(f"/sources/{id}")
 
     def create_source(self, request: SourceCreateRequest) -> dict:
-        """Register a new data source (idempotent)."""
         return self._post("/sources", json=_model_dump(request))
 
     # ── DATASETS ──────────────────────────────────────────────────────────────
 
     def list_datasets(self, status: DatasetStatus = None,
                       description: str = None) -> List[dict]:
-        """Return datasets, optionally filtered by status or description."""
         params = {}
         if status:
             params["status"] = status.value if isinstance(status, DatasetStatus) else status
@@ -82,39 +91,53 @@ class CatalogClient:
         return self._get("/datasets", params=params or None)
 
     def get_dataset(self, id: str) -> dict:
-        """Return a single dataset by ID."""
         return self._get(f"/datasets/{id}")
 
     def create_dataset(self, request: DatasetCreateRequest) -> dict:
-        """Create a dataset (idempotent — ignored if already exists)."""
         return self._post("/datasets", json=_model_dump(request))
+
+    def define(self, id: str, format: Union[str, DatasetFormat],
+               source_id: str, description: str = "") -> "DatasetHandle":
+        """Create or upsert a dataset and return a handle for further operations.
+
+        Call ``.expect()`` and ``.add_chart()`` on the handle to configure the
+        dataset before producing a version::
+
+            handle = catalog.define("my/dataset", format="parquet", source_id="local")
+            handle.expect([...])
+            with handle.produce(metadata={"date": "2026-01-01"}) as writer:
+                writer.write(df)
+        """
+        fmt = DatasetFormat[format.upper()] if isinstance(format, str) else format
+        self.create_dataset(DatasetCreateRequest(
+            id=id,
+            format=fmt,
+            source_id=source_id,
+            description=description,
+        ))
+        return DatasetHandle(self, id, fmt, source_id)
 
     # ── VERSIONS ──────────────────────────────────────────────────────────────
 
     def list_versions(self, dataset_id: str) -> List[dict]:
-        """Return all committed versions for a dataset, newest first."""
         return self._get(f"/datasets/{dataset_id}/versions")
 
     def get_version_metadata(self, dataset_id: str, version: str) -> dict:
-        """Return all metadata key/value pairs for a dataset version."""
         return self._get(f"/datasets/{dataset_id}/versions/{version}/metadata")
 
     # ── LINEAGE ───────────────────────────────────────────────────────────────
 
     def get_lineage(self, dataset_id: str, version: str) -> dict:
-        """Return upstream/downstream lineage for a specific dataset version."""
         return self._get(f"/datasets/{dataset_id}/lineage/{version}")
 
     # ── EXPECTATIONS (DQ config) ───────────────────────────────────────────────
 
     def list_expectations(self, dataset_id: str) -> List[dict]:
-        """Return all DQ expectations defined for a dataset."""
         return self._get(f"/datasets/{dataset_id}/expectations")
 
     def add_expectation(self, dataset_id: str, rule_id: str,
                         inputs: dict = None, params: dict = None,
                         tolerance: float = 1.0, position: int = 0) -> dict:
-        """Append a new DQ expectation rule to a dataset."""
         return self._post(f"/datasets/{dataset_id}/expectations", json={
             "rule_id":   rule_id,
             "inputs":    inputs or {},
@@ -123,60 +146,10 @@ class CatalogClient:
             "position":  position,
         })
 
-    def set_expectations(self, dataset_id: str, expectations: List[dict]) -> List[dict]:
-        """Replace all expectations for a dataset (bulk reset) and re-run DQ on the latest version.
-
-        Each item: {"rule_id": str, "inputs": dict, "params": dict, "tolerance": float}
-        """
-        for exp in self.list_expectations(dataset_id):
-            self._delete(f"/datasets/{dataset_id}/expectations/{exp['id']}")
-        result = [
-            self.add_expectation(
-                dataset_id,
-                rule_id=exp["rule_id"],
-                inputs=exp.get("inputs", {}),
-                params=exp.get("params", {}),
-                tolerance=exp.get("tolerance", 1.0),
-                position=i,
-            )
-            for i, exp in enumerate(expectations)
-        ]
-        try:
-            self._post(f"/datasets/{dataset_id}/dq/_rerun", json={})
-        except Exception:
-            pass
-        return result
-
     # ── CHARTS ────────────────────────────────────────────────────────────────
 
-    def set_charts(self, dataset_id: str, charts: List[dict]) -> List[dict]:
-        """Replace all chart definitions for a dataset (idempotent, upsert by key).
-
-        Upserts by ``key`` — existing charts keep their DB id so dashboard
-        panels that reference a (dataset_id, chart_key) pair stay valid across
-        pipeline re-runs. Charts not present in the new list are deleted.
-
-        Each item: {"key": str, "title": str, "spec": dict, "position": int (optional)}
-        """
-        existing = {c["key"]: c for c in self._get(f"/datasets/{dataset_id}/charts")}
-        new_keys = set()
-        result   = []
-        for i, c in enumerate(charts):
-            key  = c["key"]
-            body = {"key": key, "title": c["title"], "spec": c["spec"],
-                    "position": c.get("position", i)}
-            new_keys.add(key)
-            if key in existing:
-                updated = self._patch(
-                    f"/datasets/{dataset_id}/charts/{existing[key]['id']}", json=body
-                )
-                result.append(updated)
-            else:
-                result.append(self._post(f"/datasets/{dataset_id}/charts", json=body))
-        for key, c in existing.items():
-            if key not in new_keys:
-                self._delete(f"/datasets/{dataset_id}/charts/{c['id']}")
-        return result
+    def list_charts(self, dataset_id: str) -> List[dict]:
+        return self._get(f"/datasets/{dataset_id}/charts")
 
     # ── DATA OPS ──────────────────────────────────────────────────────────────
 
@@ -198,34 +171,6 @@ class CatalogClient:
             location=ver["location"],
             fmt=DatasetFormat(dataset["format"]),
             connector=connector,
-        )
-
-    def produce(self, dataset: DatasetCreateRequest, metadata: Dict[str, Any] = {},
-                inputs: List[dict] = [], force: bool = False) -> "DatasetWriter":
-        """Open a DatasetWriter for a two-phase write (reserve → write → commit).
-
-        Use as a context manager::
-
-            with catalog.produce(req, {"date": "2026-01-01"}) as writer:
-                writer.write(df)
-
-        Pass *force=True* to bypass metadata-based deduplication.
-        """
-        self.create_dataset(dataset)
-        result    = self._post(f"/datasets/{dataset.id}/_reserve",
-                               json={"metadata": metadata, "force": force})
-        source    = self.get_source(result["source_id"])
-        connector = ConnectorFactory.get(source["type"], source["config"])
-        return DatasetWriter(
-            client=self,
-            dataset_id=dataset.id,
-            version=result["version"],
-            location=result["location"],
-            fmt=dataset.format,
-            connector=connector,
-            metadata=metadata,
-            inputs=inputs,
-            skipped=result["skipped"],
         )
 
     # ── TRANSPORT (private) ───────────────────────────────────────────────────
@@ -268,6 +213,83 @@ class CatalogClient:
 
     def _delete(self, path: str, params: dict = None) -> Any:
         return self._unwrap(httpx.delete(f"{self.url}{path}", params=params))
+
+
+# ── DatasetHandle ──────────────────────────────────────────────────────────────
+
+class DatasetHandle:
+    """Handle for a defined dataset. Use to set expectations, add charts, and produce versions."""
+
+    def __init__(self, client: CatalogClient, id: str,
+                 format: DatasetFormat, source_id: str):
+        self._client   = client
+        self.id        = id
+        self.format    = format
+        self.source_id = source_id
+
+    def expect(self, rules: List[dict]) -> List[dict]:
+        """Replace all DQ expectations for this dataset.
+
+        Expectations are evaluated automatically when a new version is committed.
+        Call this before producing the first version so DQ runs at commit time.
+
+        Each rule: {"rule_id": str, "inputs": dict, "params": dict, "tolerance": float}
+        """
+        for exp in self._client.list_expectations(self.id):
+            self._client._delete(f"/datasets/{self.id}/expectations/{exp['id']}")
+        return [
+            self._client.add_expectation(
+                self.id,
+                rule_id=r["rule_id"],
+                inputs=r.get("inputs", {}),
+                params=r.get("params", {}),
+                tolerance=r.get("tolerance", 1.0),
+                position=i,
+            )
+            for i, r in enumerate(rules)
+        ]
+
+    def add_chart(self, key: str, title: str, spec: dict,
+                  position: int = 0) -> dict:
+        """Upsert a chart definition for this dataset (upsert by key)."""
+        existing = {c["key"]: c for c in self._client._get(f"/datasets/{self.id}/charts")}
+        body = {"key": key, "title": title, "spec": spec, "position": position}
+        if key in existing:
+            return self._client._patch(
+                f"/datasets/{self.id}/charts/{existing[key]['id']}", json=body
+            )
+        return self._client._post(f"/datasets/{self.id}/charts", json=body)
+
+    def produce(self, metadata: Dict[str, Any] = None,
+                inputs: List[dict] = None,
+                force: bool = False) -> "DatasetWriter":
+        """Open a DatasetWriter for a two-phase write (reserve → write → commit).
+
+        DQ expectations defined via ``.expect()`` are evaluated automatically
+        at commit time. Use as a context manager::
+
+            with handle.produce(metadata={"date": "2026-01-01"}) as writer:
+                writer.write(df)
+        """
+        metadata = metadata or {}
+        inputs   = inputs or []
+        result   = self._client._post(
+            f"/datasets/{self.id}/_reserve",
+            json={"metadata": metadata, "force": force},
+        )
+        source    = self._client.get_source(result["source_id"])
+        connector = ConnectorFactory.get(source["type"], source["config"])
+        return DatasetWriter(
+            client=self._client,
+            dataset_id=self.id,
+            version=result["version"],
+            location=result["location"],
+            fmt=self.format,
+            connector=connector,
+            metadata=metadata,
+            inputs=inputs,
+            skipped=result["skipped"],
+        )
 
 
 # ── DatasetWriter ──────────────────────────────────────────────────────────────

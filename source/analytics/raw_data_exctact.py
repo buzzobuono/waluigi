@@ -2,7 +2,7 @@ import random
 import pandas as pd
 from waluigi.sdk.context import context
 from waluigi.sdk.catalog import catalog
-from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
+from waluigi.catalog.models import SourceCreateRequest, SourceType
 
 METRICS = {
     "erp":    [("revenue",     "finance"),     ("costs",       "finance"),
@@ -32,14 +32,14 @@ rows = [
 ]
 df = pd.DataFrame(rows)
 
-dataset = DatasetCreateRequest(
-    id=f"analytics/{source}/raw/raw_{source}",
-    format=DatasetFormat.PARQUET,
-    description=f"Raw extracted data for {source}",
+handle = catalog.define(
+    f"analytics/{source}/raw/raw_{source}",
+    format="parquet",
     source_id="analytics-local",
+    description=f"Raw extracted data for {source}",
 )
 
-with catalog.produce(dataset, metadata={"date": date, "source": source}) as writer:
+with handle.produce(metadata={"date": date, "source": source}) as writer:
     writer.write(df)
 
 if writer.skipped:

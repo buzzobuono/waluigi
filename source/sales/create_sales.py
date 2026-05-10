@@ -1,6 +1,6 @@
 from waluigi.sdk.context import context
 from waluigi.sdk.catalog import catalog
-from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
+from waluigi.catalog.models import SourceCreateRequest, SourceType
 
 
 date = context.params.date
@@ -23,14 +23,14 @@ rows = [
     {"date": date, "product": "F", "quantity":  9, "revenue": 350.0},
 ]
 
-dataset = DatasetCreateRequest(
-    id="sales/raw/sales_raw2",
-    format=DatasetFormat.CSV,
-    description="Sales raw data",
+handle = catalog.define(
+    "sales/raw/sales_raw2",
+    format="csv",
     source_id="local",
+    description="Sales raw data",
 )
 
-with catalog.produce(dataset, metadata={"date": date, "source": "SAP_EXTRACT"}) as writer:
+with handle.produce(metadata={"date": date, "source": "SAP_EXTRACT"}) as writer:
     writer.write(rows)
 
 if writer.skipped:
