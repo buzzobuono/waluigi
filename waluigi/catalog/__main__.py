@@ -571,13 +571,9 @@ async def patch_schema_column(dataset_id: str, column_name: str,
     if not db.exists_dataset(dataset_id):
         return ko("Dataset not found", 404)
     updates = _model_dump(body)
-    updated = db.update_schema_column(dataset_id, column_name, **updates)
-    if not updated:
-        return ko("Column not found in schema", 404)
+    col = db.upsert_schema_column(dataset_id, column_name, **updates)
     # Any schema edit promotes dataset to in_review
     db.set_in_review(dataset_id)
-    col  = next((c for c in db.get_schema(dataset_id)
-                 if c["column_name"] == column_name), None)
     msgs = []
     if col and col.get("pii") and col.get("pii_type") == "none":
         msgs.append("PII flag set but pii_type is 'none' — "

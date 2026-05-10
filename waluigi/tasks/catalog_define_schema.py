@@ -30,29 +30,18 @@ def run():
     columns    = cfg.get("columns") or []
     publish    = bool(cfg.get("publish", False))
 
-    patched = 0
-    skipped = 0
     for col in columns:
         name = col["name"]
         body = {k: col[k] for k in _PATCH_FIELDS if k in col}
-        if not body:
-            continue
-        encoded = quote(name, safe="")
-        try:
+        if body:
+            encoded = quote(name, safe="")
             catalog._patch(f"/datasets/{dataset_id}/schema/{encoded}", json=body)
-            patched += 1
-        except Exception as e:
-            if "404" in str(e) or "Column not found" in str(e):
-                print(f"  skip '{name}': not in schema yet (no committed version?)")
-                skipped += 1
-            else:
-                raise
 
     if publish:
         catalog._post(f"/datasets/{dataset_id}/schema/publish", json={"published_by": "waluigi"})
-        print(f"Dataset '{dataset_id}': {patched} column(s) patched, {skipped} skipped, schema published")
+        print(f"Dataset '{dataset_id}': {len(columns)} column(s) defined, schema published")
     else:
-        print(f"Dataset '{dataset_id}': {patched} column(s) patched, {skipped} skipped")
+        print(f"Dataset '{dataset_id}': {len(columns)} column(s) defined (draft)")
 
 
 if __name__ == "__main__":
