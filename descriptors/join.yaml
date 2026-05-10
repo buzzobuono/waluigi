@@ -7,7 +7,7 @@ spec:
     namespace: "analytics"
     type: "JoinDatasets"
     params:
-        date: "2026-05-15"
+        date: "2026-05-17"
     config:
         catalog_source: "analytics-local"
         left:
@@ -15,8 +15,10 @@ spec:
         right:
             dataset: "analytics/web/clean/clean_web"
         join:
-            columns:  "date"
-            how:      "inner"
+            columns:  
+              - "date"
+              - "metric"
+            how:      "outer"
             suffixes: ["_erp", "_web"]
         output:
             dataset:     "analytics/joined/erp_web"
