@@ -48,6 +48,7 @@ class WaluigiEngine:
     def _dispatch(self, job_metadata, task):
         payload = {
             "workdir": job_metadata['workdir'],
+            "type":    task.type,
             "command": task.command,
             "script":  task.script,
             "id": task.id,
