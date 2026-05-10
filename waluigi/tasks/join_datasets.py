@@ -1,8 +1,8 @@
 """
 JoinDatasets — joins two datasets horizontally (pd.merge).
 
-Expected context.config:
-    catalog_source: str
+config:
+    # source — see _io.py for both forms (simple catalog_source or full source block)
     left:
         dataset: str
     right:
@@ -17,18 +17,13 @@ Expected context.config:
         description: str
 """
 import pandas as pd
-from waluigi.sdk.context import context
 from waluigi.sdk.catalog import catalog
-from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
+from waluigi.sdk.context import context
+from waluigi.tasks._io import create_source, write_output
 
 
 def run():
-    catalog.create_source(SourceCreateRequest(
-        id=context.config.catalog_source,
-        type=SourceType.LOCAL,
-        config={},
-        description=getattr(context.config, "catalog_source_description", "Waluigi managed source"),
-    ))
+    create_source()
 
     left_reader  = catalog.resolve(context.config.left.dataset)
     right_reader = catalog.resolve(context.config.right.dataset)
@@ -45,30 +40,14 @@ def run():
         how=getattr(j, "how", "inner"),
         suffixes=getattr(j, "suffixes", ["_x", "_y"]),
     )
-    print(f"After join ({j.how}): {len(joined)} rows")
+    print(f"After join ({getattr(j, 'how', 'inner')}): {len(joined)} rows")
 
     lineage = [
         {"dataset_id": left_reader.dataset_id,  "version": left_reader.version},
         {"dataset_id": right_reader.dataset_id, "version": right_reader.version},
     ]
 
-    out = context.config.output
-    fmt = getattr(out, "format", "parquet").upper()
-
-    dataset = DatasetCreateRequest(
-        id=out.dataset,
-        format=DatasetFormat[fmt],
-        description=getattr(out, "description", ""),
-        source_id=context.config.catalog_source,
-    )
-
-    with catalog.produce(dataset, metadata=vars(context.params), inputs=lineage) as writer:
-        writer.write(joined)
-
-    if writer.skipped:
-        print(f"Skipped — same metadata, existing version: {writer.version}")
-    else:
-        print(f"Done: {writer.dataset_id} @ {writer.version} ({len(joined)} rows)")
+    write_output(joined, lineage)
 
 
 if __name__ == "__main__":
