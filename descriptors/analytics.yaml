@@ -230,7 +230,7 @@
             print(f"Done: {writer.dataset_id} @ {writer.version} ({len(df)} rows)")
 
 
-kind: Job
+kind: DAG
 metadata:
     workdir: "work"
 spec:

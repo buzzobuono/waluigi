@@ -1,4 +1,4 @@
-kind: Job
+kind: DAG
 metadata:
     workdir: "work"
 spec:

@@ -209,7 +209,7 @@ q.config:
               y:   {field: "value", agg: "sum", label: "Total Value"}
 
 
-kind: Job
+kind: DAG
 metadata:
     workdir: "work"
 spec:

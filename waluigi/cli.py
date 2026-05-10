@@ -73,7 +73,7 @@ class WaluigiCLI:
             
             kind = doc.get('kind')
             
-            if kind == 'Job':
+            if kind in ('Job', 'DAG'):
                 r = requests.post(f"{self.base_url}/boss/submit", json=doc, headers=self._get_headers())
                 print(json.dumps(r.json(), indent=2))
             elif kind == 'ClusterResources':
