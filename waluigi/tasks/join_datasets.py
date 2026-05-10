@@ -27,6 +27,7 @@ def run():
         id=context.config.catalog_source,
         type=SourceType.LOCAL,
         config={},
+        description=getattr(context.config, "catalog_source_description", "Waluigi managed source"),
     ))
 
     left_reader  = catalog.resolve(context.config.left.dataset)
