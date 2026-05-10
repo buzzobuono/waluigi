@@ -25,7 +25,6 @@ def _expand_tasks(spec):
 class DynamicTask:
 
     def __init__(self, data, parent=None):
-        data = _expand_tasks(data)
         self.name = data.get('name')
         self.id = data.get('id', self.name)
         self.namespace = data.get('namespace', 'default')

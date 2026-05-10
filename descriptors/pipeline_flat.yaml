@@ -4,7 +4,7 @@ q.sources:
         type:        "LOCAL"
         description: "Local storage for analytics pipeline"
 
-kind: DAG
+kind: Pipeline
 metadata:
     workdir: "work"
 spec:

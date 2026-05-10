@@ -108,11 +108,21 @@ async def register(request: Request):
 async def submit(request: Request):
     data = await request.json()
 
-    if data.get("kind") not in ("Job", "DAG") or "spec" not in data:
-        return JSONResponse({"status": "error", "message": "Format not supported. Need 'kind: DAG' (or 'kind: Job') and non-empty 'spec'."}, status_code=400)
+    kind = data.get("kind")
+    if kind not in ("Job", "DAG", "Pipeline") or "spec" not in data:
+        return JSONResponse({"status": "error", "message": "Unsupported kind. Use 'kind: DAG' or 'kind: Pipeline'."}, status_code=400)
     spec = data.get("spec", {})
     if not spec:
         return JSONResponse({"status": "error", "message": "Empty 'spec'"}, status_code=400)
+
+    if kind == "Pipeline":
+        if "tasks" not in spec:
+            return JSONResponse({"status": "error", "message": "kind: Pipeline requires a 'tasks' list in spec."}, status_code=422)
+        from waluigi.core.task import _expand_tasks
+        spec = _expand_tasks(spec)
+    elif kind in ("DAG", "Job"):
+        if "tasks" in spec:
+            return JSONResponse({"status": "error", "message": "kind: DAG does not support 'tasks' list; use nested 'requires'."}, status_code=422)
 
     metadata = data.get("metadata", {})
     try:
