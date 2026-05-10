@@ -8,7 +8,7 @@ Expected context.config:
     right:
         dataset: str
     join:
-        on:       str | list   # column(s) to join on
+        columns:  str | list   # column(s) to join on
         how:      str          # inner | left | right | outer  (default: inner)
         suffixes: list         # e.g. ["_left", "_right"]  (default: ["_x", "_y"])
     output:
@@ -41,7 +41,7 @@ def run():
     j = context.config.join
     joined = pd.merge(
         df_left, df_right,
-        on=j.on,
+        on=j.columns,
         how=getattr(j, "how", "inner"),
         suffixes=getattr(j, "suffixes", ["_x", "_y"]),
     )

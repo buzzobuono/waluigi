@@ -15,7 +15,7 @@ spec:
         right:
             dataset: "analytics/web/clean/clean_web"
         join:
-            on:       "date"
+            columns:  "date"
             how:      "inner"
             suffixes: ["_erp", "_web"]
         output:
