@@ -7,6 +7,7 @@ class DynamicTask:
         self.name = data.get('name')
         self.id = data.get('id', self.name)
         self.namespace = data.get('namespace', 'default')
+        self.type    = data.get('type')              # built-in task type — alternative to command/script
         self.command = data.get('command', '')
         self.script  = data.get('script')          # inline Python — alternative to command
         self.resources = data.get('resources', {'coin': 1.0})

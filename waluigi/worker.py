@@ -42,21 +42,28 @@ def log(msg):
 @app.post('/execute')
 async def execute(request: Request):
     data = await request.json()
-    workdir   = data.get("workdir", DEFAULT_WORKDIR)
-    command   = data.get("command")
-    script    = data.get("script")
-    id        = data.get("id")
-    job_id    = data.get("job_id")
-    namespace = data.get("namespace")
+    workdir    = data.get("workdir", DEFAULT_WORKDIR)
+    task_type  = data.get("type")
+    command    = data.get("command")
+    script     = data.get("script")
+    id         = data.get("id")
+    job_id     = data.get("job_id")
+    namespace  = data.get("namespace")
     params     = data.get("params", {})
     attributes = data.get("attributes", {})
     config     = data.get("config", {})
     resources  = data.get("resources")
 
-    if script:
+    if task_type:
+        from waluigi.tasks import get_command
+        try:
+            command = get_command(task_type)
+        except ValueError as e:
+            return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
+    elif script:
         command = "python -c \"import os; exec(os.environ['WALUIGI_SCRIPT'])\""
     elif not command:
-        return JSONResponse({"status": "error", "message": "No command or script provided"}, status_code=400)
+        return JSONResponse({"status": "error", "message": "No type, command or script provided"}, status_code=400)
 
     log(f"Task recieved: {id}")
 

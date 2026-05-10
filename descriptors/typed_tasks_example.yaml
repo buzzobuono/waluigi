@@ -1,0 +1,64 @@
+# Esempio d'uso dei task tipizzati.
+# Nessuno script: il worker seleziona l'implementazione dal registry in base a `type`.
+# La configurazione semantica vive nel blocco `config`.
+
+kind: Job
+metadata:
+    workdir: "work"
+spec:
+    # ── root: join di ERP e WEB sulla colonna date ─────────────────────────────
+    name: "JoinErpWeb"
+    id:   "join_erp_web"
+    namespace: "analytics"
+    type: "JoinDatasets"
+    params:
+        date: "2026-05-15"
+    config:
+        catalog_source: "analytics-local"
+        left:
+            dataset: "analytics/erp/clean/clean_erp"
+        right:
+            dataset: "analytics/web/clean/clean_web"
+        join:
+            on:       "date"
+            how:      "inner"
+            suffixes: ["_erp", "_web"]
+        output:
+            dataset:     "analytics/joined/erp_web"
+            format:      "parquet"
+            description: "ERP + WEB join on date"
+    resources:
+        coin: 1
+    affinity:
+        - python
+
+---
+
+kind: Job
+metadata:
+    workdir: "work"
+spec:
+    # ── root: merge verticale dei tre sorgenti cleaned ─────────────────────────
+    name: "MergeAllSources"
+    id:   "merge_all_sources"
+    namespace: "analytics"
+    type: "MergeDatasets"
+    params:
+        date: "2026-05-15"
+    config:
+        catalog_source: "analytics-local"
+        inputs:
+            - dataset: "analytics/erp/clean/clean_erp"
+              label:   "erp"
+            - dataset: "analytics/web/clean/clean_web"
+              label:   "web"
+            - dataset: "analytics/social/clean/clean_social"
+              label:   "social"
+        output:
+            dataset:     "analytics/merged/all_sources"
+            format:      "parquet"
+            description: "Merge verticale di ERP, WEB e SOCIAL"
+    resources:
+        coin: 1
+    affinity:
+        - python
