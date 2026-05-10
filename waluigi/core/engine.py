@@ -13,12 +13,11 @@ class WaluigiEngine:
         params_hash = task.hash(task.params)
         attributes_hash = task.hash(task.attributes)
         status = self.db.get_task_status(id, params_hash)
-        print(status)
-        if status == "SUCCESS":
-            return "already_done"
         if status == "RUNNING":
             return "locked"
         self.db.register_task(id, task.namespace, parent_id, params_hash, attributes_hash, job_id=job_id)
+        if status == "SUCCESS":
+            return "already_done"
         return "ok"
             
     def _update_task(self, task, status):

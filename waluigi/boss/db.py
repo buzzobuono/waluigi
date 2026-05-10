@@ -95,8 +95,9 @@ class WaluigiDB:
             self.conn.execute("""
                 INSERT INTO tasks (id, parent_id, namespace, params, attributes, status, last_update, job_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET 
+                ON CONFLICT(id) DO UPDATE SET
                     namespace=excluded.namespace, parent_id=excluded.parent_id,
+                    job_id=excluded.job_id,
                     last_update=excluded.last_update
             """, (id, parent_id, namespace, params, attributes, 'PENDING', datetime.now(), job_id))
 
