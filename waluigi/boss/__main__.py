@@ -108,8 +108,8 @@ async def register(request: Request):
 async def submit(request: Request):
     data = await request.json()
 
-    if data.get("kind") != "Job" or "spec" not in data:
-        return JSONResponse({"status": "error", "message": "Format not supported. Neef 'kind: Job' and not empty 'spec'."}, status_code=400)
+    if data.get("kind") not in ("Job", "DAG") or "spec" not in data:
+        return JSONResponse({"status": "error", "message": "Format not supported. Need 'kind: DAG' (or 'kind: Job') and non-empty 'spec'."}, status_code=400)
     spec = data.get("spec", {})
     if not spec:
         return JSONResponse({"status": "error", "message": "Empty 'spec'"}, status_code=400)
