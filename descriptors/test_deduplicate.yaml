@@ -1,0 +1,24 @@
+kind: Job
+metadata:
+    workdir: "work"
+spec:
+    name: "DeduplicateMetrics"
+    id:   "test_deduplicate"
+    namespace: "analytics"
+    type: "DeduplicateDataset"
+    params:
+        date: "2026-05-15"
+    config:
+        catalog_source: "analytics-local"
+        input:
+            dataset: "analytics/erp/clean/clean_erp"
+        output:
+            dataset:     "analytics/erp/dedup/unique_metrics"
+            format:      "parquet"
+            description: "ERP — one row per metric (first occurrence)"
+        subset: ["metric"]
+        keep:   "first"
+    resources:
+        coin: 1
+    affinity:
+        - python

@@ -1,0 +1,25 @@
+kind: Job
+metadata:
+    workdir: "work"
+spec:
+    name: "AggregateByCategory"
+    id:   "test_aggregate"
+    namespace: "analytics"
+    type: "AggregateDataset"
+    params:
+        date: "2026-05-15"
+    config:
+        catalog_source: "analytics-local"
+        input:
+            dataset: "analytics/erp/clean/clean_erp"
+        output:
+            dataset:     "analytics/erp/aggregated/by_category"
+            format:      "parquet"
+            description: "ERP value sum grouped by category"
+        group_by: ["category"]
+        agg:
+            value: "sum"
+    resources:
+        coin: 1
+    affinity:
+        - python

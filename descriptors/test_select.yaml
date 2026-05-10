@@ -1,0 +1,23 @@
+kind: Job
+metadata:
+    workdir: "work"
+spec:
+    name: "SelectMetricValue"
+    id:   "test_select"
+    namespace: "analytics"
+    type: "SelectColumns"
+    params:
+        date: "2026-05-15"
+    config:
+        catalog_source: "analytics-local"
+        input:
+            dataset: "analytics/erp/clean/clean_erp"
+        output:
+            dataset:     "analytics/erp/projected/metric_value"
+            format:      "parquet"
+            description: "ERP — metric, value, category only"
+        columns: ["metric", "value", "category"]
+    resources:
+        coin: 1
+    affinity:
+        - python
