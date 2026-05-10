@@ -25,12 +25,11 @@ catalog.create_source(SourceCreateRequest(
     description="Source locale per test streaming",
 ))
 
-dataset = DatasetCreateRequest(
-    id=DATASET_ID,
-    format=DatasetFormat.PARQUET,
-    description="Dataset grande scritto in streaming",
+handle = catalog.create_dataset(
+    DATASET_ID,
+    format="parquet",
     source_id=SOURCE_ID,
-    dq_suite=SUITE_PATH
+    description="Dataset grande scritto in streaming",
 )
 
 # ---------------------------------------------------------------------------
@@ -69,7 +68,7 @@ metadata = {
 print(f"Produco {TOTAL_ROWS:,} righe in chunk da {CHUNK_SIZE:,} ({TOTAL_ROWS // CHUNK_SIZE} chunk) ...")
 t0 = time.perf_counter()
 
-with catalog.produce(dataset, metadata) as writer:
+with handle.create_version(metadata=metadata) as writer:
     written = writer.write(generate_chunks(TOTAL_ROWS, CHUNK_SIZE))
 
 elapsed = time.perf_counter() - t0
@@ -79,7 +78,7 @@ print(f"\nScritti {written:,} righe in {elapsed:.1f}s  ({written / elapsed:,.0f}
 # Resolve e verifica
 # ---------------------------------------------------------------------------
 
-reader = catalog.resolve(DATASET_ID)
+reader = catalog.read_dataset(DATASET_ID)
 print(f"\nResolve:")
 print(f"  dataset_id : {reader.dataset_id}")
 print(f"  version    : {reader.version}")

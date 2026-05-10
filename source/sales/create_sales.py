@@ -23,14 +23,14 @@ rows = [
     {"date": date, "product": "F", "quantity":  9, "revenue": 350.0},
 ]
 
-handle = catalog.define(
+handle = catalog.create_dataset(
     "sales/raw/sales_raw2",
     format="csv",
     source_id="local",
     description="Sales raw data",
 )
 
-with handle.produce(metadata={"date": date, "source": "SAP_EXTRACT"}) as writer:
+with handle.create_version(metadata={"date": date, "source": "SAP_EXTRACT"}) as writer:
     writer.write(rows)
 
 if writer.skipped:

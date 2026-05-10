@@ -41,16 +41,16 @@ class CatalogClient:
 
         catalog = CatalogClient()
 
-        # Define a dataset (idempotent), then work with it
-        handle = catalog.define("sales/raw", format="parquet", source_id="local")
-        handle.expect([{"rule_id": "expect_column_values_to_not_be_null", "inputs": {"x": "this.col"}}])
-        handle.add_chart("revenue_by_date", "Revenue by date", spec={...})
+        # Create/upsert a dataset, then configure and write a new version
+        handle = catalog.create_dataset("sales/raw", format="parquet", source_id="local")
+        handle.set_expectations([{"rule_id": "expect_column_values_to_not_be_null", "inputs": {"x": "this.col"}}])
+        handle.set_chart("revenue_by_date", "Revenue by date", spec={...})
 
-        with handle.produce(metadata={"date": "2026-01-01"}) as writer:
+        with handle.create_version(metadata={"date": "2026-01-01"}) as writer:
             writer.write(df)
 
-        # Read a dataset
-        reader = catalog.resolve("sales/raw")
+        # Read a dataset (latest committed version)
+        reader = catalog.read_dataset("sales/raw")
         df = reader.read()
     """
 
@@ -64,7 +64,7 @@ class CatalogClient:
 
     # ── BROWSE ────────────────────────────────────────────────────────────────
 
-    def folders(self, prefix: str = "") -> dict:
+    def list_folders(self, prefix: str = "") -> dict:
         """List datasets and virtual sub-prefixes under a path prefix."""
         return self._get(f"/folders/{prefix}/")
 
@@ -93,28 +93,25 @@ class CatalogClient:
     def get_dataset(self, id: str) -> dict:
         return self._get(f"/datasets/{id}")
 
-    def create_dataset(self, request: DatasetCreateRequest) -> dict:
-        return self._post("/datasets", json=_model_dump(request))
-
-    def define(self, id: str, format: Union[str, DatasetFormat],
-               source_id: str, description: str = "") -> "DatasetHandle":
+    def create_dataset(self, id: str, format: Union[str, DatasetFormat] = "parquet",
+                       source_id: str = "", description: str = "") -> "DatasetHandle":
         """Create or upsert a dataset and return a handle for further operations.
 
-        Call ``.expect()`` and ``.add_chart()`` on the handle to configure the
-        dataset before producing a version::
+        Call ``.set_expectations()`` and ``.set_chart()`` on the handle to
+        configure the dataset, then ``.create_version()`` to write data::
 
-            handle = catalog.define("my/dataset", format="parquet", source_id="local")
-            handle.expect([...])
-            with handle.produce(metadata={"date": "2026-01-01"}) as writer:
+            handle = catalog.create_dataset("my/dataset", format="parquet", source_id="local")
+            handle.set_expectations([...])
+            with handle.create_version(metadata={"date": "2026-01-01"}) as writer:
                 writer.write(df)
         """
         fmt = DatasetFormat[format.upper()] if isinstance(format, str) else format
-        self.create_dataset(DatasetCreateRequest(
+        self._post("/datasets", json=_model_dump(DatasetCreateRequest(
             id=id,
             format=fmt,
             source_id=source_id,
             description=description,
-        ))
+        )))
         return DatasetHandle(self, id, fmt, source_id)
 
     # ── VERSIONS ──────────────────────────────────────────────────────────────
@@ -153,7 +150,7 @@ class CatalogClient:
 
     # ── DATA OPS ──────────────────────────────────────────────────────────────
 
-    def resolve(self, dataset_id: str, version: str = None) -> "DatasetReader":
+    def read_dataset(self, dataset_id: str, version: str = None) -> "DatasetReader":
         """Return a DatasetReader for the latest (or a specific) committed version."""
         dataset  = self.get_dataset(dataset_id)
         versions = self.list_versions(dataset_id)
@@ -227,11 +224,11 @@ class DatasetHandle:
         self.format    = format
         self.source_id = source_id
 
-    def expect(self, rules: List[dict]) -> List[dict]:
+    def set_expectations(self, rules: List[dict]) -> List[dict]:
         """Replace all DQ expectations for this dataset.
 
         Expectations are evaluated automatically when a new version is committed.
-        Call this before producing the first version so DQ runs at commit time.
+        Call this before ``create_version()`` so DQ runs at commit time.
 
         Each rule: {"rule_id": str, "inputs": dict, "params": dict, "tolerance": float}
         """
@@ -249,9 +246,9 @@ class DatasetHandle:
             for i, r in enumerate(rules)
         ]
 
-    def add_chart(self, key: str, title: str, spec: dict,
+    def set_chart(self, key: str, title: str, spec: dict,
                   position: int = 0) -> dict:
-        """Upsert a chart definition for this dataset (upsert by key)."""
+        """Create or update a chart definition for this dataset (upsert by key)."""
         existing = {c["key"]: c for c in self._client._get(f"/datasets/{self.id}/charts")}
         body = {"key": key, "title": title, "spec": spec, "position": position}
         if key in existing:
@@ -260,15 +257,15 @@ class DatasetHandle:
             )
         return self._client._post(f"/datasets/{self.id}/charts", json=body)
 
-    def produce(self, metadata: Dict[str, Any] = None,
-                inputs: List[dict] = None,
-                force: bool = False) -> "DatasetWriter":
-        """Open a DatasetWriter for a two-phase write (reserve → write → commit).
+    def create_version(self, metadata: Dict[str, Any] = None,
+                       inputs: List[dict] = None,
+                       force: bool = False) -> "DatasetWriter":
+        """Open a DatasetWriter to write a new dataset version (reserve → write → commit).
 
-        DQ expectations defined via ``.expect()`` are evaluated automatically
-        at commit time. Use as a context manager::
+        DQ expectations defined via ``.set_expectations()`` are evaluated
+        automatically at commit time. Use as a context manager::
 
-            with handle.produce(metadata={"date": "2026-01-01"}) as writer:
+            with handle.create_version(metadata={"date": "2026-01-01"}) as writer:
                 writer.write(df)
         """
         metadata = metadata or {}

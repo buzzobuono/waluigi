@@ -23,14 +23,14 @@ df = pd.DataFrame([
     {"date": date, "product": "E", "quantity":  3, "revenue":  30.0},
 ])
 
-handle = catalog.define(
+handle = catalog.create_dataset(
     "sales/raw/sales_raw_pd",
     format="parquet",
     source_id="local",
     description="Sales raw data (parquet)",
 )
 
-with handle.produce(metadata={"date": date, "source": "SAP_EXTRACT"}) as writer:
+with handle.create_version(metadata={"date": date, "source": "SAP_EXTRACT"}) as writer:
     writer.write(df)
 
 if writer.skipped:

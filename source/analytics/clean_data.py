@@ -19,7 +19,7 @@ catalog.create_source(SourceCreateRequest(
 ))
 
 raw_id = f"analytics/{source}/raw/raw_{source}"
-reader = catalog.resolve(raw_id)
+reader = catalog.read_dataset(raw_id)
 df     = reader.read()
 print(f"Read {len(df)} rows from {raw_id} @ {reader.version}")
 
@@ -30,14 +30,14 @@ print(f"After cleaning: {len(df)} rows")
 
 clean_id = f"analytics/{source}/clean/clean_{source}"
 
-handle = catalog.define(
+handle = catalog.create_dataset(
     clean_id,
     format="parquet",
     source_id="analytics-local",
     description=f"Cleaned data for {source}",
 )
 
-handle.expect([
+handle.set_expectations([
     {
         "rule_id":   "expect_column_values_to_not_be_null",
         "inputs":    {"x": "this.metric"},
@@ -69,7 +69,7 @@ handle.expect([
 
 lineage = [{"dataset_id": reader.dataset_id, "version": reader.version}]
 
-with handle.produce(metadata={"date": date, "source": source}, inputs=lineage) as writer:
+with handle.create_version(metadata={"date": date, "source": source}, inputs=lineage) as writer:
     writer.write(df)
 
 if writer.skipped:

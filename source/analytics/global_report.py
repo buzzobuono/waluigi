@@ -18,7 +18,7 @@ frames  = []
 lineage = []
 
 for source in sources:
-    reader = catalog.resolve(f"analytics/{source}/clean/clean_{source}")
+    reader = catalog.read_dataset(f"analytics/{source}/clean/clean_{source}")
     df     = reader.read()
     df["pipeline_source"] = source
     frames.append(df)
@@ -30,40 +30,40 @@ print(f"Total rows in report: {len(report_df)}")
 
 report_id = "analytics/reports/global_report"
 
-handle = catalog.define(
+handle = catalog.create_dataset(
     report_id,
     format="parquet",
     source_id="analytics-local",
     description="Global consolidated report across all sources",
 )
 
-handle.add_chart("value_by_source", "Total value by source", spec={
+handle.set_chart("value_by_source", "Total value by source", spec={
     "type": "bar",
     "x":   {"field": "pipeline_source", "label": "Source"},
     "y":   {"field": "value", "agg": "sum", "label": "Total Value"},
 })
-handle.add_chart("value_by_metric", "Value by metric", spec={
+handle.set_chart("value_by_metric", "Value by metric", spec={
     "type": "bar",
     "x":   {"field": "metric", "label": "Metric"},
     "y":   {"field": "value", "agg": "sum", "label": "Total Value"},
 })
-handle.add_chart("value_share_by_source", "Value share by source", spec={
+handle.set_chart("value_share_by_source", "Value share by source", spec={
     "type": "pie",
     "x":   {"field": "pipeline_source"},
     "y":   {"field": "value", "agg": "sum"},
 })
-handle.add_chart("value_distribution", "Value distribution", spec={
+handle.set_chart("value_distribution", "Value distribution", spec={
     "type": "histogram",
     "x":   {"field": "value", "label": "Value"},
     "bins": 10,
 })
-handle.add_chart("value_by_category", "Value by category", spec={
+handle.set_chart("value_by_category", "Value by category", spec={
     "type": "bar",
     "x":   {"field": "category", "label": "Category"},
     "y":   {"field": "value", "agg": "sum", "label": "Total Value"},
 })
 
-with handle.produce(metadata={"date": date}, inputs=lineage) as writer:
+with handle.create_version(metadata={"date": date}, inputs=lineage) as writer:
     writer.write(report_df)
 
 if writer.skipped:

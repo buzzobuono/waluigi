@@ -13,24 +13,16 @@ source = SourceCreateRequest(
 )
 catalog.create_source(source)
 
-dataset = DatasetCreateRequest(
-    id=dataset_id,
-    format=DatasetFormat.SQL,
-    description="Sales raw",
-    source_id=source_id
-)
-
 rows = [
     {"date": "2026", "product": "A", "quantity": 11, "revenue": 100.0},
     {"date": "2026", "product": "B", "quantity": 25, "revenue": 250.0},
 ]
-metadata = {"source": "SAP_EXTRACT", "date_ref": "2026"}
 
-with catalog.produce(dataset, metadata) as writer:
+handle = catalog.create_dataset(dataset_id, format="sql", source_id=source_id, description="Sales raw")
+with handle.create_version(metadata={"source": "SAP_EXTRACT", "date_ref": "2026"}) as writer:
     writer.write(rows)
 
-# Risolve la versione più recente e legge i dati
-reader = catalog.resolve(dataset_id)
+reader = catalog.read_dataset(dataset_id)
 print(f"dataset_id : {reader.dataset_id}")
 print(f"version    : {reader.version}")
 print(f"location   : {reader.location}")
@@ -50,18 +42,11 @@ source = SourceCreateRequest(
 )
 catalog.create_source(source)
 
-dataset = DatasetCreateRequest(
-    id=dataset_id,
-    format=DatasetFormat.CSV,
-    description="Sales raw",
-    source_id=source_id
-)
-
 rows = [
     {"date": "2026", "product": "A", "quantity": 11, "revenue": 100.0},
     {"date": "2026", "product": "B", "quantity": 25, "revenue": 250.0},
 ]
-metadata = {"source": "SAP_EXTRACT", "date_ref": "2026"}
 
-with catalog.produce(dataset, metadata) as writer:
+handle = catalog.create_dataset(dataset_id, format="csv", source_id=source_id, description="Sales raw")
+with handle.create_version(metadata={"source": "SAP_EXTRACT", "date_ref": "2026"}) as writer:
     writer.write(rows)

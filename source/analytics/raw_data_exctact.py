@@ -32,14 +32,14 @@ rows = [
 ]
 df = pd.DataFrame(rows)
 
-handle = catalog.define(
+handle = catalog.create_dataset(
     f"analytics/{source}/raw/raw_{source}",
     format="parquet",
     source_id="analytics-local",
     description=f"Raw extracted data for {source}",
 )
 
-with handle.produce(metadata={"date": date, "source": source}) as writer:
+with handle.create_version(metadata={"date": date, "source": source}) as writer:
     writer.write(df)
 
 if writer.skipped:

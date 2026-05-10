@@ -31,8 +31,8 @@ def run():
     _ensure_source(left)
     _ensure_source(right)
 
-    left_reader  = catalog.resolve(left["dataset"])
-    right_reader = catalog.resolve(right["dataset"])
+    left_reader  = catalog.read_dataset(left["dataset"])
+    right_reader = catalog.read_dataset(right["dataset"])
 
     df_left  = left_reader.read()
     df_right = right_reader.read()
