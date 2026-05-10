@@ -1,7 +1,7 @@
 import pandas as pd
 from waluigi.sdk.context import context
 from waluigi.sdk.catalog import catalog
-from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
+from waluigi.catalog.models import SourceCreateRequest, SourceType
 
 
 date = context.params.date
@@ -23,14 +23,14 @@ df = pd.DataFrame([
     {"date": date, "product": "E", "quantity":  3, "revenue":  30.0},
 ])
 
-dataset = DatasetCreateRequest(
-    id="sales/raw/sales_raw_pd",
-    format=DatasetFormat.PARQUET,
-    description="Sales raw data (parquet)",
+handle = catalog.define(
+    "sales/raw/sales_raw_pd",
+    format="parquet",
     source_id="local",
+    description="Sales raw data (parquet)",
 )
 
-with catalog.produce(dataset, metadata={"date": date, "source": "SAP_EXTRACT"}) as writer:
+with handle.produce(metadata={"date": date, "source": "SAP_EXTRACT"}) as writer:
     writer.write(df)
 
 if writer.skipped:

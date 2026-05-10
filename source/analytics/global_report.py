@@ -1,7 +1,7 @@
 import pandas as pd
 from waluigi.sdk.context import context
 from waluigi.sdk.catalog import catalog
-from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
+from waluigi.catalog.models import SourceCreateRequest, SourceType
 
 date = context.params.date
 print(f"Building global report for {date} ...")
@@ -30,67 +30,43 @@ print(f"Total rows in report: {len(report_df)}")
 
 report_id = "analytics/reports/global_report"
 
-dataset = DatasetCreateRequest(
-    id=report_id,
-    format=DatasetFormat.PARQUET,
-    description="Global consolidated report across all sources",
+handle = catalog.define(
+    report_id,
+    format="parquet",
     source_id="analytics-local",
+    description="Global consolidated report across all sources",
 )
 
-with catalog.produce(dataset, metadata={"date": date}, inputs=lineage) as writer:
+handle.add_chart("value_by_source", "Total value by source", spec={
+    "type": "bar",
+    "x":   {"field": "pipeline_source", "label": "Source"},
+    "y":   {"field": "value", "agg": "sum", "label": "Total Value"},
+})
+handle.add_chart("value_by_metric", "Value by metric", spec={
+    "type": "bar",
+    "x":   {"field": "metric", "label": "Metric"},
+    "y":   {"field": "value", "agg": "sum", "label": "Total Value"},
+})
+handle.add_chart("value_share_by_source", "Value share by source", spec={
+    "type": "pie",
+    "x":   {"field": "pipeline_source"},
+    "y":   {"field": "value", "agg": "sum"},
+})
+handle.add_chart("value_distribution", "Value distribution", spec={
+    "type": "histogram",
+    "x":   {"field": "value", "label": "Value"},
+    "bins": 10,
+})
+handle.add_chart("value_by_category", "Value by category", spec={
+    "type": "bar",
+    "x":   {"field": "category", "label": "Category"},
+    "y":   {"field": "value", "agg": "sum", "label": "Total Value"},
+})
+
+with handle.produce(metadata={"date": date}, inputs=lineage) as writer:
     writer.write(report_df)
 
 if writer.skipped:
     print(f"Skipped — same metadata, existing version: {writer.version}")
 else:
     print(f"Done: {writer.dataset_id} @ {writer.version} ({len(report_df)} rows)")
-
-catalog.set_charts(report_id, [
-            {
-                "key":   "value_by_source",
-                "title": "Total value by source",
-                "spec": {
-                    "type": "bar",
-                    "x":   {"field": "pipeline_source", "label": "Source"},
-                    "y":   {"field": "value", "agg": "sum", "label": "Total Value"},
-                },
-            },
-            {
-                "key":   "value_by_metric",
-                "title": "Value by metric",
-                "spec": {
-                    "type": "bar",
-                    "x":   {"field": "metric", "label": "Metric"},
-                    "y":   {"field": "value", "agg": "sum", "label": "Total Value"},
-                },
-            },
-            {
-                "key":   "value_share_by_source",
-                "title": "Value share by source",
-                "spec": {
-                    "type": "pie",
-                    "x":   {"field": "pipeline_source"},
-                    "y":   {"field": "value", "agg": "sum"},
-                },
-            },
-            {
-                "key":   "value_distribution",
-                "title": "Value distribution",
-                "spec": {
-                    "type": "histogram",
-                    "x":   {"field": "value", "label": "Value"},
-                    "bins": 10,
-                },
-            },
-            {
-                "key":   "value_by_category",
-                "title": "Value by category",
-                "spec": {
-                    "type": "bar",
-                    "x":   {"field": "category", "label": "Category"},
-                    "y":   {"field": "value", "agg": "sum", "label": "Total Value"},
-                },
-            },
-        ])
-        
-print(f"Charts set on {report_id}")

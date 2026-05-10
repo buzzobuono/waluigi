@@ -18,7 +18,7 @@ from types import SimpleNamespace
 
 from waluigi.sdk.context import context
 from waluigi.sdk.catalog import catalog
-from waluigi.catalog.models import DatasetCreateRequest, DatasetFormat, SourceCreateRequest, SourceType
+from waluigi.catalog.models import SourceCreateRequest, SourceType
 
 
 def _to_dict(obj):
@@ -60,14 +60,13 @@ def write_output(df, lineage):
     src = out.get("source")
     if not src:
         raise ValueError(f"output.source is required (dataset: {out.get('dataset')})")
-    fmt = out.get("format", "parquet").upper()
-    dataset = DatasetCreateRequest(
-        id=out["dataset"],
-        format=DatasetFormat[fmt],
-        description=out.get("description", ""),
+    handle = catalog.define(
+        out["dataset"],
+        format=out.get("format", "parquet"),
         source_id=src["id"],
+        description=out.get("description", ""),
     )
-    with catalog.produce(dataset, metadata=vars(context.params), inputs=lineage) as writer:
+    with handle.produce(metadata=vars(context.params), inputs=lineage) as writer:
         writer.write(df)
     if writer.skipped:
         print(f"Skipped — same metadata: {writer.version}")
