@@ -2,9 +2,8 @@
 PivotDataset — pivot table or unpivot (melt).
 
 Pivot config:
-    catalog_source: str
-    input:   {dataset: str}
-    output:  {dataset: str, format: str, description: str}
+    input:   {dataset: str, source: {id, type, ...}}
+    output:  {dataset: str, format: str, description: str, source: {id, type, ...}}
     mode:    "pivot"        # default
     index:   str | list
     columns: str
@@ -21,11 +20,10 @@ Unpivot (melt) config:
 """
 import pandas as pd
 from waluigi.sdk.context import context
-from waluigi.tasks._io import create_source, read_input, write_output
+from waluigi.tasks._io import read_input, write_output
 
 
 def run():
-    create_source()
     reader, df = read_input()
     lineage = [{"dataset_id": reader.dataset_id, "version": reader.version}]
 

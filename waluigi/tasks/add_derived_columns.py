@@ -3,19 +3,17 @@ AddDerivedColumns — appends computed columns using pandas eval expressions.
 Columns are applied sequentially, so later expressions can reference earlier ones.
 
 config:
-    catalog_source: str
-    input:   {dataset: str}
-    output:  {dataset: str, format: str, description: str}
+    input:   {dataset: str, source: {id, type, ...}}
+    output:  {dataset: str, format: str, description: str, source: {id, type, ...}}
     columns:
         - name: str    # new column name
           expr: str    # pandas eval expression referencing existing columns
 """
 from waluigi.sdk.context import context
-from waluigi.tasks._io import create_source, read_input, write_output
+from waluigi.tasks._io import read_input, write_output
 
 
 def run():
-    create_source()
     reader, df = read_input()
     lineage = [{"dataset_id": reader.dataset_id, "version": reader.version}]
 

@@ -2,28 +2,28 @@
 MergeDatasets — concatenates multiple datasets vertically (pd.concat).
 
 config:
-    # source — see _io.py for both forms (simple catalog_source or full source block)
     inputs:
-        - dataset: str         # dataset ID to read
-          label:   str         # optional — added as column 'source_label'
+        - dataset: str
+          label:   str     # optional — added as column 'source_label'
+          source:  {id, type, description, config}
     output:
         dataset:     str
-        format:      str       # parquet | csv  (default: parquet)
+        format:      str   (default: parquet)
         description: str
+        source:      {id, type, description, config}   # required
 """
 import pandas as pd
 from waluigi.sdk.catalog import catalog
 from waluigi.sdk.context import context
-from waluigi.tasks._io import create_source, write_output
+from waluigi.tasks._io import _ensure_source, write_output
 
 
 def run():
-    create_source()
-
     frames  = []
     lineage = []
 
-    for inp in context.config.inputs:
+    for inp in context.config.inputs:     # list of plain dicts
+        _ensure_source(inp)
         reader = catalog.resolve(inp["dataset"])
         df = reader.read()
         if "label" in inp:

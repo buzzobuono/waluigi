@@ -1,3 +1,9 @@
+q.sources:
+    local: &local
+        id:          "analytics-local"
+        type:        "LOCAL"
+        description: "Local storage for analytics pipeline"
+
 kind: Job
 metadata:
     workdir: "work"
@@ -9,21 +15,21 @@ spec:
     params:
         date: "2026-05-17"
     config:
-        catalog_source: "analytics-local"
         left:
             dataset: "analytics/erp/clean/clean_erp"
+            source:  *local
         right:
             dataset: "analytics/web/clean/clean_web"
+            source:  *local
         join:
-            columns:  
-              - "date"
-              - "metric"
+            columns:  ["date", "metric"]
             how:      "outer"
             suffixes: ["_erp", "_web"]
         output:
             dataset:     "analytics/joined/erp_web"
             format:      "parquet"
-            description: "ERP + WEB join on date"
+            description: "ERP + WEB join on date and metric"
+            source:      *local
     resources:
         coin: 1
     affinity:
