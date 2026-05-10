@@ -9,23 +9,29 @@ spec:
     config:
         dataset: "tests/test_dataset"
         charts:
-            - key:   "value_by_source"
-              title: "Total value by source"
-              spec:
-                  type: "bar"
-                  x:   {field: "pipeline_source", label: "Source"}
-                  y:   {field: "value", agg: "sum", label: "Total Value"}
             - key:   "value_by_metric"
               title: "Value by metric"
               spec:
                   type: "bar"
                   x:   {field: "metric", label: "Metric"}
                   y:   {field: "value", agg: "sum", label: "Total Value"}
-            - key:   "value_share_by_source"
-              title: "Value share by source"
+            - key:   "value_by_category"
+              title: "Value by category"
+              spec:
+                  type: "bar"
+                  x:   {field: "category", label: "Category"}
+                  y:   {field: "value", agg: "sum", label: "Total Value"}
+            - key:   "value_by_source"
+              title: "Value by source"
+              spec:
+                  type: "bar"
+                  x:   {field: "source", label: "Source"}
+                  y:   {field: "value", agg: "sum", label: "Total Value"}
+            - key:   "metric_share"
+              title: "Metric share"
               spec:
                   type: "pie"
-                  x:   {field: "pipeline_source"}
+                  x:   {field: "metric"}
                   y:   {field: "value", agg: "sum"}
             - key:   "value_distribution"
               title: "Value distribution"
@@ -33,12 +39,6 @@ spec:
                   type: "histogram"
                   x:   {field: "value", label: "Value"}
                   bins: 10
-            - key:   "value_by_category"
-              title: "Value by category"
-              spec:
-                  type: "bar"
-                  x:   {field: "category", label: "Category"}
-                  y:   {field: "value", agg: "sum", label: "Total Value"}
     resources:
         coin: 1
     affinity:

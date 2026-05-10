@@ -448,18 +448,71 @@ class CatalogDB:
     # Dataset Schema
     
     def upsert_schema_columns(self, dataset_id: str, columns: list[dict]):
+        """Bulk upsert from inference (commit time). Always refreshes physical_type;
+        only sets status='inferred' on new columns — existing draft/published kept."""
         now = _now()
         with self.conn:
             for col in columns:
                 self.conn.execute("""
-                    INSERT INTO schema_columns (dataset_id , column_name, physical_type, logical_type, nullable, pii, pii_type, pii_notes, description, status, username, createdate, updatedate)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO schema_columns (dataset_id, column_name, physical_type, logical_type, nullable, pii, pii_type, pii_notes, description, status, username, createdate, updatedate)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'inferred', ?, ?, ?)
                     ON CONFLICT(dataset_id, column_name) DO UPDATE SET
-                        physical_type  = excluded.physical_type,
-                        updatedate = excluded.updatedate
-                    WHERE schema_columns.status = 'inferred'
-                """, (dataset_id , col["name"], col.get("physical_type"), col.get("logical_type"), 1, 0, 'none', '', '', 'inferred', _user(), now, now) )
-    
+                        physical_type = excluded.physical_type,
+                        updatedate    = excluded.updatedate
+                """, (dataset_id, col["name"], col.get("physical_type"), col.get("logical_type"), 1, 0, 'none', '', '', _user(), now, now))
+
+    def upsert_schema_column(self, dataset_id: str, column_name: str, **kwargs) -> dict | None:
+        """Create (draft) or update a single schema column.
+
+        If the column does not yet exist it is inserted with status='draft'.
+        If it already exists the status transitions are:
+          inferred  → draft
+          draft     → draft
+          published → published  (editing a published column keeps it published)
+        """
+        allowed = {"logical_type", "nullable", "pii", "pii_type", "pii_notes", "description"}
+        updates = {k: v for k, v in kwargs.items() if k in allowed and v is not None}
+
+        if "nullable" in updates:
+            updates["nullable"] = int(updates["nullable"])
+        if "pii" in updates:
+            updates["pii"] = int(updates["pii"])
+
+        now = _now()
+        with self.conn:
+            set_parts = [f"{k} = ?" for k in updates]
+            set_parts += [
+                "username = ?", "updatedate = ?",
+                "status = CASE WHEN status = 'published' THEN 'published' ELSE 'draft' END",
+            ]
+            vals = list(updates.values()) + [_user(), now, dataset_id, column_name]
+            cur = self.conn.execute(
+                f"UPDATE schema_columns SET {', '.join(set_parts)} "
+                f"WHERE dataset_id = ? AND column_name = ?", vals)
+
+            if cur.rowcount == 0:
+                self.conn.execute("""
+                    INSERT INTO schema_columns
+                        (dataset_id, column_name, physical_type, logical_type, nullable, pii,
+                         pii_type, pii_notes, description, status, username, createdate, updatedate)
+                    VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)
+                """, (
+                    dataset_id, column_name,
+                    updates.get("logical_type"),
+                    int(updates.get("nullable", True)),
+                    int(updates.get("pii", False)),
+                    updates.get("pii_type", "none"),
+                    updates.get("pii_notes", ""),
+                    updates.get("description", ""),
+                    _user(), now, now,
+                ))
+
+        cur = self.conn.execute(
+            "SELECT * FROM schema_columns WHERE dataset_id = ? AND column_name = ?",
+            (dataset_id, column_name))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
     def get_schema(self, dataset_id: str) -> list[dict]:
         cur = self.conn.execute("""
             SELECT * FROM schema_columns

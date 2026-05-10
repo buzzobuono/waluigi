@@ -39,9 +39,9 @@ def run():
 
     if publish:
         catalog._post(f"/datasets/{dataset_id}/schema/publish", json={"published_by": "waluigi"})
-        print(f"Dataset '{dataset_id}': {len(columns)} column(s) patched, schema published")
+        print(f"Dataset '{dataset_id}': {len(columns)} column(s) defined, schema published")
     else:
-        print(f"Dataset '{dataset_id}': {len(columns)} column(s) patched")
+        print(f"Dataset '{dataset_id}': {len(columns)} column(s) defined (draft)")
 
 
 if __name__ == "__main__":
