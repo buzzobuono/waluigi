@@ -3,7 +3,7 @@ import shutil
 import tempfile
 from pathlib import Path
 from waluigi.sdk.catalog import catalog
-from waluigi.catalog.models import *
+from waluigi.catalog.models import SourceCreateRequest, SourceType
 
 @pytest.fixture
 def temp_db_dir():
@@ -35,15 +35,10 @@ def test_produce_dataset_from_local_source(sample_rows):
     )
     catalog.create_source(source)
     
-    dataset = DatasetCreateRequest(
-        id=dataset_id,
-        format=DatasetFormat.PARQUET,
-        description="Sales raw",
-        source_id=source_id
-    )
-    
+    handle = catalog.create_dataset(dataset_id, format="parquet", source_id=source_id, description="Sales raw")
+
     metadata = {"rows": len(sample_rows), "source": "SAP_EXTRACT", "date_ref": "2026yyyyyyyy"}
-    with catalog.produce(dataset, metadata) as ctx:
+    with handle.create_version(metadata=metadata) as ctx:
         count = ctx.write(sample_rows)
         
     assert count == len(sample_rows)
@@ -64,15 +59,10 @@ def test_produce_dataset_from_sql_source_sqlite(temp_db_dir, sample_rows):
     )
     catalog.create_source(source)
     
-    dataset = DatasetCreateRequest(
-        id=dataset_id,
-        format=DatasetFormat.SQL,
-        description="Sales raw Sqlite",
-        source_id=source_id
-    )
+    handle = catalog.create_dataset(dataset_id, format="sql", source_id=source_id, description="Sales raw Sqlite")
 
     metadata = {"rows": len(sample_rows), "source": "SAP_EXTRACT", "date_ref": "2026"}
-    with catalog.produce(dataset, metadata) as ctx:
+    with handle.create_version(metadata=metadata) as ctx:
         count = ctx.write(sample_rows)
         
     assert count == len(sample_rows)
@@ -92,15 +82,10 @@ def _test_produce_dataset_from_postgresql(sample_rows):
     )
     catalog.create_source(source)
     
-    dataset = DatasetCreateRequest(
-        id=dataset_id,
-        format=DatasetFormat.SQL,
-        description="Sales raw PostgreSQL",
-        source_id=source_id
-    )
+    handle = catalog.create_dataset(dataset_id, format="sql", source_id=source_id, description="Sales raw PostgreSQL")
 
     metadata = {"rows": len(sample_rows), "source": "SAP_EXTRACT", "date_ref": "2026"}
-    with catalog.produce(dataset, metadata) as writer:
+    with handle.create_version(metadata=metadata) as writer:
         writer.write(sample_rows)
         
     if writer.skipped:

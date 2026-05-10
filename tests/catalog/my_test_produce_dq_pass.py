@@ -37,14 +37,14 @@ catalog.create_source(SourceCreateRequest(
     type=SourceType.LOCAL,
     description="Local source for DQ test",
 ))
-dataset_req = DatasetCreateRequest(
-    id=DATASET_ID,
-    format=DatasetFormat.CSV,
-    description="Sales dataset with DQ monitoring",
+
+handle = catalog.create_dataset(
+    DATASET_ID,
+    format="csv",
     source_id=SOURCE_ID,
+    description="Sales dataset with DQ monitoring",
 )
-catalog.create_dataset(dataset_req)
-saved = catalog.set_expectations(DATASET_ID, EXPECTATIONS)
+handle.set_expectations(EXPECTATIONS)
 
 rows_clean = [
     {"product": "PROD_0001", "quantity": 10, "revenue": 100.0, "category": "A"},
@@ -54,7 +54,7 @@ rows_clean = [
     {"product": "PROD_0005", "quantity": 80, "revenue": 800.0, "category": "E"},
 ]
 
-with catalog.produce(dataset_req, {"quality": "pass"}) as writer:
+with handle.create_version(metadata={"quality": "pass"}) as writer:
     writer.write(rows_clean)
     ver1 = writer.version
 

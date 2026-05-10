@@ -48,7 +48,7 @@ def _ensure_source(dataset_cfg: dict):
 def read_input():
     inp = _to_dict(context.config.input)
     _ensure_source(inp)
-    reader = catalog.resolve(inp["dataset"])
+    reader = catalog.read_dataset(inp["dataset"])
     df = reader.read()
     print(f"  read {inp['dataset']}: {len(df)} rows @ {reader.version}")
     return reader, df
@@ -60,13 +60,13 @@ def write_output(df, lineage):
     src = out.get("source")
     if not src:
         raise ValueError(f"output.source is required (dataset: {out.get('dataset')})")
-    handle = catalog.define(
+    handle = catalog.create_dataset(
         out["dataset"],
         format=out.get("format", "parquet"),
         source_id=src["id"],
         description=out.get("description", ""),
     )
-    with handle.produce(metadata=vars(context.params), inputs=lineage) as writer:
+    with handle.create_version(metadata=vars(context.params), inputs=lineage) as writer:
         writer.write(df)
     if writer.skipped:
         print(f"Skipped — same metadata: {writer.version}")

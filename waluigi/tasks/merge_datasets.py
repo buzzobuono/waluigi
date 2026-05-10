@@ -24,7 +24,7 @@ def run():
 
     for inp in context.config.inputs:     # list of plain dicts
         _ensure_source(inp)
-        reader = catalog.resolve(inp["dataset"])
+        reader = catalog.read_dataset(inp["dataset"])
         df = reader.read()
         if "label" in inp:
             df["source_label"] = inp["label"]

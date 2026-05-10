@@ -7,10 +7,7 @@ import yaml
 import httpx
 from pathlib import Path
 from waluigi.sdk.catalog import catalog
-from waluigi.catalog.models import (
-    DatasetCreateRequest, DatasetFormat,
-    SourceCreateRequest, SourceType,
-)
+from waluigi.catalog.models import SourceCreateRequest, SourceType
 
 DATASET_ID  = "analytics/graph/sales_chart_test"
 CHARTS_YAML = Path(__file__).parent / "sales_charts.yaml"
@@ -23,11 +20,11 @@ catalog.create_source(SourceCreateRequest(
     description="Local source for chart test",
 ))
 
-dataset_req = DatasetCreateRequest(
-    id=DATASET_ID,
-    format=DatasetFormat.CSV,
-    description="Sales data for chart visualisation test",
+handle = catalog.create_dataset(
+    DATASET_ID,
+    format="csv",
     source_id="local_graph_test",
+    description="Sales data for chart visualisation test",
 )
 
 # ── 2. Write data ─────────────────────────────────────────────────────────────
@@ -45,14 +42,14 @@ rows = [
 ]
 
 print("Writing dataset ...")
-with catalog.produce(dataset_req, {"period": "Q1-2026"}, force=False) as writer:
+with handle.create_version(metadata={"period": "Q1-2026"}, force=False) as writer:
     writer.write(rows)
     version = writer.version
 print(f"  version : {version}")
 
 # ── 3. Read back & verify ─────────────────────────────────────────────────────
 
-reader = catalog.resolve(DATASET_ID)
+reader = catalog.read_dataset(DATASET_ID)
 df     = reader.read()
 print(f"  rows    : {len(df)}")
 print(f"  columns : {list(df.columns)}")
@@ -60,7 +57,7 @@ print(f"  columns : {list(df.columns)}")
 # ── 4. Apply chart definitions from YAML (idempotent) ─────────────────────────
 
 chart_defs = yaml.safe_load(CHARTS_YAML.read_text())
-charts     = catalog.set_charts(DATASET_ID, chart_defs)
+charts     = [handle.set_chart(c["key"], c["title"], c["spec"]) for c in chart_defs]
 print(f"\nApplied {len(charts)} chart(s) from {CHARTS_YAML.name}")
 
 # ── 5. Verify renders ─────────────────────────────────────────────────────────
