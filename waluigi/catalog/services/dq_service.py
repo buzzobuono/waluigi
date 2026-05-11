@@ -1,3 +1,5 @@
+import os
+import yaml
 import logging
 
 from waluigi.catalog.db import CatalogDB
@@ -49,6 +51,34 @@ class DQService:
                 details=[], error=str(e),
             )
             return None
+
+    def get_suite(self, path: str) -> list:
+        """Read a DQ suite YAML and enrich with catalogue definitions.
+
+        Raises ValueError if the file is not found or cannot be parsed.
+        """
+        if not os.path.isfile(path):
+            raise ValueError(f"Suite file not found: {path}")
+        try:
+            with open(path, "r") as f:
+                raw = yaml.safe_load(f) or []
+        except Exception as e:
+            raise ValueError(f"Cannot read suite file: {e}")
+
+        enriched = []
+        for item in raw:
+            rule_id = item.get("rule_id", "?")
+            defn    = self.dq_manager.catalogue.get(rule_id)
+            enriched.append({
+                "rule_id":     rule_id,
+                "inputs":      item.get("inputs", {}),
+                "params":      item.get("params", {}),
+                "tolerance":   item.get("tolerance", 1.0),
+                "description": defn.description if defn else None,
+                "formula":     defn.formula.strip() if defn else None,
+                "found":       defn is not None,
+            })
+        return enriched
 
     def list_rules(self) -> list:
         """Reload the rules catalogue from disk and return a serialisable list."""

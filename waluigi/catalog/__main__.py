@@ -12,7 +12,10 @@ from waluigi.core.responses import ok, warn, ko
 from waluigi.core.utils import _model_dump
 from waluigi.catalog.db import CatalogDB
 from waluigi.catalog.models import *
-from waluigi.catalog.services import ChartService, DQService, DatasetService, SourceService
+from waluigi.catalog.services import (
+    ChartService, DQService, DatasetService, SourceService,
+    CatalogBrowserService, MetadataService,
+)
 from waluigi.sdk.dataquality import DQManager
 
 logger = logging.getLogger("waluigi")
@@ -55,6 +58,8 @@ chart_service   = ChartService(db)
 dq_service      = DQService(db, dq_manager)
 dataset_service = DatasetService(db, DATA_PATH, dq_service)
 source_service  = SourceService(db)
+browser_service = CatalogBrowserService(db)
+metadata_service = MetadataService(db)
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +74,7 @@ source_service  = SourceService(db)
              "exactly like S3 ListObjects with a delimiter."
          ))
 async def list_folders(prefix: str):
-    return ok(db.list_folders(prefix))
+    return ok(browser_service.list_folders(prefix))
 
 
 # ---------------------------------------------------------------------------
@@ -130,33 +135,32 @@ async def delete_source(id: str):
          tags=["Metadata"],
          summary="Get all metadata for a version")
 async def get_metadata(dataset_id: str, version: str):
-    if not db.get_version(dataset_id, version):
-        return ko("Version not found", 404)
-    return ok(db.get_metadata(dataset_id, version))
+    try:
+        return ok(metadata_service.get_version_metadata(dataset_id, version))
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 @app.post("/datasets/{dataset_id:path}/versions/{version}/metadata",
           tags=["Metadata"],
           summary="Set a metadata key on a version")
-async def set_metadata(dataset_id: str, version: str,
-                       body: MetadataSetRequest):
-    if not db.get_version(dataset_id, version):
-        return ko("Version not found", 404)
-    if body.key.startswith("sys."):
-        return ko("sys.* keys are reserved for the server", 422)
-    db.set_metadata(dataset_id, version, body.key, body.value)
-    return ok({"key": body.key, "value": body.value})
+async def set_metadata(dataset_id: str, version: str, body: MetadataSetRequest):
+    try:
+        return ok(metadata_service.set_version_metadata(
+            dataset_id, version, body.key, body.value))
+    except ValueError as e:
+        status = 422 if "reserved" in str(e) else 404
+        return ko(str(e), status)
 
 
 @app.delete("/datasets/{dataset_id:path}/versions/{version}/metadata/{key}",
             tags=["Metadata"],
             summary="Delete a metadata key from a version")
 async def delete_metadata(dataset_id: str, version: str, key: str):
-    if not db.get_version(dataset_id, version):
-        return ko("Version not found", 404)
-    if not db.delete_metadata(dataset_id, version, key):
-        return ko("Key not found or protected (sys.*)", 404)
-    return ok({"key": key, "deleted": True})
+    try:
+        return ok(metadata_service.delete_version_metadata(dataset_id, version, key))
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 # ---------------------------------------------------------------------------
@@ -194,31 +198,11 @@ async def list_versions(dataset_id: str):
 @app.get("/datasets/{dataset_id:path}/schema", tags=["Schema"],
          summary="Get current schema with PII flags and status per column")
 async def get_schema(dataset_id: str):
-    if not db.exists_dataset(dataset_id):
-        return ko("Dataset not found", 404)
-    columns   = db.get_schema(dataset_id)
-    pii_count = sum(1 for c in columns if c.get("pii"))
-    inferred  = [c["column_name"] for c in columns
-                 if c.get("status") == "inferred"]
-    msgs = []
-    if pii_count:
-        msgs.append(f"{pii_count} column(s) flagged as PII")
-    if inferred:
-        msgs.append(
-            f"{len(inferred)} column(s) still 'inferred' — "
-            "review before publishing")
-    data = {
-        "dataset_id": dataset_id,
-        "columns":    columns,
-        "summary": {
-            "total":     len(columns),
-            "pii":       pii_count,
-            "inferred":  len(inferred),
-            "draft":     sum(1 for c in columns if c.get("status") == "draft"),
-            "published": sum(1 for c in columns if c.get("status") == "published"),
-        },
-    }
-    return warn(data, msgs) if msgs else ok(data)
+    try:
+        data, msgs = metadata_service.get_schema(dataset_id)
+        return warn(data, msgs) if msgs else ok(data)
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 @app.patch("/datasets/{dataset_id:path}/schema/{column_name}",
@@ -226,52 +210,42 @@ async def get_schema(dataset_id: str):
            summary="Edit a column's semantic metadata and PII flags")
 async def patch_schema_column(dataset_id: str, column_name: str,
                                body: SchemaColumnPatch):
-    if not db.exists_dataset(dataset_id):
-        return ko("Dataset not found", 404)
-    updates = _model_dump(body)
-    col = db.upsert_schema_column(dataset_id, column_name, **updates)
-    db.set_in_review(dataset_id)
-    msgs = []
-    if col and col.get("pii") and col.get("pii_type") == "none":
-        msgs.append("PII flag set but pii_type is 'none' — "
-                    "set it to: direct | indirect | sensitive")
-    return warn(col, msgs) if msgs else ok(col)
+    try:
+        col, msgs = metadata_service.patch_column(
+            dataset_id, column_name, **_model_dump(body))
+        return warn(col, msgs) if msgs else ok(col)
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 @app.post("/datasets/{dataset_id:path}/schema/{column_name}/approve",
           tags=["Schema"],
           summary="Approve a single column — promotes it to 'published'")
 async def approve_schema_column(dataset_id: str, column_name: str):
-    if not db.exists_dataset(dataset_id):
-        return ko("Dataset not found", 404)
-    updated = db.approve_schema_column(dataset_id, column_name)
-    if not updated:
-        return ko("Column not found in schema", 404)
-    col = next((c for c in db.get_schema(dataset_id)
-                if c["column_name"] == column_name), None)
-    return ok(col)
+    try:
+        return ok(metadata_service.approve_column(dataset_id, column_name))
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 @app.delete("/datasets/{dataset_id:path}/schema/{column_name}",
             tags=["Schema"],
             summary="Delete a column from the schema definition")
 async def delete_schema_column(dataset_id: str, column_name: str):
-    if not db.exists_dataset(dataset_id):
-        return ko("Dataset not found", 404)
-    deleted = db.delete_schema_column(dataset_id, column_name)
-    if not deleted:
-        return ko("Column not found in schema", 404)
-    return ok({"column_name": column_name, "deleted": True})
+    try:
+        return ok(metadata_service.delete_column(dataset_id, column_name))
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 @app.post("/datasets/{dataset_id:path}/schema/publish",
           tags=["Schema"],
           summary="Publish schema — promotes all columns to 'published'")
 async def publish_schema(dataset_id: str, body: SchemaPublishRequest):
-    if not db.exists_dataset(dataset_id):
-        return ko("Dataset not found", 404)
-    db.publish_schema(dataset_id, body.published_by)
-    return ok({"dataset_id": dataset_id})
+    try:
+        return ok(metadata_service.publish_schema(dataset_id, body.published_by))
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 # ---------------------------------------------------------------------------
@@ -281,48 +255,40 @@ async def publish_schema(dataset_id: str, body: SchemaPublishRequest):
 @app.get("/datasets/{dataset_id:path}/expectations", tags=["Expectations"],
          summary="List all DQ expectations for a dataset")
 async def list_expectations(dataset_id: str):
-    if not db.exists_dataset(dataset_id):
-        return ko("Dataset not found", 404)
-    return ok(db.list_expectations(dataset_id))
+    try:
+        return ok(metadata_service.list_expectations(dataset_id))
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 @app.post("/datasets/{dataset_id:path}/expectations", tags=["Expectations"],
           summary="Add a DQ expectation to a dataset")
 async def add_expectation(dataset_id: str, body: ExpectationCreateRequest):
-    if not db.exists_dataset(dataset_id):
-        return ko("Dataset not found", 404)
-    exp = db.add_expectation(
-        dataset_id,
-        body.rule_id,
-        body.inputs,
-        body.params,
-        body.tolerance,
-        body.position,
-    )
-    return ok(exp)
+    try:
+        return ok(metadata_service.add_expectation(
+            dataset_id, body.rule_id, body.inputs,
+            body.params, body.tolerance, body.position))
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 @app.patch("/datasets/{dataset_id:path}/expectations/{exp_id}", tags=["Expectations"],
            summary="Update a DQ expectation")
 async def update_expectation(dataset_id: str, exp_id: int, body: ExpectationUpdateRequest):
-    if not db.exists_dataset(dataset_id):
-        return ko("Dataset not found", 404)
-    updates = {k: v for k, v in _model_dump(body).items() if v is not None}
-    updated = db.update_expectation(dataset_id, exp_id, **updates)
-    if not updated:
-        return ko("Expectation not found", 404)
-    return ok(db.get_expectation(dataset_id, exp_id))
+    try:
+        updates = {k: v for k, v in _model_dump(body).items() if v is not None}
+        return ok(metadata_service.update_expectation(dataset_id, exp_id, **updates))
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 @app.delete("/datasets/{dataset_id:path}/expectations/{exp_id}", tags=["Expectations"],
             summary="Delete a DQ expectation")
 async def delete_expectation(dataset_id: str, exp_id: int):
-    if not db.exists_dataset(dataset_id):
-        return ko("Dataset not found", 404)
-    deleted = db.delete_expectation(dataset_id, exp_id)
-    if not deleted:
-        return ko("Expectation not found", 404)
-    return ok({"deleted": exp_id})
+    try:
+        return ok(metadata_service.delete_expectation(dataset_id, exp_id))
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 # ---------------------------------------------------------------------------
@@ -332,46 +298,46 @@ async def delete_expectation(dataset_id: str, exp_id: int):
 @app.get("/datasets/{dataset_id:path}/charts", tags=["Charts"],
          summary="List chart definitions for a dataset")
 async def list_charts(dataset_id: str):
-    if not db.exists_dataset(dataset_id):
-        return ko("Dataset not found", 404)
-    return ok(db.list_charts(dataset_id))
+    try:
+        return ok(metadata_service.list_charts(dataset_id))
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 @app.post("/datasets/{dataset_id:path}/charts", tags=["Charts"],
           summary="Add a chart definition")
 async def add_chart(dataset_id: str, body: ChartCreateRequest):
-    if not db.exists_dataset(dataset_id):
-        return ko("Dataset not found", 404)
-    chart = db.add_chart(dataset_id, body.key, body.title, body.spec, body.position)
-    return ok(chart)
+    try:
+        return ok(metadata_service.add_chart(
+            dataset_id, body.key, body.title, body.spec, body.position))
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 @app.patch("/datasets/{dataset_id:path}/charts/{chart_id}", tags=["Charts"],
            summary="Update a chart definition")
 async def update_chart(dataset_id: str, chart_id: int, body: ChartUpdateRequest):
-    if not db.exists_dataset(dataset_id):
-        return ko("Dataset not found", 404)
-    updates = {k: v for k, v in _model_dump(body).items() if v is not None}
-    if not db.update_chart(dataset_id, chart_id, **updates):
-        return ko("Chart not found", 404)
-    return ok(db.get_chart(dataset_id, chart_id))
+    try:
+        updates = {k: v for k, v in _model_dump(body).items() if v is not None}
+        return ok(metadata_service.update_chart(dataset_id, chart_id, **updates))
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 @app.delete("/datasets/{dataset_id:path}/charts/{chart_id}", tags=["Charts"],
             summary="Delete a chart definition")
 async def delete_chart(dataset_id: str, chart_id: int):
-    if not db.exists_dataset(dataset_id):
-        return ko("Dataset not found", 404)
-    if not db.delete_chart(dataset_id, chart_id):
-        return ko("Chart not found", 404)
-    return ok({"deleted": chart_id})
+    try:
+        return ok(metadata_service.delete_chart(dataset_id, chart_id))
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 @app.get("/datasets/{dataset_id:path}/charts/{chart_id}/render", tags=["Charts"],
          summary="Render a chart by ID — returns an ECharts option object")
 async def render_chart(dataset_id: str, chart_id: int,
                        version: str = Query(None)):
-    chart = db.get_chart(dataset_id, chart_id)
+    chart = metadata_service.get_chart(dataset_id, chart_id)
     if not chart:
         return ko("Chart not found", 404)
     try:
@@ -387,7 +353,7 @@ async def render_chart(dataset_id: str, chart_id: int,
 async def render_chart_by_key(dataset_id: str,
                                key:     str = Query(...),
                                version: str = Query(None)):
-    chart = db.get_chart_by_key(dataset_id, key)
+    chart = metadata_service.get_chart_by_key(dataset_id, key)
     if not chart:
         return ko("Chart not found", 404)
     try:
@@ -405,20 +371,19 @@ async def render_chart_by_key(dataset_id: str,
 @app.get("/datasets/{dataset_id:path}/dq", tags=["DQ Results"],
          summary="List all DQ run results for a dataset (one per version)")
 async def list_dq_results(dataset_id: str):
-    if not db.exists_dataset(dataset_id):
-        return ko("Dataset not found", 404)
-    return ok(db.list_dq_results(dataset_id))
+    try:
+        return ok(browser_service.list_dq_results(dataset_id))
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 @app.get("/datasets/{dataset_id:path}/dq/{version}", tags=["DQ Results"],
          summary="Get the DQ result for a specific version")
 async def get_dq_result(dataset_id: str, version: str):
-    if not db.exists_dataset(dataset_id):
-        return ko("Dataset not found", 404)
-    row = db.get_dq_result(dataset_id, version)
-    if not row:
-        return ko("No DQ result for this version", 404)
-    return ok(row)
+    try:
+        return ok(browser_service.get_dq_result(dataset_id, version))
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 # ---------------------------------------------------------------------------
@@ -428,18 +393,10 @@ async def get_dq_result(dataset_id: str, version: str):
 @app.get("/datasets/{dataset_id:path}/lineage/{version}", tags=["Lineage"],
          summary="Get upstream and downstream lineage")
 async def get_lineage(dataset_id: str, version: str):
-    record = (db.get_version(dataset_id, version) if version
-              else db.get_latest_version(dataset_id))
-    if not record:
-        return ko("Dataset version not found", 404)
-
-    ver = record["version"]
-    return ok({
-        "dataset_id": dataset_id,
-        "version":    ver,
-        "upstream":   db.get_upstream(dataset_id, ver),
-        "downstream": db.get_downstream(dataset_id, ver),
-    })
+    try:
+        return ok(browser_service.get_lineage(dataset_id, version))
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 # ---------------------------------------------------------------------------
@@ -455,28 +412,11 @@ async def list_dq_rules():
 @app.get("/dq/suite", tags=["Data Quality"],
          summary="Read a suite YAML and return its rules enriched with catalogue definitions")
 async def get_dq_suite(path: str = Query(..., description="Absolute path to the suite YAML file")):
-    if not os.path.isfile(path):
-        return ko(f"Suite file not found: {path}", 404)
     try:
-        with open(path, "r") as f:
-            raw = yaml.safe_load(f) or []
-    except Exception as e:
-        return ko(f"Cannot read suite file: {e}", 422)
-
-    enriched = []
-    for item in raw:
-        rule_id = item.get("rule_id", "?")
-        defn    = dq_manager.catalogue.get(rule_id)
-        enriched.append({
-            "rule_id":     rule_id,
-            "inputs":      item.get("inputs", {}),
-            "params":      item.get("params", {}),
-            "tolerance":   item.get("tolerance", 1.0),
-            "description": defn.description if defn else None,
-            "formula":     defn.formula.strip() if defn else None,
-            "found":       defn is not None,
-        })
-    return ok(enriched)
+        return ok(dq_service.get_suite(path))
+    except ValueError as e:
+        status = 404 if "not found" in str(e) else 422
+        return ko(str(e), status)
 
 
 # ---------------------------------------------------------------------------
