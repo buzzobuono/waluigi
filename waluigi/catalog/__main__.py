@@ -18,7 +18,7 @@ from waluigi.core.utils import _model_dump
 from waluigi.catalog.db import CatalogDB
 from waluigi.catalog.utils import _version_id, _infer_schema, _safe_json_value
 from waluigi.catalog.models import *
-from waluigi.catalog.services import ChartService, DQService, DatasetService
+from waluigi.catalog.services import ChartService, DQService, DatasetService, SourceService
 from waluigi.sdk.connectors import ConnectorFactory
 from waluigi.sdk.dataquality import DQManager
 
@@ -61,6 +61,7 @@ dq_manager      = DQManager(RULES_PATH)
 chart_service   = ChartService(db)
 dq_service      = DQService(db, dq_manager)
 dataset_service = DatasetService(db, DATA_PATH)
+source_service  = SourceService(db)
 
 
 # ---------------------------------------------------------------------------
@@ -85,24 +86,23 @@ async def list_folders(prefix: str):
 @app.get("/sources", tags=["Sources"],
          summary="List sources")
 async def list_sources():
-    return ok(db.list_sources())
+    return ok(source_service.list())
 
 
 @app.post("/sources", tags=["Sources"],
           summary="Register or update a source (upsert)",
           status_code=200)
 async def create_source(body: SourceCreateRequest):
-    existing = db.get_source(body.id)
-    if existing and existing["type"] != body.type:
-        return ko(f"Cannot change source type from '{existing['type']}' to '{body.type.value}' — create a new source instead", 409)
-    db.upsert_source(body.id, body.type, body.config, body.description)
-    return ok(db.get_source(body.id))
+    try:
+        return ok(source_service.upsert(body.id, body.type.value, body.config, body.description))
+    except ValueError as e:
+        return ko(str(e), 409)
 
 
 @app.get("/sources/{id}", tags=["Sources"],
          summary="Get a source details")
 async def get_source(id: str):
-    src = db.get_source(id)
+    src = source_service.get(id)
     if not src:
         return ko("Source not found", 404)
     return ok(src)
@@ -111,17 +111,17 @@ async def get_source(id: str):
 @app.patch("/sources/{id}", tags=["Sources"],
            summary="Update a source")
 async def update_source(id: str, body: SourceUpdateRequest):
-    updated = db.update_source(id, **_model_dump(body))
-    if not updated:
+    src = source_service.update(id, **_model_dump(body))
+    if not src:
         return ko("Source not found", 404)
-    return ok(db.get_source(id))
+    return ok(src)
 
 
 @app.delete("/sources/{id}", tags=["Sources"],
             summary="Delete a source")
 async def delete_source(id: str):
     try:
-        deleted = db.delete_source(id)
+        deleted = source_service.delete(id)
     except ValueError as e:
         return ko(str(e), 409)
     if not deleted:
