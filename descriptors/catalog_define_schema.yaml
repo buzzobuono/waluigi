@@ -2,7 +2,6 @@ kind: DAG
 metadata:
     workdir: "work"
 spec:
-    name: "DefineTestSchema"
     id:   "catalog_define_schema_test"
     namespace: "catalog"
     type: "CatalogDefineSchema"

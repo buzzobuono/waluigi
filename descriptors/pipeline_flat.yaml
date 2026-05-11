@@ -11,7 +11,6 @@ params:
     date: "2026-05-15"
 spec:
     - id:        "filter_high_value"
-      name:      "Filter High-Value Rows"
       namespace: "analytics"
       type:      "FilterDataset"
       config:
@@ -28,7 +27,6 @@ spec:
           coin: 1
 
     - id:        "add_derived"
-      name:      "Add Derived Metrics"
       namespace: "analytics"
       type:      "AddDerivedColumns"
       requires:  ["filter_high_value"]
@@ -50,7 +48,6 @@ spec:
           coin: 1
 
     - id:        "aggregate_by_category"
-      name:      "Aggregate by Category"
       namespace: "analytics"
       type:      "AggregateDataset"
       requires:  ["add_derived"]
