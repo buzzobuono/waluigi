@@ -263,7 +263,7 @@ async def publish_schema(dataset_id: str, body: SchemaPublishRequest):
          summary="List all DQ expectations for a dataset")
 async def list_expectations(dataset_id: str):
     try:
-        return ok(metadata_service.list_expectations(dataset_id))
+        return ok(dq_service.list_expectations(dataset_id))
     except ValueError as e:
         return ko(str(e), 404)
 
@@ -272,7 +272,7 @@ async def list_expectations(dataset_id: str):
           summary="Add a DQ expectation to a dataset")
 async def add_expectation(dataset_id: str, body: ExpectationCreateRequest):
     try:
-        return ok(metadata_service.add_expectation(
+        return ok(dq_service.add_expectation(
             dataset_id, body.rule_id, body.inputs,
             body.params, body.tolerance, body.position))
     except ValueError as e:
@@ -284,7 +284,7 @@ async def add_expectation(dataset_id: str, body: ExpectationCreateRequest):
 async def update_expectation(dataset_id: str, exp_id: int, body: ExpectationUpdateRequest):
     try:
         updates = {k: v for k, v in _model_dump(body).items() if v is not None}
-        return ok(metadata_service.update_expectation(dataset_id, exp_id, **updates))
+        return ok(dq_service.update_expectation(dataset_id, exp_id, **updates))
     except ValueError as e:
         return ko(str(e), 404)
 
@@ -293,7 +293,7 @@ async def update_expectation(dataset_id: str, exp_id: int, body: ExpectationUpda
             summary="Delete a DQ expectation")
 async def delete_expectation(dataset_id: str, exp_id: int):
     try:
-        return ok(metadata_service.delete_expectation(dataset_id, exp_id))
+        return ok(dq_service.delete_expectation(dataset_id, exp_id))
     except ValueError as e:
         return ko(str(e), 404)
 
