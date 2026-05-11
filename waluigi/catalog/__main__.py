@@ -13,7 +13,9 @@ from waluigi.core.utils import _model_dump
 from waluigi.catalog.db import CatalogDB
 from waluigi.catalog.models import *
 from waluigi.catalog.services import (
-    ChartService, DQService, DatasetService, SourceService,
+    ChartService, DQService,
+    DatasetService, VersionService,
+    SourceService,
     CatalogBrowserService, MetadataService,
 )
 from waluigi.sdk.dataquality import DQManager
@@ -53,12 +55,13 @@ except Exception as e:
     logger.error(f"❌ Critical DB error: {e}")
     sys.exit(1)
 
-dq_manager      = DQManager(RULES_PATH)
-chart_service   = ChartService(db)
-dq_service      = DQService(db, dq_manager)
-dataset_service = DatasetService(db, DATA_PATH, dq_service)
-source_service  = SourceService(db)
-browser_service = CatalogBrowserService(db)
+dq_manager       = DQManager(RULES_PATH)
+chart_service    = ChartService(db)
+dq_service       = DQService(db, dq_manager)
+dataset_service  = DatasetService(db)
+version_service  = VersionService(db, DATA_PATH, dq_service)
+source_service   = SourceService(db)
+browser_service  = CatalogBrowserService(db)
 metadata_service = MetadataService(db)
 
 
@@ -173,7 +176,7 @@ async def delete_metadata(dataset_id: str, version: str, key: str):
 async def preview(dataset_id: str, version: str,
                   limit: int = 10, offset: int = 0):
     try:
-        return ok(dataset_service.preview(dataset_id, version, limit, offset))
+        return ok(version_service.preview(dataset_id, version, limit, offset))
     except NotImplementedError as e:
         return ko(str(e), 422)
     except ValueError as e:
@@ -186,7 +189,7 @@ async def preview(dataset_id: str, version: str,
          summary="List all committed versions (newest first)")
 async def list_versions(dataset_id: str):
     try:
-        return ok(dataset_service.list_versions(dataset_id))
+        return ok(version_service.list_versions(dataset_id))
     except ValueError as e:
         return ko(str(e), 404)
 
@@ -502,7 +505,7 @@ async def approve_dataset(dataset_id: str, body: ApproveRequest):
           status_code=201)
 async def dataset_reserve(dataset_id: str, body: ReserveRequest):
     try:
-        result, skipped = dataset_service.reserve(
+        result, skipped = version_service.reserve(
             dataset_id, body.metadata, body.force)
         if skipped:
             msg = result.pop("_skip_msg")
@@ -523,7 +526,7 @@ async def dataset_reserve(dataset_id: str, body: ReserveRequest):
 async def dataset_commit(dataset_id: str, version: str, body: CommitRequest):
     try:
         inputs = [_model_dump(i) for i in body.inputs] if body.inputs else None
-        data, warnings = dataset_service.commit(
+        data, warnings = version_service.commit(
             dataset_id, version,
             metadata=body.metadata,
             task_id=body.task_id,
@@ -545,7 +548,7 @@ async def dataset_commit(dataset_id: str, version: str, body: CommitRequest):
           summary="Mark a reserved version as failed")
 async def fail_version(dataset_id: str, version: str):
     try:
-        return ok(dataset_service.fail(dataset_id, version))
+        return ok(version_service.fail(dataset_id, version))
     except ValueError as e:
         return ko(str(e), 404)
 
@@ -559,7 +562,7 @@ async def fail_version(dataset_id: str, version: str):
             summary="Deprecate a dataset version")
 async def deprecate(dataset_id: str, version: str):
     try:
-        return ok(dataset_service.deprecate(dataset_id, version))
+        return ok(version_service.deprecate(dataset_id, version))
     except ValueError as e:
         return ko(str(e), 404)
 
@@ -574,7 +577,7 @@ async def deprecate(dataset_id: str, version: str):
           status_code=201)
 async def register_virtual(dataset_id: str, body: VirtualRegisterRequest):
     try:
-        return ok(dataset_service.register_virtual(
+        return ok(version_service.register_virtual(
             dataset_id, body.source_id, body.location, body.format,
             display_name=body.display_name, description=body.description,
             owner=body.owner, tags=body.tags,
@@ -596,7 +599,7 @@ async def register_virtual(dataset_id: str, body: VirtualRegisterRequest):
           status_code=201)
 async def materialize(dataset_id: str, body: MaterializeRequest):
     try:
-        return ok(await dataset_service.materialize(
+        return ok(await version_service.materialize(
             dataset_id, body.base_url, body.endpoint, body.params,
             display_name=body.display_name, description=body.description,
             task_id=body.task_id, job_id=body.job_id,
@@ -619,7 +622,7 @@ async def scan_api(body: ScanRequest):
     data_path = body.data_path or DATA_PATH
     if not os.path.exists(data_path):
         return ko(f"Path not found: {data_path}", 404)
-    count = dataset_service.scan(data_path, body.prefix)
+    count = version_service.scan(data_path, body.prefix)
     return ok({"scanned": count, "data_path": data_path})
 
 
@@ -632,7 +635,7 @@ def main():
         logging.config.dictConfig(yaml.safe_load(f))
 
     if args.scan:
-        dataset_service.scan(args.scan_path or DATA_PATH, args.scan_prefix)
+        version_service.scan(args.scan_path or DATA_PATH, args.scan_prefix)
         return
 
     logger.info("Waluigi Catalog v2")
