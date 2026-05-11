@@ -112,15 +112,16 @@ class DQManager:
     def _startup(self):
         self.catalogue.clear()
         for filename in os.listdir(self.rules_path):
-            if filename.endswith(".yaml"):
-                rule_id = os.path.splitext(filename)[0]
-                filepath = os.path.join(self.rules_path, filename)
-                with open(filepath, "r") as f:
+            if not filename.endswith(".yaml"):
+                continue
+            rule_id  = os.path.splitext(filename)[0]
+            filepath = os.path.join(self.rules_path, filename)
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
                     data = yaml.safe_load(f)
-                try:
-                    self.catalogue[rule_id] = RuleDefinition(**data)
-                except Exception as e:
-                    print(f"⚠️  Skipping {filename}: {e}")
+                self.catalogue[rule_id] = RuleDefinition(**data)
+            except Exception as e:
+                print(f"⚠️  Skipping {filename}: {e}", flush=True)
         
     # ── Public API ────────────────────────────────────────────────────────────
 
