@@ -225,6 +225,15 @@ async def delete_user(request: Request, userid: str):
     return {"data": {"deleted": userid}}
 
 
+def _parse_json(response):
+    if not response.content:
+        return None
+    try:
+        return response.json()
+    except Exception:
+        return None
+
+
 # ── Proxy ─────────────────────────────────────────────────────────────────────
 
 @app.api_route("/boss/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
@@ -240,7 +249,7 @@ async def proxy_boss(request: Request, path: str):
             content=content, headers=headers,
         )
     return JSONResponse(
-        content=response.json() if response.content else None,
+        content=_parse_json(response),
         status_code=response.status_code,
     )
 
@@ -258,7 +267,7 @@ async def proxy_catalog(request: Request, path: str):
             content=content, headers=headers,
         )
     return JSONResponse(
-        content=response.json() if response.content else None,
+        content=_parse_json(response),
         status_code=response.status_code,
     )
 

@@ -260,9 +260,12 @@ class CatalogDB:
             """, (id, type, json.dumps(config), description, _user(), now, now))
             
     def delete_source(self, id: str) -> bool:
-        with self.conn:
-            cur = self.conn.execute("DELETE FROM sources WHERE id = ?", (id,))
-            return cur.rowcount > 0
+        try:
+            with self.conn:
+                cur = self.conn.execute("DELETE FROM sources WHERE id = ?", (id,))
+                return cur.rowcount > 0
+        except sqlite3.IntegrityError as e:
+            raise ValueError(f"Source '{id}' is still referenced by one or more datasets") from e
     
     # Datasets
     

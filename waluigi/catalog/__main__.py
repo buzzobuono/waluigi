@@ -428,7 +428,10 @@ async def update_source(id: str, body: SourceUpdateRequest):
 @app.delete("/sources/{id}", tags=["Sources"],
             summary="Delete a source")
 async def delete_source(id: str):
-    deleted = db.delete_source(id)
+    try:
+        deleted = db.delete_source(id)
+    except ValueError as e:
+        return ko(str(e), 409)
     if not deleted:
         return ko("Source not found", 404)
     return ok({"id": id})
