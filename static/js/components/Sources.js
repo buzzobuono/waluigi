@@ -173,12 +173,14 @@ export default {
     function deleteSource(src) {
       confirmRef.value.ask(
         `Delete source "<b>${src.id}</b>"?<br><small class="text-muted">Datasets linked to this source may become unreadable.</small>`,
-        async (ok) => {
-          if (!ok) return;
+        async (confirmed) => {
+          if (!confirmed) return;
           try {
             await api.catalogDeleteSource(src.id);
-          } catch { /* best-effort */ }
-          await loadSources();
+            await loadSources();
+          } catch (e) {
+            pageError.value = e.message;
+          }
         }
       );
     }

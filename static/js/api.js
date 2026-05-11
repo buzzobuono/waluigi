@@ -18,7 +18,14 @@ async function _handle(r, url) {
     window.location.href = '/login';
     throw new Error(`Unauthorized`);
   }
-  if (!r.ok) throw new Error(`${r.method || '?'} ${url} → ${r.status}`);
+  if (!r.ok) {
+    let msg = `${url} → ${r.status}`;
+    try {
+      const body = await r.json();
+      if (body?.diagnostic?.messages?.length) msg = body.diagnostic.messages[0];
+    } catch {}
+    throw new Error(msg);
+  }
   return r.json();
 }
 
