@@ -8,7 +8,6 @@ kind: DAG
 metadata:
     workdir: "work"
 spec:
-    name: "PivotMetricsByCategory"
     id:   "test_pivot"
     namespace: "analytics"
     type: "PivotDataset"

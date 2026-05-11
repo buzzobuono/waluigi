@@ -16,7 +16,6 @@ spec:
     # Custom scripts generate simulated source data with no dependencies.
 
     - id:        "gen_sales"
-      name:      "Generate Sales Data"
       namespace: "simulation"
       script: |
         import pandas as pd, numpy as np
@@ -45,7 +44,6 @@ spec:
           coin: 1
 
     - id:        "gen_products"
-      name:      "Generate Product Catalog"
       namespace: "simulation"
       script: |
         import pandas as pd, numpy as np
@@ -70,7 +68,6 @@ spec:
           coin: 1
 
     - id:        "gen_customers"
-      name:      "Generate Customer Registry"
       namespace: "simulation"
       script: |
         import pandas as pd, numpy as np
@@ -95,7 +92,6 @@ spec:
           coin: 1
 
     - id:        "gen_regions"
-      name:      "Generate Region Reference"
       namespace: "simulation"
       script: |
         import pandas as pd
@@ -121,7 +117,6 @@ spec:
     # naming conflicts in subsequent joins (e.g. region_id in customers, name in regions).
 
     - id:        "select_sales"
-      name:      "Clean Sales Columns"
       namespace: "simulation"
       type:      "SelectColumns"
       requires:  ["gen_sales"]
@@ -140,7 +135,6 @@ spec:
           coin: 1
 
     - id:        "select_products"
-      name:      "Clean Products Columns"
       namespace: "simulation"
       type:      "SelectColumns"
       requires:  ["gen_products"]
@@ -158,7 +152,6 @@ spec:
           coin: 1
 
     - id:        "select_customers"
-      name:      "Clean Customer Columns"
       namespace: "simulation"
       type:      "SelectColumns"
       requires:  ["gen_customers"]
@@ -176,7 +169,6 @@ spec:
           coin: 1
 
     - id:        "select_regions"
-      name:      "Clean Region Columns"
       namespace: "simulation"
       type:      "SelectColumns"
       requires:  ["gen_regions"]
@@ -197,7 +189,6 @@ spec:
     # Each join adds a dimension to the sales fact table.
 
     - id:        "join_sales_products"
-      name:      "Enrich Sales with Products"
       namespace: "simulation"
       type:      "JoinDatasets"
       requires:  ["select_sales", "select_products"]
@@ -220,7 +211,6 @@ spec:
           coin: 1
 
     - id:        "join_with_customers"
-      name:      "Enrich with Customer Segment"
       namespace: "simulation"
       type:      "JoinDatasets"
       requires:  ["join_sales_products", "select_customers"]
@@ -243,7 +233,6 @@ spec:
           coin: 1
 
     - id:        "join_with_regions"
-      name:      "Enrich with Region Geography"
       namespace: "simulation"
       type:      "JoinDatasets"
       requires:  ["join_with_customers", "select_regions"]
@@ -269,7 +258,6 @@ spec:
     # Columns are sequential: gross_profit references revenue, margin_pct references both.
 
     - id:        "add_financials"
-      name:      "Add Financial KPIs"
       namespace: "simulation"
       type:      "AddDerivedColumns"
       requires:  ["join_with_regions"]
@@ -296,7 +284,6 @@ spec:
     # All five tasks read the same enriched dataset independently.
 
     - id:        "agg_by_region"
-      name:      "Aggregate Revenue by Zone"
       namespace: "simulation"
       type:      "AggregateDataset"
       requires:  ["add_financials"]
@@ -318,7 +305,6 @@ spec:
           coin: 1
 
     - id:        "agg_by_category"
-      name:      "Aggregate Revenue by Category"
       namespace: "simulation"
       type:      "AggregateDataset"
       requires:  ["add_financials"]
@@ -339,7 +325,6 @@ spec:
           coin: 1
 
     - id:        "agg_by_segment"
-      name:      "Aggregate Revenue by Customer Segment"
       namespace: "simulation"
       type:      "AggregateDataset"
       requires:  ["add_financials"]
@@ -360,7 +345,6 @@ spec:
           coin: 1
 
     - id:        "pivot_cat_zone"
-      name:      "Pivot Revenue — Category × Zone"
       namespace: "simulation"
       type:      "PivotDataset"
       requires:  ["add_financials"]
@@ -381,7 +365,6 @@ spec:
           coin: 1
 
     - id:        "filter_high_value"
-      name:      "Filter High-Value Transactions"
       namespace: "simulation"
       type:      "FilterDataset"
       requires:  ["add_financials"]
@@ -401,7 +384,6 @@ spec:
     # ── PHASE 6: REFINEMENT (3 tasks) ───────────────────────────────────────
 
     - id:        "filter_top_regions"
-      name:      "Top Zones by Revenue"
       namespace: "simulation"
       type:      "FilterDataset"
       requires:  ["agg_by_region"]
@@ -419,7 +401,6 @@ spec:
           coin: 1
 
     - id:        "filter_top_categories"
-      name:      "Top Categories by Revenue"
       namespace: "simulation"
       type:      "FilterDataset"
       requires:  ["agg_by_category"]
@@ -437,7 +418,6 @@ spec:
           coin: 1
 
     - id:        "dedup_top_products"
-      name:      "Best Transaction per Product"
       namespace: "simulation"
       type:      "DeduplicateDataset"
       requires:  ["filter_high_value"]
@@ -459,7 +439,6 @@ spec:
     # Fan-in: merges all 5 report outputs with source_label column for traceability.
 
     - id:        "merge_executive_report"
-      name:      "Merge Executive Report"
       namespace: "simulation"
       type:      "MergeDatasets"
       requires:  ["filter_top_regions", "filter_top_categories", "agg_by_segment",

@@ -8,7 +8,6 @@ kind: DAG
 metadata:
     workdir: "work"
 spec:
-    name: "AggregateByCategory"
     id:   "test_aggregate"
     namespace: "analytics"
     type: "AggregateDataset"

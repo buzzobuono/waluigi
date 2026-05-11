@@ -2,7 +2,6 @@ kind: DAG
 metadata:
   workdir: "work"
 spec:
-  name: "CreateSalesDataset"
   id: "create_sales_dataset"
   namespace: "sales"
   command: "python ../source/sales/create_sales.py"

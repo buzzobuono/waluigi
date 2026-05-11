@@ -188,7 +188,6 @@ kind: DAG
 metadata:
     workdir: "work"
 spec:
-    name: "GlobalReport"
     id: "final_report"
     namespace: "analytics"
     script: *report_script
@@ -201,8 +200,7 @@ spec:
     affinity:
       - python
     requires:
-      - name: "CleanDataTask"
-        namespace: "analytics"
+      - namespace: "analytics"
         id: "clean_erp"
         script: *clean_script
         params:
@@ -215,8 +213,7 @@ spec:
         affinity:
           - python
         requires:
-          - name: "RawDataExtract"
-            namespace: "analytics"
+          - namespace: "analytics"
             id: "extract_erp"
             script: *extract_script
             params:
@@ -226,8 +223,7 @@ spec:
               coin: 1
             affinity:
               - python
-      - name: "CleanDataTask"
-        namespace: "analytics"
+      - namespace: "analytics"
         id: "clean_web"
         script: *clean_script
         params:
@@ -240,8 +236,7 @@ spec:
         affinity:
           - python
         requires:
-          - name: "RawDataExtract"
-            namespace: "analytics"
+          - namespace: "analytics"
             id: "extract_web"
             script: *extract_script
             params:
@@ -251,8 +246,7 @@ spec:
               coin: 1
             affinity:
               - python
-      - name: "CleanDataTask"
-        namespace: "analytics"
+      - namespace: "analytics"
         id: "clean_social"
         script: *clean_script
         params:
@@ -265,8 +259,7 @@ spec:
         affinity:
           - python
         requires:
-          - name: "RawDataExtract"
-            namespace: "analytics"
+          - namespace: "analytics"
             id: "extract_social"
             script: *extract_script
             params:

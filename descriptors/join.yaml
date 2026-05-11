@@ -8,7 +8,6 @@ kind: DAG
 metadata:
     workdir: "work"
 spec:
-    name: "JoinErpWeb"
     id:   "join_erp_web"
     namespace: "analytics"
     type: "JoinDatasets"
