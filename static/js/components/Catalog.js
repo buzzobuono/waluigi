@@ -118,16 +118,9 @@ export default {
         
         const res = await api.catalogFolders(path);
         const prefix = res.data.prefix;
-        //alert(prefix)
+        
         const prefixItems = [];
         const cleanPrefix = prefix ? prefix.replace(/\/+$/, '') : null;
-
-        prefixItems.push({ 
-          name: ".", 
-          path: cleanPrefix, 
-          description: "Current folder", 
-          type: 'folder' 
-        });
 
         prefixItems.push({ 
           name: "..", 
@@ -135,6 +128,7 @@ export default {
           description: "Parent folder", 
           type: 'folder' 
         });
+        
         const realPrefixItem = (res.data.prefixes || []).map(folder => {
           const clean = folder.replace(/\/+$/, '');
 

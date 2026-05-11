@@ -10,7 +10,7 @@ spec:
         type:        "LOCAL"
         description: "Local storage for the test dataset"
         config:
-            base_path: "data"
+            data_path: "data"
     resources:
         coin: 1
     affinity:
