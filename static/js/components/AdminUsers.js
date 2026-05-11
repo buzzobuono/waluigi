@@ -88,10 +88,14 @@ export default {
     function deleteUser(u) {
       confirmRef.value.ask(
         `Delete user <b>${u.userid}</b>?`,
-        async (ok) => {
-          if (!ok) return;
-          try { await api.adminDeleteUser(u.userid); } catch { /* best-effort */ }
-          await loadUsers();
+        async (confirmed) => {
+          if (!confirmed) return;
+          try {
+            await api.adminDeleteUser(u.userid);
+            await loadUsers();
+          } catch (e) {
+            pageError.value = e.message;
+          }
         }
       );
     }
