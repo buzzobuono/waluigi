@@ -16,7 +16,7 @@ from waluigi.catalog.services import (
     ChartService, DQService,
     DatasetService, VersionService, MaterializeService,
     SourceService,
-    CatalogBrowserService, MetadataService,
+    CatalogBrowserService, LineageService, MetadataService,
 )
 from waluigi.sdk.dataquality import DQManager
 
@@ -63,6 +63,7 @@ version_service     = VersionService(db, DATA_PATH, dq_service)
 materialize_service = MaterializeService(db, DATA_PATH)
 source_service      = SourceService(db)
 browser_service     = CatalogBrowserService(db)
+lineage_service     = LineageService(db)
 metadata_service    = MetadataService(db)
 
 
@@ -376,7 +377,7 @@ async def render_chart_by_key(dataset_id: str,
          summary="List all DQ run results for a dataset (one per version)")
 async def list_dq_results(dataset_id: str):
     try:
-        return ok(browser_service.list_dq_results(dataset_id))
+        return ok(dq_service.list_results(dataset_id))
     except ValueError as e:
         return ko(str(e), 404)
 
@@ -385,7 +386,7 @@ async def list_dq_results(dataset_id: str):
          summary="Get the DQ result for a specific version")
 async def get_dq_result(dataset_id: str, version: str):
     try:
-        return ok(browser_service.get_dq_result(dataset_id, version))
+        return ok(dq_service.get_result(dataset_id, version))
     except ValueError as e:
         return ko(str(e), 404)
 
@@ -398,7 +399,7 @@ async def get_dq_result(dataset_id: str, version: str):
          summary="Get upstream and downstream lineage")
 async def get_lineage(dataset_id: str, version: str):
     try:
-        return ok(browser_service.get_lineage(dataset_id, version))
+        return ok(lineage_service.get_lineage(dataset_id, version))
     except ValueError as e:
         return ko(str(e), 404)
 
