@@ -37,34 +37,4 @@ class MetadataService:
             raise ValueError("Key not found or protected (sys.*)")
         return {"key": key, "deleted": True}
 
-    # ── Expectations ──────────────────────────────────────────────────────────
-
-    def list_expectations(self, dataset_id: str) -> list:
-        if not self.db.exists_dataset(dataset_id):
-            raise ValueError("Dataset not found")
-        return self.db.list_expectations(dataset_id)
-
-    def add_expectation(self, dataset_id: str, rule_id: str, inputs: dict,
-                        params: dict, tolerance: float, position: int) -> dict:
-        if not self.db.exists_dataset(dataset_id):
-            raise ValueError("Dataset not found")
-        return self.db.add_expectation(
-            dataset_id, rule_id, inputs, params, tolerance, position)
-
-    def update_expectation(self, dataset_id: str, exp_id: int,
-                           **updates) -> dict:
-        """Raises ValueError if dataset or expectation not found."""
-        if not self.db.exists_dataset(dataset_id):
-            raise ValueError("Dataset not found")
-        if not self.db.update_expectation(dataset_id, exp_id, **updates):
-            raise ValueError("Expectation not found")
-        return self.db.get_expectation(dataset_id, exp_id)
-
-    def delete_expectation(self, dataset_id: str, exp_id: int) -> dict:
-        """Raises ValueError if dataset or expectation not found."""
-        if not self.db.exists_dataset(dataset_id):
-            raise ValueError("Dataset not found")
-        if not self.db.delete_expectation(dataset_id, exp_id):
-            raise ValueError("Expectation not found")
-        return {"deleted": exp_id}
 
