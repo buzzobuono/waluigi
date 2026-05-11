@@ -16,7 +16,8 @@ from waluigi.catalog.services import (
     ChartService, DQService,
     DatasetService, VersionService, MaterializeService,
     SourceService,
-    CatalogBrowserService, LineageService, MetadataService,
+    CatalogBrowserService, LineageService,
+    SchemaService, MetadataService,
 )
 from waluigi.sdk.dataquality import DQManager
 
@@ -64,6 +65,7 @@ materialize_service = MaterializeService(db, DATA_PATH)
 source_service      = SourceService(db)
 browser_service     = CatalogBrowserService(db)
 lineage_service     = LineageService(db)
+schema_service      = SchemaService(db)
 metadata_service    = MetadataService(db)
 
 
@@ -204,7 +206,7 @@ async def list_versions(dataset_id: str):
          summary="Get current schema with PII flags and status per column")
 async def get_schema(dataset_id: str):
     try:
-        data, msgs = metadata_service.get_schema(dataset_id)
+        data, msgs = schema_service.get_schema(dataset_id)
         return warn(data, msgs) if msgs else ok(data)
     except ValueError as e:
         return ko(str(e), 404)
@@ -216,7 +218,7 @@ async def get_schema(dataset_id: str):
 async def patch_schema_column(dataset_id: str, column_name: str,
                                body: SchemaColumnPatch):
     try:
-        col, msgs = metadata_service.patch_column(
+        col, msgs = schema_service.patch_column(
             dataset_id, column_name, **_model_dump(body))
         return warn(col, msgs) if msgs else ok(col)
     except ValueError as e:
@@ -228,7 +230,7 @@ async def patch_schema_column(dataset_id: str, column_name: str,
           summary="Approve a single column — promotes it to 'published'")
 async def approve_schema_column(dataset_id: str, column_name: str):
     try:
-        return ok(metadata_service.approve_column(dataset_id, column_name))
+        return ok(schema_service.approve_column(dataset_id, column_name))
     except ValueError as e:
         return ko(str(e), 404)
 
@@ -238,7 +240,7 @@ async def approve_schema_column(dataset_id: str, column_name: str):
             summary="Delete a column from the schema definition")
 async def delete_schema_column(dataset_id: str, column_name: str):
     try:
-        return ok(metadata_service.delete_column(dataset_id, column_name))
+        return ok(schema_service.delete_column(dataset_id, column_name))
     except ValueError as e:
         return ko(str(e), 404)
 
@@ -248,7 +250,7 @@ async def delete_schema_column(dataset_id: str, column_name: str):
           summary="Publish schema — promotes all columns to 'published'")
 async def publish_schema(dataset_id: str, body: SchemaPublishRequest):
     try:
-        return ok(metadata_service.publish_schema(dataset_id, body.published_by))
+        return ok(schema_service.publish_schema(dataset_id, body.published_by))
     except ValueError as e:
         return ko(str(e), 404)
 
@@ -304,7 +306,7 @@ async def delete_expectation(dataset_id: str, exp_id: int):
          summary="List chart definitions for a dataset")
 async def list_charts(dataset_id: str):
     try:
-        return ok(metadata_service.list_charts(dataset_id))
+        return ok(chart_service.list_charts(dataset_id))
     except ValueError as e:
         return ko(str(e), 404)
 
@@ -313,7 +315,7 @@ async def list_charts(dataset_id: str):
           summary="Add a chart definition")
 async def add_chart(dataset_id: str, body: ChartCreateRequest):
     try:
-        return ok(metadata_service.add_chart(
+        return ok(chart_service.add_chart(
             dataset_id, body.key, body.title, body.spec, body.position))
     except ValueError as e:
         return ko(str(e), 404)
@@ -324,7 +326,7 @@ async def add_chart(dataset_id: str, body: ChartCreateRequest):
 async def update_chart(dataset_id: str, chart_id: int, body: ChartUpdateRequest):
     try:
         updates = {k: v for k, v in _model_dump(body).items() if v is not None}
-        return ok(metadata_service.update_chart(dataset_id, chart_id, **updates))
+        return ok(chart_service.update_chart(dataset_id, chart_id, **updates))
     except ValueError as e:
         return ko(str(e), 404)
 
@@ -333,7 +335,7 @@ async def update_chart(dataset_id: str, chart_id: int, body: ChartUpdateRequest)
             summary="Delete a chart definition")
 async def delete_chart(dataset_id: str, chart_id: int):
     try:
-        return ok(metadata_service.delete_chart(dataset_id, chart_id))
+        return ok(chart_service.delete_chart(dataset_id, chart_id))
     except ValueError as e:
         return ko(str(e), 404)
 
@@ -342,7 +344,7 @@ async def delete_chart(dataset_id: str, chart_id: int):
          summary="Render a chart by ID — returns an ECharts option object")
 async def render_chart(dataset_id: str, chart_id: int,
                        version: str = Query(None)):
-    chart = metadata_service.get_chart(dataset_id, chart_id)
+    chart = chart_service.get_chart(dataset_id, chart_id)
     if not chart:
         return ko("Chart not found", 404)
     try:
@@ -358,7 +360,7 @@ async def render_chart(dataset_id: str, chart_id: int,
 async def render_chart_by_key(dataset_id: str,
                                key:     str = Query(...),
                                version: str = Query(None)):
-    chart = metadata_service.get_chart_by_key(dataset_id, key)
+    chart = chart_service.get_chart_by_key(dataset_id, key)
     if not chart:
         return ko("Chart not found", 404)
     try:
