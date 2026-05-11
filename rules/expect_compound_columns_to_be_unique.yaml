@@ -1,0 +1,5 @@
+description: "Verifica che la combinazione di più colonne sia univoca (chiave composta)"
+formula: "~(a.astype(str) + '§' + b.astype(str)).duplicated()"
+inputs_schema:
+  a: "Prima colonna della chiave composta"
+  b: "Seconda colonna della chiave composta"

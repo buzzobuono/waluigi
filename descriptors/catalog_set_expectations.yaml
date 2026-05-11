@@ -25,6 +25,9 @@ spec:
               inputs:    {x: "this.value"}
               params:    {target_type: "float"}
               tolerance: 1.0
+            - rule_id:   "expect_compound_columns_to_be_unique"
+              inputs:    {a: "this.source", b: "this.metric"}
+              tolerance: 1.0
     resources:
         coin: 1
     affinity:
