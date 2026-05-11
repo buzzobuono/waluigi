@@ -110,6 +110,7 @@ class DQManager:
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     def _startup(self):
+        self.catalogue.clear()
         for filename in os.listdir(self.rules_path):
             if filename.endswith(".yaml"):
                 rule_id = os.path.splitext(filename)[0]
