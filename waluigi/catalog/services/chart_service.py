@@ -60,6 +60,43 @@ class ChartService:
             "is_latest": version is None,
         }
 
+    # ── Chart CRUD ────────────────────────────────────────────────────────────
+
+    def list_charts(self, dataset_id: str) -> list:
+        if not self.db.exists_dataset(dataset_id):
+            raise ValueError("Dataset not found")
+        return self.db.list_charts(dataset_id)
+
+    def get_chart(self, dataset_id: str, chart_id: int) -> dict | None:
+        return self.db.get_chart(dataset_id, chart_id)
+
+    def get_chart_by_key(self, dataset_id: str, key: str) -> dict | None:
+        return self.db.get_chart_by_key(dataset_id, key)
+
+    def add_chart(self, dataset_id: str, key: str, title: str,
+                  spec: dict, position: int) -> dict:
+        if not self.db.exists_dataset(dataset_id):
+            raise ValueError("Dataset not found")
+        return self.db.add_chart(dataset_id, key, title, spec, position)
+
+    def update_chart(self, dataset_id: str, chart_id: int, **updates) -> dict:
+        """Raises ValueError if dataset or chart not found."""
+        if not self.db.exists_dataset(dataset_id):
+            raise ValueError("Dataset not found")
+        if not self.db.update_chart(dataset_id, chart_id, **updates):
+            raise ValueError("Chart not found")
+        return self.db.get_chart(dataset_id, chart_id)
+
+    def delete_chart(self, dataset_id: str, chart_id: int) -> dict:
+        """Raises ValueError if dataset or chart not found."""
+        if not self.db.exists_dataset(dataset_id):
+            raise ValueError("Dataset not found")
+        if not self.db.delete_chart(dataset_id, chart_id):
+            raise ValueError("Chart not found")
+        return {"deleted": chart_id}
+
+    # ── Render ────────────────────────────────────────────────────────────────
+
     def build_option(self, df: pd.DataFrame, spec: dict) -> dict:
         """Build an ECharts option dict from a DataFrame and a chart spec."""
         chart_type  = spec.get("type", "bar")
