@@ -39,7 +39,7 @@ x-scripts:
                 "source":   source,
                 "metric":   metric,
                 "value":    round(random.uniform(100, 10_000), 2),
-                "category": category,
+                "category": category
             }
             for source in SOURCES
             for metric, category in random.sample(METRICS, rows_per_source)
@@ -71,7 +71,7 @@ spec:
     namespace: "catalog"
     script: *produce_script
     params:
-        date:            "2026-05-10"
+        date:            "2026-05-14"
         rows_per_source: "4"
     resources:
         coin: 1

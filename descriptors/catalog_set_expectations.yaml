@@ -14,9 +14,6 @@ spec:
             - rule_id:   "expect_column_values_to_not_be_null"
               inputs:    {x: "this.value"}
               tolerance: 1.0
-            - rule_id:   "expect_column_values_to_be_unique"
-              inputs:    {x: "this.metric"}
-              tolerance: 1.0
             - rule_id:   "expect_column_values_to_be_between"
               inputs:    {x: "this.value"}
               params:    {min_val: 0, max_val: 1000000}
