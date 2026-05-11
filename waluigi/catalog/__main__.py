@@ -14,7 +14,7 @@ from waluigi.catalog.db import CatalogDB
 from waluigi.catalog.models import *
 from waluigi.catalog.services import (
     ChartService, DQService,
-    DatasetService, VersionService,
+    DatasetService, VersionService, MaterializeService,
     SourceService,
     CatalogBrowserService, MetadataService,
 )
@@ -55,14 +55,15 @@ except Exception as e:
     logger.error(f"❌ Critical DB error: {e}")
     sys.exit(1)
 
-dq_manager       = DQManager(RULES_PATH)
-chart_service    = ChartService(db)
-dq_service       = DQService(db, dq_manager)
-dataset_service  = DatasetService(db)
-version_service  = VersionService(db, DATA_PATH, dq_service)
-source_service   = SourceService(db)
-browser_service  = CatalogBrowserService(db)
-metadata_service = MetadataService(db)
+dq_manager          = DQManager(RULES_PATH)
+chart_service       = ChartService(db)
+dq_service          = DQService(db, dq_manager)
+dataset_service     = DatasetService(db)
+version_service     = VersionService(db, DATA_PATH, dq_service)
+materialize_service = MaterializeService(db, DATA_PATH)
+source_service      = SourceService(db)
+browser_service     = CatalogBrowserService(db)
+metadata_service    = MetadataService(db)
 
 
 # ---------------------------------------------------------------------------
@@ -599,7 +600,7 @@ async def register_virtual(dataset_id: str, body: VirtualRegisterRequest):
           status_code=201)
 async def materialize(dataset_id: str, body: MaterializeRequest):
     try:
-        return ok(await version_service.materialize(
+        return ok(await materialize_service.materialize(
             dataset_id, body.base_url, body.endpoint, body.params,
             display_name=body.display_name, description=body.description,
             task_id=body.task_id, job_id=body.job_id,
