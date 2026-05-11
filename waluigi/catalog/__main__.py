@@ -804,6 +804,7 @@ async def get_lineage(dataset_id: str,
 @app.get("/dq/rules", tags=["Data Quality"],
          summary="List all DQ rules available in the catalogue")
 async def list_dq_rules():
+    dq_manager._startup()
     rules = [
         {
             "id":            rule_id,
