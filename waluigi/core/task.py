@@ -34,8 +34,7 @@ def _expand_pipeline(task_list, pipeline_params):
 class DynamicTask:
 
     def __init__(self, data, parent=None):
-        self.name = data.get('name')
-        self.id = data.get('id', self.name)
+        self.id = data.get('id')
         self.namespace = data.get('namespace', 'default')
         self.type    = data.get('type')              # built-in task type — alternative to command/script
         self.command = data.get('command', '')
