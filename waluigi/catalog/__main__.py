@@ -1,25 +1,18 @@
 import os
 import sys
-import json
 import socket
 import yaml
-from datetime import datetime, timezone
 import configargparse
 import httpx
-import pandas as pd
 import uvicorn
 import logging
 from fastapi import FastAPI, Query
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
 
 from waluigi.core.responses import ok, warn, ko
 from waluigi.core.utils import _model_dump
 from waluigi.catalog.db import CatalogDB
-from waluigi.catalog.utils import _version_id, _infer_schema, _safe_json_value
 from waluigi.catalog.models import *
 from waluigi.catalog.services import ChartService, DQService, DatasetService, SourceService
-from waluigi.sdk.connectors import ConnectorFactory
 from waluigi.sdk.dataquality import DQManager
 
 logger = logging.getLogger("waluigi")
@@ -60,7 +53,7 @@ except Exception as e:
 dq_manager      = DQManager(RULES_PATH)
 chart_service   = ChartService(db)
 dq_service      = DQService(db, dq_manager)
-dataset_service = DatasetService(db, DATA_PATH)
+dataset_service = DatasetService(db, DATA_PATH, dq_service)
 source_service  = SourceService(db)
 
 
@@ -175,60 +168,23 @@ async def delete_metadata(dataset_id: str, version: str, key: str):
          summary="Preview rows of Dataset Version")
 async def preview(dataset_id: str, version: str,
                   limit: int = 10, offset: int = 0):
-    dataset = db.get_dataset(dataset_id)
-    if not dataset:
-        return ko("Dataset not found", 404)
-
-    fmt = (dataset.get("format") or "").lower()
-
-    source_id = dataset.get("source_id")
-    if not source_id:
-        return ko("Dataset has no source", 404)
-
-    source = db.get_source(source_id)
-    if not source:
-        return ko(f"Source '{source_id}' not found", 404)
-
-    version_record = db.get_version(dataset_id, version)
-    if not version_record:
-        return ko("Version not found", 404)
-
-    location    = version_record["location"]
-    source_type = source.get("type", "local")
-
     try:
-        connector = ConnectorFactory.get(source_type, source.get("config") or {})
-        result    = connector.read(location, fmt, limit=limit, offset=offset)
+        return ok(dataset_service.preview(dataset_id, version, limit, offset))
     except NotImplementedError as e:
         return ko(str(e), 422)
+    except ValueError as e:
+        return ko(str(e), 404)
     except Exception as e:
         return ko(f"Read error: {e}", 500)
-
-    if isinstance(result, pd.DataFrame):
-        df = result
-    elif isinstance(result, list):
-        df = pd.DataFrame(result)
-    else:
-        return ko(f"Preview not supported for format '{fmt}'", 422)
-
-    clean = [{k: _safe_json_value(v) for k, v in row.items()}
-             for row in df.to_dict(orient="records")]
-
-    return ok({
-        "dataset_id": dataset_id,
-        "version":    version_record["version"],
-        "columns":    df.columns.tolist(),
-        "rows":       clean,
-        "pagination": {"limit": limit, "offset": offset, "count": len(clean)},
-    })
 
 
 @app.get("/datasets/{dataset_id:path}/versions", tags=["Versions"],
          summary="List all committed versions (newest first)")
 async def list_versions(dataset_id: str):
-    if not db.exists_dataset(dataset_id):
-        return ko("Dataset not found", 404)
-    return ok(db.list_versions(dataset_id))
+    try:
+        return ok(dataset_service.list_versions(dataset_id))
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 # ---------------------------------------------------------------------------
@@ -533,52 +489,46 @@ async def get_dq_suite(path: str = Query(..., description="Absolute path to the 
 )
 async def find_datasets(status: DatasetStatus | None = Query(default=None, example=DatasetStatus.DRAFT),
                         description: str | None = Query(default=None, example="sales dataset")):
-    if not status and not description:
-        return ok(db.list_datasets())
-    return ok(db.find_datasets(status=status, description=description))
+    return ok(dataset_service.find(status, description))
 
 
 @app.post("/datasets", tags=["Datasets"],
           summary="Register a new dataset",
           status_code=201)
 async def create_dataset(body: DatasetCreateRequest):
-    if body.source_id and not db.exists_source(body.source_id):
-        return ko("Source not found", 404)
-    if body.id.startswith("/"):
-        return ko("Dataset 'id' not valid", 400)
-    existing = db.get_dataset(body.id)
-    if existing and existing["format"] != body.format:
-        return ko(f"Cannot change format from '{existing['format']}' to '{body.format.value}' — create a new dataset instead", 409)
-    db.create_dataset(body.id, body.format, body.description, body.source_id, body.dq_suite)
-    return ok(db.get_dataset(body.id))
+    try:
+        return ok(dataset_service.create(
+            body.id, body.format.value, body.description, body.source_id, body.dq_suite))
+    except ValueError as e:
+        msg = str(e)
+        if "Source not found" in msg:      return ko(msg, 404)
+        if "'id' not valid" in msg:        return ko(msg, 400)
+        return ko(msg, 409)
 
 
 @app.get("/datasets/{id:path}", tags=["Datasets"],
          summary="Get a dataset details")
 async def get_dataset(id: str):
-    dataset = db.get_dataset(id)
-    if not dataset:
-        return ko("Dataset not found", 404)
-    msgs = []
-    if dataset.get("status") != "approved":
-        msgs.append(f"Dataset status is '{dataset.get('status')}' — not yet approved")
-    return warn(dataset, msgs) if msgs else ok(dataset)
+    try:
+        dataset, msgs = dataset_service.get(id)
+        return warn(dataset, msgs) if msgs else ok(dataset)
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 @app.patch("/datasets/{id:path}", tags=["Datasets"],
            summary="Update a dataset")
 async def update_dataset(id: str, body: DatasetUpdateRequest):
-    updated = db.update_dataset(id, **_model_dump(body))
-    if not updated:
+    dataset = dataset_service.update(id, **_model_dump(body))
+    if not dataset:
         return ko("Dataset not found", 404)
-    return ok(db.get_dataset(id))
+    return ok(dataset)
 
 
 @app.delete("/datasets/{id:path}", tags=["Datasets"],
             summary="Delete a dataset")
 async def delete_dataset(id: str):
-    deleted = db.delete_dataset(id)
-    if not deleted:
+    if not dataset_service.delete(id):
         return ko("Dataset not found", 404)
     return ok({"id": id, "deleted": True})
 
@@ -591,31 +541,16 @@ async def delete_dataset(id: str):
           tags=["Datasets Status"],
           summary="Approve a dataset — marks it as reviewed and publishes its schema")
 async def approve_dataset(dataset_id: str, body: ApproveRequest):
-    dataset = db.get_dataset(dataset_id)
-    if not dataset:
-        return ko("Dataset not found", 404)
-    if dataset.get("status") == "deprecated":
-        return ko("Cannot approve a deprecated dataset", 409)
-
-    schema_result = db.publish_schema(dataset_id, publisher=body.approved_by)
-    approved      = db.approve_dataset(dataset_id, body.approved_by)
-    if not approved:
-        return ko("Approval failed", 500)
-
-    msgs = schema_result["breaking_changes"] + schema_result["warnings"]
-    data = {
-        "dataset_id":           dataset_id,
-        "status":               "approved",
-        "approved_by":          body.approved_by,
-        "notes":                body.notes,
-        "schema_published_at":  schema_result["published_at"],
-        "breaking_changes":     schema_result["breaking_changes"],
-        "warnings":             schema_result["warnings"],
-    }
-    logger.info(f"Approved {dataset_id} by {body.approved_by}")
-    if schema_result["breaking_changes"]:
-        return warn(data, ["⚠️ Breaking schema changes on approval"] + msgs)
-    return warn(data, msgs) if msgs else ok(data)
+    try:
+        data, msgs = dataset_service.approve(dataset_id, body.approved_by, body.notes)
+        if data["breaking_changes"]:
+            return warn(data, ["⚠️ Breaking schema changes on approval"] + msgs)
+        return warn(data, msgs) if msgs else ok(data)
+    except ValueError as e:
+        status = 409 if "deprecated" in str(e) else 404
+        return ko(str(e), status)
+    except RuntimeError as e:
+        return ko(str(e), 500)
 
 
 # ---------------------------------------------------------------------------
@@ -627,38 +562,17 @@ async def approve_dataset(dataset_id: str, body: ApproveRequest):
           status_code=201)
 async def dataset_reserve(dataset_id: str, body: ReserveRequest):
     try:
-        dataset = db.get_dataset(dataset_id)
-        if not dataset:
-            return ko("Dataset not found", 404)
-        source = db.get_source(dataset["source_id"])
-
-        if not body.force and body.metadata:
-            existing = db.find_version_by_metadata(dataset_id, body.metadata)
-            if existing:
-                msg = (f"Skipped {dataset_id} new version creation because of "
-                       f"identical metadata to {existing['version']} version")
-                logger.info(msg)
-                return warn({
-                    "dataset_id": dataset_id,
-                    "version":    existing["version"],
-                    "source_id":  source["id"],
-                    "location":   existing["location"],
-                    "skipped":    True,
-                }, [msg])
-
-        connector = ConnectorFactory.get(source["type"], source["config"])
-        version   = _version_id()
-        location  = connector.resolve_location(dataset_id, version, dataset["format"], DATA_PATH)
-        if not db.reserve_version(dataset_id, version, location):
-            return ko("Version already exists", 409)
-        logger.info(f"Reserved {dataset_id}@{version}")
-        return ok({
-            "dataset_id": dataset_id,
-            "version":    version,
-            "source_id":  source["id"],
-            "location":   location,
-            "skipped":    False,
-        })
+        result, skipped = dataset_service.reserve(
+            dataset_id, body.metadata, body.force)
+        if skipped:
+            msg = result.pop("_skip_msg")
+            return warn(result, [msg])
+        return ok(result)
+    except ValueError as e:
+        msg = str(e)
+        if "not found" in msg.lower():  return ko(msg, 404)
+        if "already exists" in msg:     return ko(msg, 409)
+        return ko(msg, 500)
     except Exception as e:
         return ko(str(e), 500)
 
@@ -667,101 +581,33 @@ async def dataset_reserve(dataset_id: str, body: ReserveRequest):
           tags=["Dataset Produce"],
           summary="Commit a reserved version (phase 2 of 2-phase write)")
 async def dataset_commit(dataset_id: str, version: str, body: CommitRequest):
-    dataset = db.get_dataset(dataset_id)
-    if not dataset:
-        return ko("Dataset not found", 404)
-
-    source    = db.get_source(dataset["source_id"])
-    connector = ConnectorFactory.get(source["type"], source["config"])
-
-    record = db.get_version(dataset_id, version)
-    if not record:
-        return ko("Version not found", 404)
-    if record["status"] != "reserved":
-        return ko(f"Cannot commit - status is '{record['status']}'", 409)
-
-    location = record["location"]
-    if not connector.exists(location):
-        return ko(f"Dataset Version not found at: {location}", 422)
-
     try:
-        if not db.commit_version(dataset_id, version):
-            raise Exception("commit_version returned False")
-
-        for k, v in (body.metadata or {}).items():
-            db.set_metadata(dataset_id, version, k, v)
-        if body.task_id:
-            db.set_metadata(dataset_id, version, "sys.produced_by_task", body.task_id)
-        if body.job_id:
-            db.set_metadata(dataset_id, version, "sys.produced_by_job", body.job_id)
-
-        inferred = connector.infer_schema(location)
-        db.upsert_schema_columns(dataset_id, inferred)
-        diff = db.diff_schema_against_inferred(dataset_id, inferred)
-
-        if body.inputs:
-            db.insert_lineage(dataset_id, version,
-                              [_model_dump(i) for i in body.inputs])
-
-        dq_result    = None
-        expectations = db.list_expectations(dataset_id)
-        if expectations:
-            dq_result = dq_service.run_on_commit(
-                dataset_id, version, connector, location,
-                dataset["format"], expectations,
-            )
-
-        logger.info(f"Committed {dataset_id}@{version}")
-
-        all_warnings = diff["breaking"] + diff["warnings"]
-        data = {
-            "dataset_id": dataset_id,
-            "version":    version,
-            "location":   location,
-            "dq":         dq_result,
-        }
-
-        if diff["breaking"]:
-            msg = f"Schema breaking changes detected on {dataset_id}@{version}"
-            logger.warning(msg)
-            return warn(data, [msg] + all_warnings)
-        if all_warnings:
-            return warn(data, all_warnings)
-        return ok(data)
-
-    except Exception as e:
-        msg = f"Failed to commit {dataset_id}@{version}: {e}"
-        logger.error(msg)
-        try:
-            db.delete_version(dataset_id, version)
-            connector.delete(location)
-            logger.info(f"Cleanup: deleted orphaned location {location}")
-        except Exception as cleanup_err:
-            logger.warning(f"Failed to cleanup {location}: {cleanup_err}")
-        return ko(f"Failed to commit {dataset_id}@{version}", 500)
+        inputs = [_model_dump(i) for i in body.inputs] if body.inputs else None
+        data, warnings = dataset_service.commit(
+            dataset_id, version,
+            metadata=body.metadata,
+            task_id=body.task_id,
+            job_id=body.job_id,
+            inputs=inputs,
+        )
+        return warn(data, warnings) if warnings else ok(data)
+    except ValueError as e:
+        msg = str(e)
+        if "not found" in msg.lower():  return ko(msg, 404)
+        if "status is" in msg:          return ko(msg, 409)
+        return ko(msg, 422)
+    except RuntimeError as e:
+        return ko(str(e), 500)
 
 
 @app.post("/datasets/{dataset_id:path}/_fail/{version}",
           tags=["Dataset Produce"],
           summary="Mark a reserved version as failed")
 async def fail_version(dataset_id: str, version: str):
-    dataset = db.get_dataset(dataset_id)
-    if not dataset:
-        return ko("Dataset not found", 404)
-    source    = db.get_source(dataset["source_id"])
-    connector = ConnectorFactory.get(source["type"], source["config"])
-    record    = db.get_version(dataset_id, version)
-    if not record:
-        return ko("Version not found", 404)
-    location = record["location"]
-    db.fail_version(dataset_id, version)
     try:
-        connector.delete(location)
-        db.delete_version(dataset_id, version)
-        logger.info(f"Cleanup: deleted orphaned location {location}")
-    except Exception as cleanup_err:
-        logger.warning(f"Failed to cleanup {location}: {cleanup_err}")
-    return ok({"dataset_id": dataset_id, "version": version, "status": "failed"})
+        return ok(dataset_service.fail(dataset_id, version))
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 # ---------------------------------------------------------------------------
@@ -772,10 +618,10 @@ async def fail_version(dataset_id: str, version: str):
             tags=["Versions"],
             summary="Deprecate a dataset version")
 async def deprecate(dataset_id: str, version: str):
-    if not db.deprecate(dataset_id, version):
-        return ko("Version not found", 404)
-    logger.info(f"Deprecated {dataset_id}@{version}")
-    return ok({"dataset_id": dataset_id, "version": version, "status": "deprecated"})
+    try:
+        return ok(dataset_service.deprecate(dataset_id, version))
+    except ValueError as e:
+        return ko(str(e), 404)
 
 
 # ---------------------------------------------------------------------------
@@ -787,31 +633,15 @@ async def deprecate(dataset_id: str, version: str):
           summary="Register a virtual dataset version (no local file)",
           status_code=201)
 async def register_virtual(dataset_id: str, body: VirtualRegisterRequest):
-    src = db.get_source(body.source_id)
-    if not src:
-        return ko(f"Source '{body.source_id}' not found. "
-                  f"Register it first via POST /sources.", 422)
-    version = _version_id()
     try:
-        db.create_dataset(dataset_id,
-                          display_name=body.display_name,
-                          description=body.description,
-                          owner=body.owner,
-                          tags=body.tags)
-        db.commit_virtual(dataset_id, version, body.location)
-        if body.task_id:
-            db.set_metadata(dataset_id, version, "sys.produced_by_task", body.task_id)
-        if body.job_id:
-            db.set_metadata(dataset_id, version, "sys.produced_by_job", body.job_id)
-        logger.info(f"Virtual {dataset_id}@{version} [{src['type']}]")
-        return ok({
-            "dataset_id":  dataset_id,
-            "version":     version,
-            "source_id":   body.source_id,
-            "source_type": src["type"],
-            "location":    body.location,
-            "format":      body.format,
-        })
+        return ok(dataset_service.register_virtual(
+            dataset_id, body.source_id, body.location, body.format,
+            display_name=body.display_name, description=body.description,
+            owner=body.owner, tags=body.tags,
+            task_id=body.task_id, job_id=body.job_id,
+        ))
+    except ValueError as e:
+        return ko(str(e), 422)
     except Exception as e:
         return ko(str(e), 500)
 
@@ -825,53 +655,17 @@ async def register_virtual(dataset_id: str, body: VirtualRegisterRequest):
           summary="Fetch a REST API and store result as a local CSV version",
           status_code=201)
 async def materialize(dataset_id: str, body: MaterializeRequest):
-    version = _version_id()
-    path    = dataset_service.local_path(dataset_id, version, "csv")
     try:
-        db.create_dataset(dataset_id,
-                          display_name=body.display_name,
-                          description=body.description)
-        db.reserve_version(dataset_id, version, path)
-
-        rows, schema_cols = await dataset_service.fetch_and_write(
-            body.base_url, body.endpoint, body.params, path)
-
-        if rows == 0:
-            db.fail_version(dataset_id, version)
-            return ko("No records returned from endpoint", 422)
-
-        committed = db.commit_version(dataset_id, version)
-        if not committed:
-            db.fail_version(dataset_id, version)
-            return ko("Commit failed", 409)
-
-        db.upsert_schema_columns(dataset_id, schema_cols)
-        db.insert_lineage(dataset_id, version, [{
-            "dataset_id": f"__external__/{body.base_url}{body.endpoint}",
-            "version":    "live",
-        }])
-        if body.task_id:
-            db.set_metadata(dataset_id, version, "sys.produced_by_task", body.task_id)
-        if body.job_id:
-            db.set_metadata(dataset_id, version, "sys.produced_by_job", body.job_id)
-
-        logger.info(f"Materialized {dataset_id}@{version} rows={rows}")
-        return ok({
-            "dataset_id": dataset_id,
-            "version":    version,
-            "path":       path,
-            "rows":       rows,
-            "source_url": f"{body.base_url}{body.endpoint}",
-        })
-
+        return ok(await dataset_service.materialize(
+            dataset_id, body.base_url, body.endpoint, body.params,
+            display_name=body.display_name, description=body.description,
+            task_id=body.task_id, job_id=body.job_id,
+        ))
     except httpx.HTTPError as e:
-        db.fail_version(dataset_id, version)
         return ko(f"HTTP error: {e}", 502)
+    except ValueError as e:
+        return ko(str(e), 422)
     except Exception as e:
-        try:
-            db.fail_version(dataset_id, version)
-        except Exception:
-            pass
         return ko(str(e), 500)
 
 
