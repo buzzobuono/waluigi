@@ -93,3 +93,20 @@ class DQService:
             }
             for rule_id, rule in sorted(self.dq_manager.catalogue.items())
         ]
+
+    # ── DQ Results ────────────────────────────────────────────────────────────
+
+    def list_results(self, dataset_id: str) -> list:
+        """Raises ValueError if dataset not found."""
+        if not self.db.exists_dataset(dataset_id):
+            raise ValueError("Dataset not found")
+        return self.db.list_dq_results(dataset_id)
+
+    def get_result(self, dataset_id: str, version: str) -> dict:
+        """Raises ValueError if dataset or result not found."""
+        if not self.db.exists_dataset(dataset_id):
+            raise ValueError("Dataset not found")
+        row = self.db.get_dq_result(dataset_id, version)
+        if not row:
+            raise ValueError("No DQ result for this version")
+        return row

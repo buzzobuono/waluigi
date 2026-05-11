@@ -1,15 +1,16 @@
-from .chart_service      import ChartService
-from .dq_service         import DQService
-from .dataset_service    import DatasetService
-from .version_service    import VersionService
+from .chart_service       import ChartService
+from .dq_service          import DQService
+from .dataset_service     import DatasetService
+from .version_service     import VersionService
 from .materialize_service import MaterializeService
-from .source_service     import SourceService
-from .browser_service    import CatalogBrowserService
-from .metadata_service   import MetadataService
+from .source_service      import SourceService
+from .browser_service     import CatalogBrowserService
+from .lineage_service     import LineageService
+from .metadata_service    import MetadataService
 
 __all__ = [
     "ChartService", "DQService",
     "DatasetService", "VersionService", "MaterializeService",
     "SourceService",
-    "CatalogBrowserService", "MetadataService",
+    "CatalogBrowserService", "LineageService", "MetadataService",
 ]
