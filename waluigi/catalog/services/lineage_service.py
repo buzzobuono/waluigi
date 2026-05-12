@@ -16,7 +16,7 @@ class LineageService:
                   else self.db.get_latest_version(dataset_id))
         if not record:
             raise ValueError("Dataset version not found")
-        ver = record["version"]
+        ver = record.version
         return {
             "dataset_id": dataset_id,
             "version":    ver,

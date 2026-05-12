@@ -25,8 +25,10 @@ class DQService:
         try:
             if not expectations:
                 return None
-            df     = connector.read(location, fmt)
-            result = self.dq_manager.run_from_db(expectations, {"this": df})
+            df       = connector.read(location, fmt)
+            exp_data = [e.to_dict() if hasattr(e, "to_dict") else e
+                        for e in expectations]
+            result   = self.dq_manager.run_from_db(exp_data, {"this": df})
             details = [
                 {"rule_id": r.rule_id, "success": r.success,
                  "score": r.score, "error": r.error}

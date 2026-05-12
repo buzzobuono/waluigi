@@ -20,7 +20,7 @@ class SourceService:
                description: str | None) -> dict:
         """Create or update a source. Raises ValueError if type would change."""
         existing = self.db.get_source(id)
-        if existing and existing["type"] != source_type:
+        if existing and existing.type != source_type:
             raise ValueError(
                 f"Cannot change source type from '{existing['type']}' "
                 f"to '{source_type}' — create a new source instead"

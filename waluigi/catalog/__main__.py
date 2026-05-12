@@ -33,7 +33,8 @@ p = configargparse.ArgParser(auto_env_var_prefix="WALUIGI_CATALOG_")
 p.add("--port",         type=int, default=9000)
 p.add("--host",         default=socket.gethostname())
 p.add("--bind-address", default="0.0.0.0")
-p.add("--db-path",      default=os.path.join(os.getcwd(), "db/catalog.db"))
+p.add("--db-url",       default=f"sqlite:///{os.path.join(os.getcwd(), 'db/catalog.db')}",
+      help="SQLAlchemy database URL (e.g. sqlite:///./db/catalog.db or postgresql://user:pw@host/db)")
 p.add("--data-path",    default=os.path.join(os.getcwd(), "data"))
 p.add("--scan",         action="store_true", default=False)
 p.add("--scan-path",    default=None)
@@ -46,12 +47,14 @@ args = p.parse_args()
 DATA_PATH  = args.data_path
 RULES_PATH = args.rules_path
 os.makedirs(DATA_PATH, exist_ok=True)
-os.makedirs(os.path.dirname(args.db_path), exist_ok=True)
+if args.db_url.startswith("sqlite:///"):
+    _sqlite_path = args.db_url[len("sqlite:///"):]
+    os.makedirs(os.path.dirname(os.path.abspath(_sqlite_path)), exist_ok=True)
 os.makedirs(RULES_PATH, exist_ok=True)
 
 try:
-    db = CatalogDB(args.db_path)
-    logger.info(f"Database ready: {args.db_path}")
+    db = CatalogDB(args.db_url)
+    logger.info(f"Database ready: {args.db_url}")
 except Exception as e:
     logger.error(f"❌ Critical DB error: {e}")
     sys.exit(1)
@@ -91,7 +94,7 @@ async def list_folders(prefix: str):
 @app.get("/sources", tags=["Sources"],
          summary="List sources")
 async def list_sources():
-    return ok(source_service.list())
+    return ok([s.to_dict() for s in source_service.list()])
 
 
 @app.post("/sources", tags=["Sources"],
@@ -99,7 +102,7 @@ async def list_sources():
           status_code=200)
 async def create_source(body: SourceCreateRequest):
     try:
-        return ok(source_service.upsert(body.id, body.type.value, body.config, body.description))
+        return ok(source_service.upsert(body.id, body.type.value, body.config, body.description).to_dict())
     except ValueError as e:
         return ko(str(e), 409)
 
@@ -110,7 +113,7 @@ async def get_source(id: str):
     src = source_service.get(id)
     if not src:
         return ko("Source not found", 404)
-    return ok(src)
+    return ok(src.to_dict())
 
 
 @app.patch("/sources/{id}", tags=["Sources"],
@@ -119,7 +122,7 @@ async def update_source(id: str, body: SourceUpdateRequest):
     src = source_service.update(id, **_model_dump(body))
     if not src:
         return ko("Source not found", 404)
-    return ok(src)
+    return ok(src.to_dict())
 
 
 @app.delete("/sources/{id}", tags=["Sources"],
@@ -193,7 +196,7 @@ async def preview(dataset_id: str, version: str,
          summary="List all committed versions (newest first)")
 async def list_versions(dataset_id: str):
     try:
-        return ok(version_service.list_versions(dataset_id))
+        return ok([v.to_dict() for v in version_service.list_versions(dataset_id)])
     except ValueError as e:
         return ko(str(e), 404)
 
@@ -263,7 +266,7 @@ async def publish_schema(dataset_id: str, body: SchemaPublishRequest):
          summary="List all DQ expectations for a dataset")
 async def list_expectations(dataset_id: str):
     try:
-        return ok(dq_service.list_expectations(dataset_id))
+        return ok([e.to_dict() for e in dq_service.list_expectations(dataset_id)])
     except ValueError as e:
         return ko(str(e), 404)
 
@@ -274,7 +277,7 @@ async def add_expectation(dataset_id: str, body: ExpectationCreateRequest):
     try:
         return ok(dq_service.add_expectation(
             dataset_id, body.rule_id, body.inputs,
-            body.params, body.tolerance, body.position))
+            body.params, body.tolerance, body.position).to_dict())
     except ValueError as e:
         return ko(str(e), 404)
 
@@ -284,7 +287,7 @@ async def add_expectation(dataset_id: str, body: ExpectationCreateRequest):
 async def update_expectation(dataset_id: str, exp_id: int, body: ExpectationUpdateRequest):
     try:
         updates = {k: v for k, v in _model_dump(body).items() if v is not None}
-        return ok(dq_service.update_expectation(dataset_id, exp_id, **updates))
+        return ok(dq_service.update_expectation(dataset_id, exp_id, **updates).to_dict())
     except ValueError as e:
         return ko(str(e), 404)
 
@@ -436,7 +439,7 @@ async def get_dq_suite(path: str = Query(..., description="Absolute path to the 
 )
 async def find_datasets(status: DatasetStatus | None = Query(default=None, example=DatasetStatus.DRAFT),
                         description: str | None = Query(default=None, example="sales dataset")):
-    return ok(dataset_service.find(status, description))
+    return ok([d.to_dict() for d in dataset_service.find(status, description)])
 
 
 @app.post("/datasets", tags=["Datasets"],
@@ -445,7 +448,7 @@ async def find_datasets(status: DatasetStatus | None = Query(default=None, examp
 async def create_dataset(body: DatasetCreateRequest):
     try:
         return ok(dataset_service.create(
-            body.id, body.format.value, body.description, body.source_id, body.dq_suite))
+            body.id, body.format.value, body.description, body.source_id, body.dq_suite).to_dict())
     except ValueError as e:
         msg = str(e)
         if "Source not found" in msg:      return ko(msg, 404)
@@ -458,7 +461,8 @@ async def create_dataset(body: DatasetCreateRequest):
 async def get_dataset(id: str):
     try:
         dataset, msgs = dataset_service.get(id)
-        return warn(dataset, msgs) if msgs else ok(dataset)
+        d = dataset.to_dict()
+        return warn(d, msgs) if msgs else ok(d)
     except ValueError as e:
         return ko(str(e), 404)
 
@@ -469,7 +473,7 @@ async def update_dataset(id: str, body: DatasetUpdateRequest):
     dataset = dataset_service.update(id, **_model_dump(body))
     if not dataset:
         return ko("Dataset not found", 404)
-    return ok(dataset)
+    return ok(dataset.to_dict())
 
 
 @app.delete("/datasets/{id:path}", tags=["Datasets"],
@@ -645,7 +649,7 @@ def main():
     logger.info("Waluigi Catalog v2")
     logger.info(f"  Binding : {args.bind_address}:{args.port}")
     logger.info(f"  URL     : http://{args.host}:{args.port}")
-    logger.info(f"  DB      : {args.db_path}")
+    logger.info(f"  DB      : {args.db_url}")
     logger.info(f"  Data    : {args.data_path}")
 
     uvicorn.run(app, host=args.bind_address, port=args.port, log_config=None)

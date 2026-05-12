@@ -38,7 +38,7 @@ services:
       protocol: tcp
       mode: ingress
     environment:
-      - WALUIGI_CATALOG_DB_PATH=/db/catalog.db
+      - WALUIGI_CATALOG_DB_URL=sqlite:////db/catalog.db
       - WALUIGI_CATALOG_DATA_PATH=/data
     volumes:
       - ./db:/db

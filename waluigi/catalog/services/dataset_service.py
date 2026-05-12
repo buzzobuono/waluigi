@@ -23,8 +23,8 @@ class DatasetService:
         if not dataset:
             raise ValueError("Dataset not found")
         msgs = []
-        if dataset.get("status") != "approved":
-            msgs.append(f"Dataset status is '{dataset.get('status')}' — not yet approved")
+        if dataset.status != "approved":
+            msgs.append(f"Dataset status is '{dataset.status}' — not yet approved")
         return dataset, msgs
 
     def create(self, id: str, fmt: str, description=None,
@@ -36,9 +36,9 @@ class DatasetService:
         if id.startswith("/"):
             raise ValueError("Dataset 'id' not valid")
         existing = self.db.get_dataset(id)
-        if existing and existing["format"] != fmt:
+        if existing and existing.format != fmt:
             raise ValueError(
-                f"Cannot change format from '{existing['format']}' "
+                f"Cannot change format from '{existing.format}' "
                 f"to '{fmt}' — create a new dataset instead"
             )
         self.db.create_dataset(id, fmt, description, source_id, dq_suite)
@@ -65,7 +65,7 @@ class DatasetService:
         dataset = self.db.get_dataset(dataset_id)
         if not dataset:
             raise ValueError("Dataset not found")
-        if dataset.get("status") == "deprecated":
+        if dataset.status == "deprecated":
             raise ValueError("Cannot approve a deprecated dataset")
 
         schema_result = self.db.publish_schema(dataset_id, publisher=approved_by)

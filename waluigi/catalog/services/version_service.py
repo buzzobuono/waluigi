@@ -47,36 +47,36 @@ class VersionService:
         dataset = self.db.get_dataset(dataset_id)
         if not dataset:
             raise ValueError("Dataset not found")
-        source = self.db.get_source(dataset["source_id"])
+        source = self.db.get_source(dataset.source_id)
         if not source:
-            raise ValueError(f"Source '{dataset['source_id']}' not found")
+            raise ValueError(f"Source '{dataset.source_id}' not found")
 
         if not force and metadata:
             existing = self.db.find_version_by_metadata(dataset_id, metadata)
             if existing:
                 msg = (f"Skipped {dataset_id} new version creation because of "
-                       f"identical metadata to {existing['version']} version")
+                       f"identical metadata to {existing.version} version")
                 logger.info(msg)
                 return {
                     "dataset_id": dataset_id,
-                    "version":    existing["version"],
-                    "source_id":  source["id"],
-                    "location":   existing["location"],
+                    "version":    existing.version,
+                    "source_id":  source.id,
+                    "location":   existing.location,
                     "skipped":    True,
                     "_skip_msg":  msg,
                 }, True
 
-        connector = ConnectorFactory.get(source["type"], source["config"])
+        connector = ConnectorFactory.get(source.type, source.config)
         version   = _version_id()
         location  = connector.resolve_location(
-            dataset_id, version, dataset["format"], self.data_path)
+            dataset_id, version, dataset.format, self.data_path)
         if not self.db.reserve_version(dataset_id, version, location):
             raise ValueError("Version already exists")
         logger.info(f"Reserved {dataset_id}@{version}")
         return {
             "dataset_id": dataset_id,
             "version":    version,
-            "source_id":  source["id"],
+            "source_id":  source.id,
             "location":   location,
             "skipped":    False,
         }, False
@@ -95,16 +95,16 @@ class VersionService:
         if not dataset:
             raise ValueError("Dataset not found")
 
-        source    = self.db.get_source(dataset["source_id"])
-        connector = ConnectorFactory.get(source["type"], source["config"])
+        source    = self.db.get_source(dataset.source_id)
+        connector = ConnectorFactory.get(source.type, source.config)
 
         record = self.db.get_version(dataset_id, version)
         if not record:
             raise ValueError("Version not found")
-        if record["status"] != "reserved":
-            raise ValueError(f"Cannot commit - status is '{record['status']}'")
+        if record.status != "reserved":
+            raise ValueError(f"Cannot commit - status is '{record.status}'")
 
-        location = record["location"]
+        location = record.location
         if not connector.exists(location):
             raise ValueError(f"Dataset Version not found at: {location}")
 
@@ -133,7 +133,7 @@ class VersionService:
             if expectations and self.dq_service:
                 dq_result = self.dq_service.run_on_commit(
                     dataset_id, version, connector, location,
-                    dataset["format"], expectations,
+                    dataset.format, expectations,
                 )
 
             logger.info(f"Committed {dataset_id}@{version}")
@@ -163,12 +163,12 @@ class VersionService:
         dataset = self.db.get_dataset(dataset_id)
         if not dataset:
             raise ValueError("Dataset not found")
-        source    = self.db.get_source(dataset["source_id"])
-        connector = ConnectorFactory.get(source["type"], source["config"])
+        source    = self.db.get_source(dataset.source_id)
+        connector = ConnectorFactory.get(source.type, source.config)
         record    = self.db.get_version(dataset_id, version)
         if not record:
             raise ValueError("Version not found")
-        location = record["location"]
+        location = record.location
         self.db.fail_version(dataset_id, version)
         try:
             connector.delete(location)
@@ -191,8 +191,8 @@ class VersionService:
         if not dataset:
             raise ValueError("Dataset not found")
 
-        fmt       = (dataset.get("format") or "").lower()
-        source_id = dataset.get("source_id")
+        fmt       = (dataset.format or "").lower()
+        source_id = dataset.source_id
         if not source_id:
             raise ValueError("Dataset has no source")
 
@@ -204,8 +204,8 @@ class VersionService:
         if not record:
             raise ValueError("Version not found")
 
-        connector = ConnectorFactory.get(source["type"], source.get("config") or {})
-        result    = connector.read(record["location"], fmt, limit=limit, offset=offset)
+        connector = ConnectorFactory.get(source.type, source.config or {})
+        result    = connector.read(record.location, fmt, limit=limit, offset=offset)
 
         if isinstance(result, pd.DataFrame):
             df = result
@@ -218,7 +218,7 @@ class VersionService:
                  for row in df.to_dict(orient="records")]
         return {
             "dataset_id": dataset_id,
-            "version":    record["version"],
+            "version":    record.version,
             "columns":    df.columns.tolist(),
             "rows":       clean,
             "pagination": {"limit": limit, "offset": offset, "count": len(clean)},
@@ -254,12 +254,12 @@ class VersionService:
         if job_id:
             self.db.set_metadata(dataset_id, version,
                                  "sys.produced_by_job", job_id)
-        logger.info(f"Virtual {dataset_id}@{version} [{src['type']}]")
+        logger.info(f"Virtual {dataset_id}@{version} [{src.type}]")
         return {
             "dataset_id":  dataset_id,
             "version":     version,
             "source_id":   source_id,
-            "source_type": src["type"],
+            "source_type": src.type,
             "location":    location,
             "format":      fmt,
         }

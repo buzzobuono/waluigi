@@ -43,19 +43,19 @@ class ChartService:
         if not ver:
             raise ValueError("No committed version available")
 
-        source = self.db.get_source(dataset["source_id"])
+        source = self.db.get_source(dataset.source_id)
         if not source:
             raise ValueError(
-                f"Source '{dataset['source_id']}' not found "
+                f"Source '{dataset.source_id}' not found "
                 "— run CatalogCreateSource first"
             )
 
-        connector = ConnectorFactory.get(source["type"], source["config"])
-        df = connector.read(ver["location"], dataset["format"])
+        connector = ConnectorFactory.get(source.type, source.config)
+        df = connector.read(ver.location, dataset.format)
 
         return {
             "option":    self.build_option(df, chart["spec"]),
-            "version":   ver["version"],
+            "version":   ver.version,
             "rows":      len(df),
             "is_latest": version is None,
         }
