@@ -1,5 +1,5 @@
 from waluigi.sdk.catalog import catalog, CatalogError
-from waluigi.catalog.models import SourceCreateRequest, SourceType
+from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 
 source_id  = "local2"
 dataset_id = "sales/raw/sales_schema"

@@ -1,6 +1,6 @@
 from waluigi.sdk.context import context
 from waluigi.sdk.catalog import catalog
-from waluigi.catalog.models import SourceCreateRequest, SourceType
+from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 
 
 date = context.params.date

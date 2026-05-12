@@ -4,7 +4,7 @@ import pickle
 import pandas as pd
 import paramiko
 from typing import Any, Dict
-from waluigi.catalog.models import DatasetFormat
+from waluigi.catalog.api.schemas import DatasetFormat
 from .base import BaseConnector
 
 

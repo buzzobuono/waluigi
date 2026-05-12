@@ -4,7 +4,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 from typing import Any, Dict, Iterator
-from waluigi.catalog.models import DatasetFormat
+from waluigi.catalog.api.schemas import DatasetFormat
 from waluigi.catalog.utils import _infer_schema_from_df
 from .base import BaseConnector
 

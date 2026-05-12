@@ -1,6 +1,6 @@
 import pytest
 from waluigi.sdk.catalog import catalog, CatalogError
-from waluigi.catalog.models import SourceCreateRequest, SourceUpdateRequest, SourceType
+from waluigi.catalog.api.schemas import SourceCreateRequest, SourceUpdateRequest, SourceType
 
 @pytest.fixture(scope="module")
 def source_id():

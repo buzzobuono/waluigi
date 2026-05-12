@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict
-from waluigi.catalog.models import DatasetFormat
+from waluigi.catalog.api.schemas import DatasetFormat
 
 
 class BaseConnector(ABC):

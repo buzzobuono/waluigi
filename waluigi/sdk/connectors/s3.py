@@ -6,7 +6,7 @@ import pandas as pd
 import boto3
 from typing import Any, Dict
 from urllib.parse import urlparse
-from waluigi.catalog.models import DatasetFormat
+from waluigi.catalog.api.schemas import DatasetFormat
 from .base import BaseConnector
 
 

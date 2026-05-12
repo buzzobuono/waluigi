@@ -1,5 +1,5 @@
 from waluigi.sdk.catalog import catalog
-from waluigi.catalog.models import *
+from waluigi.catalog.api.schemas import *
 
 EXPECTATIONS = [
     # completeness

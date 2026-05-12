@@ -11,6 +11,7 @@ class SourceService:
         self.db = db
 
     def list(self) -> list[dict]:
+        
         return self.db.list_sources()
 
     def get(self, id: str) -> dict | None:

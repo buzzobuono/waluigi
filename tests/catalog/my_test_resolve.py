@@ -1,5 +1,5 @@
 from waluigi.sdk.catalog import catalog, CatalogError
-from waluigi.catalog.models import *
+from waluigi.catalog.api.schemas import *
 
 source_id  = "sqlite_local"
 dataset_id = "sales/raw/sales_raw_sqlite"

@@ -7,7 +7,7 @@ import yaml
 import httpx
 from pathlib import Path
 from waluigi.sdk.catalog import catalog
-from waluigi.catalog.models import SourceCreateRequest, SourceType
+from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 
 DATASET_ID  = "analytics/graph/sales_chart_test"
 CHARTS_YAML = Path(__file__).parent / "sales_charts.yaml"

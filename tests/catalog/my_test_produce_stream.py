@@ -1,5 +1,5 @@
 from waluigi.sdk.catalog import catalog, CatalogError
-from waluigi.catalog.models import *
+from waluigi.catalog.api.schemas import *
 import pandas as pd
 import time
 import os

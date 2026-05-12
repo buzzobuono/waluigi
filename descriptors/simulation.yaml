@@ -252,7 +252,7 @@ spec:
               description: "Fully enriched sales: products + customers + geography"
               source:      *local
       resources:
-          coin: 1
+          pdc: 1
 
     # ── PHASE 4: FINANCIAL DERIVATION ───────────────────────────────────────
     # Columns are sequential: gross_profit references revenue, margin_pct references both.

@@ -7,7 +7,7 @@ import pandas as pd
 import pyarrow as pa
 
 from waluigi.core.utils import _model_dump
-from waluigi.catalog.models import (
+from waluigi.catalog.api.schemas import (
     DatasetCreateRequest, DatasetFormat, DatasetStatus,
     SourceCreateRequest,
 )

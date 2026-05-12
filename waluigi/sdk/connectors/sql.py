@@ -2,7 +2,7 @@ import hashlib
 from typing import Any, Dict, Iterator
 import pandas as pd
 from sqlalchemy import create_engine, text
-from waluigi.catalog.models import DatasetFormat
+from waluigi.catalog.api.schemas import DatasetFormat
 from waluigi.catalog.utils import _infer_schema_from_df
 from .base import BaseConnector
 

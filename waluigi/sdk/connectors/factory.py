@@ -1,5 +1,5 @@
 from typing import Any, Dict
-from waluigi.catalog.models import SourceType
+from waluigi.catalog.api.schemas import SourceType
 from .base import BaseConnector
 from .local import LocalConnector
 from .s3 import S3Connector

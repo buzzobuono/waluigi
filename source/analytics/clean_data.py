@@ -2,7 +2,7 @@ import random
 import pandas as pd
 from waluigi.sdk.context import context
 from waluigi.sdk.catalog import catalog
-from waluigi.catalog.models import SourceCreateRequest, SourceType
+from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 
 source    = context.params.source.lower()
 date      = context.params.date

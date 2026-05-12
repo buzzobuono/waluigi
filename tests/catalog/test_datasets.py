@@ -1,7 +1,7 @@
 import pytest
 import warnings
 from waluigi.sdk.catalog import catalog, CatalogError
-from waluigi.catalog.models import DatasetStatus
+from waluigi.catalog.api.schemas import DatasetStatus
 
 @pytest.fixture(scope="module")
 def dataset_id():
