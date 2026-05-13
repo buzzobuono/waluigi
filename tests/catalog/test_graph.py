@@ -1,35 +1,19 @@
 """
-test_graph.py — write a dataset and apply chart definitions from a YAML file.
-
-Run with: python tests/catalog/test_graph.py
+test_graph.py — end-to-end chart lifecycle: create dataset, write data,
+define charts from YAML, verify all render endpoints return valid ECharts options.
 """
+import pytest
 import yaml
-import httpx
 from pathlib import Path
-from waluigi.sdk.catalog import catalog
+
+from waluigi.sdk.catalog import catalog, CatalogError
 from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 
-DATASET_ID  = "analytics/graph/sales_chart_test"
-CHARTS_YAML = Path(__file__).parent / "sales_charts.yaml"
+DATASET_ID   = "test/chart/sales_graph"
+SOURCE_ID    = "local_graph_test"
+CHARTS_YAML  = Path(__file__).parent / "sales_charts.yaml"
 
-# ── 1. Source & dataset ───────────────────────────────────────────────────────
-
-catalog.create_source(SourceCreateRequest(
-    id="local_graph_test",
-    type=SourceType.LOCAL,
-    description="Local source for chart test",
-))
-
-handle = catalog.create_dataset(
-    DATASET_ID,
-    format="csv",
-    source_id="local_graph_test",
-    description="Sales data for chart visualisation test",
-)
-
-# ── 2. Write data ─────────────────────────────────────────────────────────────
-
-rows = [
+ROWS = [
     {"date": "2026-01", "category": "Electronics", "revenue": 12400.0, "units": 310, "returns": 18},
     {"date": "2026-01", "category": "Clothing",    "revenue":  5200.0, "units": 420, "returns": 42},
     {"date": "2026-01", "category": "Food",        "revenue":  3100.0, "units": 890, "returns":  5},
@@ -41,46 +25,193 @@ rows = [
     {"date": "2026-03", "category": "Food",        "revenue":  4200.0, "units": 1100, "returns":  9},
 ]
 
-print("Writing dataset ...")
-with handle.create_version(metadata={"period": "Q1-2026"}, force=False) as writer:
-    writer.write(rows)
-    version = writer.version
-print(f"  version : {version}")
 
-# ── 3. Read back & verify ─────────────────────────────────────────────────────
+@pytest.fixture(scope="module", autouse=True)
+def setup_dataset():
+    """Create source, dataset and write one version; clean up afterwards."""
+    try:
+        catalog.create_source(SourceCreateRequest(
+            id=SOURCE_ID,
+            type=SourceType.LOCAL,
+            description="Local source for chart tests",
+        ))
+    except CatalogError:
+        pass  # already exists from a previous run
 
-reader = catalog.read_dataset(DATASET_ID)
-df     = reader.read()
-print(f"  rows    : {len(df)}")
-print(f"  columns : {list(df.columns)}")
+    catalog.create_dataset(
+        DATASET_ID,
+        format="csv",
+        source_id=SOURCE_ID,
+        description="Sales data for chart visualisation tests",
+    )
 
-# ── 4. Apply chart definitions from YAML (idempotent) ─────────────────────────
+    handle = catalog.create_dataset(DATASET_ID, format="csv", source_id=SOURCE_ID)
+    with handle.create_version(metadata={"period": "Q1-2026"}, force=True) as writer:
+        writer.write(ROWS)
 
-chart_defs = yaml.safe_load(CHARTS_YAML.read_text())
-charts     = [handle.set_chart(c["key"], c["title"], c["spec"]) for c in chart_defs]
-print(f"\nApplied {len(charts)} chart(s) from {CHARTS_YAML.name}")
+    yield
 
-# ── 5. Verify renders ─────────────────────────────────────────────────────────
+    try:
+        catalog._delete(f"/datasets/{DATASET_ID}")
+    except Exception:
+        pass
+    try:
+        catalog.delete_source(SOURCE_ID)
+    except Exception:
+        pass
 
-BASE = catalog.url
 
-for c in charts:
-    r      = httpx.get(f"{BASE}/datasets/{DATASET_ID}/charts/{c['id']}/render")
-    option = r.json()["data"]["option"]
+@pytest.fixture(scope="module")
+def chart_defs():
+    return yaml.safe_load(CHARTS_YAML.read_text())
 
-    has_data = any(len(s.get("data", [])) > 0 for s in option.get("series", []))
-    status   = "✅" if has_data else "⚠️  no data"
-    print(f"  [{status}] {c['title']}")
-    if option.get("radar"):
-        print(f"         axes: {[i['name'] for i in option['radar'].get('indicator', [])]}")
 
-# ── 6. Summary ────────────────────────────────────────────────────────────────
+@pytest.fixture(scope="module")
+def charts(chart_defs):
+    """Apply chart definitions from YAML (upsert by key) and return created charts."""
+    handle = catalog.create_dataset(DATASET_ID, format="csv", source_id=SOURCE_ID)
+    return [
+        handle.set_chart(c["key"], c["title"], c["spec"])
+        for c in chart_defs
+    ]
 
-versions = catalog.list_versions(DATASET_ID)
 
-print(f"\n{'─'*55}")
-print(f"  Dataset  : {DATASET_ID}")
-print(f"  Versions : {len(versions)}")
-print(f"  Charts   : {len(charts)}")
-print(f"{'─'*55}")
-print(f"\n  Frontend : /charts/{DATASET_ID}")
+# ── Data layer ────────────────────────────────────────────────────────────────
+
+def test_dataset_has_version():
+    versions = catalog.list_versions(DATASET_ID)
+    assert len(versions) >= 1
+    assert versions[0]["status"] == "committed"
+
+
+def test_dataset_readable():
+    reader = catalog.read_dataset(DATASET_ID)
+    df = reader.read()
+    assert len(df) == len(ROWS)
+    assert set(df.columns) >= {"date", "category", "revenue", "units", "returns"}
+
+
+# ── Chart CRUD ────────────────────────────────────────────────────────────────
+
+def test_charts_created(charts, chart_defs):
+    assert len(charts) == len(chart_defs)
+    for chart in charts:
+        assert "id" in chart
+        assert "key" in chart
+        assert "title" in chart
+
+
+def test_list_charts(charts):
+    listed = catalog.list_charts(DATASET_ID)
+    listed_ids = {c["id"] for c in listed}
+    for chart in charts:
+        assert chart["id"] in listed_ids
+
+
+def test_chart_upsert_is_idempotent(chart_defs):
+    handle = catalog.create_dataset(DATASET_ID, format="csv", source_id=SOURCE_ID)
+    first_run  = [handle.set_chart(c["key"], c["title"], c["spec"]) for c in chart_defs]
+    second_run = [handle.set_chart(c["key"], c["title"], c["spec"]) for c in chart_defs]
+    ids_first  = {c["id"] for c in first_run}
+    ids_second = {c["id"] for c in second_run}
+    assert ids_first == ids_second, "Re-applying charts should return the same IDs"
+
+
+def test_chart_update(charts):
+    chart = charts[0]
+    new_title = "Updated Title"
+    updated = catalog._patch(
+        f"/datasets/{DATASET_ID}/charts/{chart['id']}",
+        json={"title": new_title},
+    )
+    assert updated["title"] == new_title
+
+
+def test_chart_delete():
+    handle = catalog.create_dataset(DATASET_ID, format="csv", source_id=SOURCE_ID)
+    tmp = handle.set_chart("_tmp_delete_me", "Temporary", {"type": "bar", "x": {"field": "date"}, "y": {"field": "revenue"}})
+    chart_id = tmp["id"]
+    catalog._delete(f"/datasets/{DATASET_ID}/charts/{chart_id}")
+    listed = catalog.list_charts(DATASET_ID)
+    assert all(c["id"] != chart_id for c in listed)
+
+
+# ── Render ────────────────────────────────────────────────────────────────────
+
+def test_render_by_id(charts):
+    for chart in charts:
+        result = catalog._get(f"/datasets/{DATASET_ID}/charts/{chart['id']}/render")
+        assert "option" in result
+        assert "version" in result
+        assert "rows" in result
+        assert result["rows"] == len(ROWS)
+
+
+def test_render_by_key(chart_defs, charts):
+    for cdef in chart_defs:
+        result = catalog._get(
+            f"/datasets/{DATASET_ID}/charts/_render",
+            params={"key": cdef["key"]},
+        )
+        assert "option" in result
+        option = result["option"]
+        assert "series" in option
+        assert len(option["series"]) > 0
+
+
+def test_render_each_chart_type_has_data(charts):
+    for chart in charts:
+        result = catalog._get(f"/datasets/{DATASET_ID}/charts/{chart['id']}/render")
+        option = result["option"]
+        series = option.get("series", [])
+        has_data = any(len(s.get("data", [])) > 0 for s in series)
+        assert has_data, f"Chart '{chart['title']}' rendered no data"
+
+
+def test_render_bar_structure(charts, chart_defs):
+    bar_def = next((c for c in chart_defs if c["spec"].get("type") == "bar"), None)
+    if bar_def is None:
+        pytest.skip("No bar chart in YAML")
+    bar_chart = next(c for c in charts if c["key"] == bar_def["key"])
+    result = catalog._get(f"/datasets/{DATASET_ID}/charts/{bar_chart['id']}/render")
+    option = result["option"]
+    assert "xAxis" in option
+    assert "yAxis" in option
+    assert option["xAxis"]["type"] == "category"
+
+
+def test_render_pie_structure(charts, chart_defs):
+    pie_def = next((c for c in chart_defs if c["spec"].get("type") == "pie"), None)
+    if pie_def is None:
+        pytest.skip("No pie chart in YAML")
+    pie_chart = next(c for c in charts if c["key"] == pie_def["key"])
+    result = catalog._get(f"/datasets/{DATASET_ID}/charts/{pie_chart['id']}/render")
+    option = result["option"]
+    series = option["series"]
+    assert series[0]["type"] == "pie"
+    assert all("name" in p and "value" in p for p in series[0]["data"])
+
+
+def test_render_radar_has_indicator(charts, chart_defs):
+    radar_def = next((c for c in chart_defs if c["spec"].get("type") == "radar"), None)
+    if radar_def is None:
+        pytest.skip("No radar chart in YAML")
+    radar_chart = next(c for c in charts if c["key"] == radar_def["key"])
+    result = catalog._get(f"/datasets/{DATASET_ID}/charts/{radar_chart['id']}/render")
+    option = result["option"]
+    assert "radar" in option
+    axes = radar_def["spec"]["axes"]
+    assert len(option["radar"]["indicator"]) == len(axes)
+
+
+def test_render_nonexistent_chart():
+    with pytest.raises(CatalogError):
+        catalog._get(f"/datasets/{DATASET_ID}/charts/999999/render")
+
+
+def test_render_by_nonexistent_key():
+    with pytest.raises(CatalogError):
+        catalog._get(
+            f"/datasets/{DATASET_ID}/charts/_render",
+            params={"key": "_no_such_chart"},
+        )
