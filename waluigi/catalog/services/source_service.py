@@ -23,7 +23,7 @@ class SourceService:
         existing = self.db.get_source(id)
         if existing and existing.type != source_type:
             raise ValueError(
-                f"Cannot change source type from '{existing['type']}' "
+                f"Cannot change source type from '{existing.type}' "
                 f"to '{source_type}' — create a new source instead"
             )
         self.db.upsert_source(id, source_type, config, description)
