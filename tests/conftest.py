@@ -16,7 +16,7 @@ def start_catalog_server():
 
     # Copia l'ambiente corrente e aggiungi le variabili per il test
     test_env = os.environ.copy()
-    test_env["WALUIGI_CATALOG_DB_PATH"] = test_db
+    test_env["WALUIGI_CATALOG_DB_URL"]   = f"sqlite:///{test_db}"
     test_env["WALUIGI_CATALOG_DATA_PATH"] = test_data
 
     proc = subprocess.Popen(

@@ -1,4 +1,5 @@
-- title: Revenue by Category (bar)
+- key: revenue_by_category_bar
+  title: Revenue by Category (bar)
   spec:
     type: bar
     x:
@@ -9,7 +10,8 @@
       agg: sum
       label: Total Revenue (€)
 
-- title: Revenue over Time grouped by Category (line)
+- key: revenue_over_time_line
+  title: Revenue over Time grouped by Category (line)
   spec:
     type: line
     x:
@@ -21,7 +23,8 @@
       label: Revenue (€)
     color: category
 
-- title: Revenue share by Category (pie)
+- key: revenue_share_pie
+  title: Revenue share by Category (pie)
   spec:
     type: pie
     x:
@@ -30,7 +33,8 @@
       field: revenue
       agg: sum
 
-- title: Units distribution (histogram)
+- key: units_histogram
+  title: Units distribution (histogram)
   spec:
     type: histogram
     x:
@@ -38,7 +42,8 @@
       label: Units Sold
     bins: 6
 
-- title: Revenue vs Units (scatter)
+- key: revenue_vs_units_scatter
+  title: Revenue vs Units (scatter)
   spec:
     type: scatter
     x:
@@ -49,7 +54,8 @@
       label: Revenue (€)
     limit: 100
 
-- title: Category performance radar (radar)
+- key: category_radar
+  title: Category performance radar (radar)
   spec:
     type: radar
     group_by: category
