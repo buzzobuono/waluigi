@@ -33,14 +33,21 @@ app.include_router(lineage_router)
 app.include_router(version_router)
 app.include_router(dataset_router)
 
+def main():
+    try:
+        with open("logging.yaml") as f:
+            logging.config.dictConfig(yaml.safe_load(f))
+    except Exception:
+        logging.basicConfig(level=logging.INFO)
+        logger.warning("File logging.yaml non trovato, uso configurazione base.")
 
-with open("logging.yaml") as f:
-    logging.config.dictConfig(yaml.safe_load(f))
+    logger.info("Waluigi Catalog v2")
+    logger.info(f"  Binding : {args.bind_address}:{args.port}")
+    logger.info(f"  URL     : http://{args.host}:{args.port}")
+    logger.info(f"  DB      : {args.db_url}")
+    logger.info(f"  Data    : {args.data_path}")
 
-logger.info("Waluigi Catalog v2")
-logger.info(f"  Binding : {args.bind_address}:{args.port}")
-logger.info(f"  URL     : http://{args.host}:{args.port}")
-logger.info(f"  DB      : {args.db_url}")
-logger.info(f"  Data    : {args.data_path}")
+    uvicorn.run(app, host=args.bind_address, port=args.port, log_config=None)
 
-uvicorn.run(app, host=args.bind_address, port=args.port, log_config=None)
+if __name__ == "__main__":
+    main()
