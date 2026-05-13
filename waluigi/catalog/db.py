@@ -378,7 +378,7 @@ class CatalogDB:
         with self.engine.connect() as conn:
             rows = conn.execute(
                 text("SELECT * FROM versions WHERE dataset_id = :did"
-                     " ORDER BY createdate DESC"),
+                     " AND status = 'committed' ORDER BY createdate DESC"),
                 {"did": dataset_id},
             ).fetchall()
         return [Version.from_row(r) for r in rows]

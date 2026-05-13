@@ -245,8 +245,8 @@ class VersionService:
                 "Register it first via POST /sources."
             )
         version = _version_id()
-        self.db.create_dataset(dataset_id, display_name=display_name,
-                               description=description, owner=owner, tags=tags)
+        self.db.create_dataset(dataset_id, fmt, description=description,
+                               source_id=source_id)
         self.db.commit_virtual(dataset_id, version, location)
         if task_id:
             self.db.set_metadata(dataset_id, version,
