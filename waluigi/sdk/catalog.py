@@ -79,6 +79,12 @@ class CatalogClient:
     def create_source(self, request: SourceCreateRequest) -> dict:
         return self._post("/sources", json=_model_dump(request))
 
+    def update_source(self, id: str, updates) -> dict:
+        return self._patch(f"/sources/{id}", json=_model_dump(updates) if hasattr(updates, "model_dump") else updates)
+
+    def delete_source(self, id: str) -> dict:
+        return self._delete(f"/sources/{id}")
+
     # ── DATASETS ──────────────────────────────────────────────────────────────
 
     def list_datasets(self, status: DatasetStatus = None,
@@ -268,7 +274,7 @@ class DatasetHandle:
             with handle.create_version(metadata={"date": "2026-01-01"}) as writer:
                 writer.write(df)
         """
-        metadata = metadata or {}
+        metadata = {k: str(v) for k, v in (metadata or {}).items()}
         inputs   = inputs or []
         result   = self._client._post(
             f"/datasets/{self.id}/_reserve",
