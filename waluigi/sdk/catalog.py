@@ -80,7 +80,7 @@ class CatalogClient:
         return self._post("/sources", json=_model_dump(request))
 
     def update_source(self, id: str, updates) -> dict:
-        return self._patch(f"/sources/{id}", json=_model_dump(updates) if hasattr(updates, "model_dump") else updates)
+        return self._patch(f"/sources/{id}", json=_model_dump(updates))
 
     def delete_source(self, id: str) -> dict:
         return self._delete(f"/sources/{id}")

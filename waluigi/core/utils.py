@@ -15,8 +15,9 @@ def setup_logging():
         
 
 def _model_dump(obj):
-    if hasattr(obj, "model_dump"):
+    if hasattr(obj, "model_dump"):      # Pydantic v2
         return obj.model_dump(exclude_none=True)
-    else:
+    elif hasattr(obj, "dict") and not isinstance(obj, dict):  # Pydantic v1
         return obj.dict(exclude_none=True)
+    return obj  # plain dict or other serialisable type
         
