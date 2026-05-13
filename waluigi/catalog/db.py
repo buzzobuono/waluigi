@@ -309,12 +309,19 @@ class CatalogDB:
             rows = conn.execute(text("SELECT * FROM datasets ORDER BY id")).fetchall()
         return [Dataset.from_row(r) for r in rows]
 
-    def find_datasets(self, status: str, description: str) -> list[Dataset]:
+    def find_datasets(self, status: str = None, description: str = None) -> list[Dataset]:
+        clauses, params = [], {}
+        if status:
+            clauses.append("status = :status")
+            params["status"] = status
+        if description:
+            clauses.append("description LIKE :desc")
+            params["desc"] = description
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
         with self.engine.connect() as conn:
             rows = conn.execute(
-                text("SELECT * FROM datasets WHERE status = :status"
-                     " AND description LIKE :desc ORDER BY id"),
-                {"status": status, "desc": description},
+                text(f"SELECT * FROM datasets {where} ORDER BY id"),
+                params,
             ).fetchall()
         return [Dataset.from_row(r) for r in rows]
 
@@ -607,7 +614,7 @@ class CatalogDB:
             )
         return result.rowcount > 0
 
-    def publish_schema(self, dataset_id: str, publisher: str):
+    def publish_schema(self, dataset_id: str, publisher: str) -> dict:
         now = _now()
         with self.engine.begin() as conn:
             conn.execute(
@@ -615,6 +622,7 @@ class CatalogDB:
                      " WHERE dataset_id = :did AND status IN ('inferred', 'draft')"),
                 {"now": now, "did": dataset_id},
             )
+        return {"published_at": now, "breaking_changes": [], "warnings": []}
 
     def approve_schema_column(self, dataset_id: str, column_name: str) -> bool:
         now = _now()

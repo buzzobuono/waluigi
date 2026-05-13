@@ -2,15 +2,11 @@ import pytest
 import shutil
 import tempfile
 from pathlib import Path
-from waluigi.sdk.catalog import catalog
+
+from waluigi.sdk.catalog import catalog, CatalogError
 from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 
-@pytest.fixture
-def temp_db_dir():
-    temp_dir = tempfile.mkdtemp()
-    db_path = Path(temp_dir) / "test_catalog.db"
-    yield str(db_path)
-    shutil.rmtree(temp_dir)
+# ── Shared rows fixture ───────────────────────────────────────────────────────
 
 @pytest.fixture
 def sample_rows():
@@ -23,73 +19,162 @@ def sample_rows():
         {"date": "2026", "product": "F", "quantity":  9, "revenue": 350.0},
     ]
 
-def test_produce_dataset_from_local_source(sample_rows):
-    source_id = "local"
-    dataset_id = "sales/raw/sales_raw"
-    
-    source = SourceCreateRequest(
-        id=source_id,
-        type=SourceType.LOCAL,
-        config={},
-        description="Local Source"
-    )
-    catalog.create_source(source)
-    
-    handle = catalog.create_dataset(dataset_id, format="parquet", source_id=source_id, description="Sales raw")
 
-    metadata = {"rows": len(sample_rows), "source": "SAP_EXTRACT", "date_ref": "2026yyyyyyyy"}
-    with handle.create_version(metadata=metadata) as ctx:
+# ── Local (parquet) ───────────────────────────────────────────────────────────
+
+SOURCE_LOCAL   = "produce_local"
+DATASET_LOCAL  = "test/produce/sales_local"
+
+@pytest.fixture(autouse=True)
+def cleanup_local():
+    def _clean():
+        try: catalog._delete(f"/datasets/{DATASET_LOCAL}")
+        except Exception: pass
+        try: catalog.delete_source(SOURCE_LOCAL)
+        except Exception: pass
+    _clean()
+    yield
+    _clean()
+
+
+def test_produce_local_row_count(sample_rows):
+    catalog.create_source(SourceCreateRequest(
+        id=SOURCE_LOCAL, type=SourceType.LOCAL, config={}, description="Local"))
+    handle = catalog.create_dataset(DATASET_LOCAL, format="parquet", source_id=SOURCE_LOCAL)
+
+    with handle.create_version(metadata={"source": "SAP", "date_ref": "2026"}) as ctx:
         count = ctx.write(sample_rows)
-        
-    assert count == len(sample_rows)
-    info = catalog.get_dataset(dataset_id)
-    assert info["id"] == dataset_id
 
-def test_produce_dataset_from_sql_source_sqlite(temp_db_dir, sample_rows):
-    source_id = "sqlite_local"
-    dataset_id = "sales/raw/sales_raw_sqlite"
-    
-    source = SourceCreateRequest(
-        id=source_id,
-        type=SourceType.SQL,
-        config={
-            "url": f"sqlite:///{temp_db_dir}"
-        },
-        description="SQLite locale temporaneo"
-    )
-    catalog.create_source(source)
-    
-    handle = catalog.create_dataset(dataset_id, format="sql", source_id=source_id, description="Sales raw Sqlite")
-
-    metadata = {"rows": len(sample_rows), "source": "SAP_EXTRACT", "date_ref": "2026"}
-    with handle.create_version(metadata=metadata) as ctx:
-        count = ctx.write(sample_rows)
-        
     assert count == len(sample_rows)
     assert not ctx.skipped
 
-def _test_produce_dataset_from_postgresql(sample_rows):
-    source_id = "pg_local"
-    dataset_id = "sales/raw/sales_pg"
-    
-    source = SourceCreateRequest(
-        id=source_id,
-        type=SourceType.SQL,
-        config={
-            "url": "postgresql://test:test@localhost:5432/test"
-        },
-        description="PostgreSQL local"
-    )
-    catalog.create_source(source)
-    
-    handle = catalog.create_dataset(dataset_id, format="sql", source_id=source_id, description="Sales raw PostgreSQL")
 
-    metadata = {"rows": len(sample_rows), "source": "SAP_EXTRACT", "date_ref": "2026"}
-    with handle.create_version(metadata=metadata) as writer:
-        writer.write(sample_rows)
-        
-    if writer.skipped:
-        assert writer.version is not None
-    else:
-        assert writer.dataset_id == dataset_id
-        assert writer.version is not None
+def test_produce_local_version_committed(sample_rows):
+    catalog.create_source(SourceCreateRequest(
+        id=SOURCE_LOCAL, type=SourceType.LOCAL, config={}, description="Local"))
+    handle = catalog.create_dataset(DATASET_LOCAL, format="parquet", source_id=SOURCE_LOCAL)
+
+    with handle.create_version(metadata={"source": "SAP", "date_ref": "2026"}) as ctx:
+        ctx.write(sample_rows)
+
+    versions = catalog.list_versions(DATASET_LOCAL)
+    assert len(versions) == 1
+    ver = versions[0]
+    assert ver["status"] == "committed"
+    assert ver["version"] is not None
+    assert ver["location"] is not None
+
+
+def test_produce_local_readable_after_commit(sample_rows):
+    catalog.create_source(SourceCreateRequest(
+        id=SOURCE_LOCAL, type=SourceType.LOCAL, config={}, description="Local"))
+    handle = catalog.create_dataset(DATASET_LOCAL, format="parquet", source_id=SOURCE_LOCAL)
+
+    with handle.create_version(metadata={"source": "SAP", "date_ref": "2026"}) as ctx:
+        ctx.write(sample_rows)
+
+    reader = catalog.read_dataset(DATASET_LOCAL)
+    df = reader.read()
+    assert len(df) == len(sample_rows)
+    assert set(df.columns) >= {"date", "product", "quantity", "revenue"}
+
+
+def test_produce_local_dedup_skips_on_same_metadata(sample_rows):
+    catalog.create_source(SourceCreateRequest(
+        id=SOURCE_LOCAL, type=SourceType.LOCAL, config={}, description="Local"))
+    handle = catalog.create_dataset(DATASET_LOCAL, format="parquet", source_id=SOURCE_LOCAL)
+    meta = {"source": "SAP", "date_ref": "2026"}
+
+    with handle.create_version(metadata=meta) as ctx:
+        ctx.write(sample_rows)
+
+    with handle.create_version(metadata=meta, force=False) as ctx2:
+        count2 = ctx2.write(sample_rows)
+
+    assert ctx2.skipped
+    assert count2 == 0
+    assert len(catalog.list_versions(DATASET_LOCAL)) == 1
+
+
+def test_produce_local_force_creates_new_version(sample_rows):
+    catalog.create_source(SourceCreateRequest(
+        id=SOURCE_LOCAL, type=SourceType.LOCAL, config={}, description="Local"))
+    handle = catalog.create_dataset(DATASET_LOCAL, format="parquet", source_id=SOURCE_LOCAL)
+    meta = {"source": "SAP", "date_ref": "2026"}
+
+    with handle.create_version(metadata=meta) as ctx:
+        ctx.write(sample_rows)
+
+    with handle.create_version(metadata=meta, force=True) as ctx2:
+        count2 = ctx2.write(sample_rows)
+
+    assert not ctx2.skipped
+    assert count2 == len(sample_rows)
+    assert len(catalog.list_versions(DATASET_LOCAL)) == 2
+
+
+def test_produce_local_version_metadata_stored(sample_rows):
+    catalog.create_source(SourceCreateRequest(
+        id=SOURCE_LOCAL, type=SourceType.LOCAL, config={}, description="Local"))
+    handle = catalog.create_dataset(DATASET_LOCAL, format="parquet", source_id=SOURCE_LOCAL)
+    meta = {"source": "SAP", "date_ref": "2026", "rows": str(len(sample_rows))}
+
+    with handle.create_version(metadata=meta) as ctx:
+        ctx.write(sample_rows)
+        version = ctx.version
+
+    stored = catalog.get_version_metadata(DATASET_LOCAL, version)
+    assert stored.get("source") == "SAP"
+    assert stored.get("date_ref") == "2026"
+
+
+# ── SQLite (sql format) ───────────────────────────────────────────────────────
+
+SOURCE_SQL    = "produce_sqlite"
+DATASET_SQL   = "test/produce/sales_sqlite"
+
+@pytest.fixture
+def sqlite_url():
+    tmp = tempfile.mkdtemp()
+    yield f"sqlite:///{tmp}/test.db"
+    shutil.rmtree(tmp)
+
+
+@pytest.fixture(autouse=True)
+def cleanup_sql():
+    def _clean():
+        try: catalog._delete(f"/datasets/{DATASET_SQL}")
+        except Exception: pass
+        try: catalog.delete_source(SOURCE_SQL)
+        except Exception: pass
+    _clean()
+    yield
+    _clean()
+
+
+def test_produce_sql_row_count(sqlite_url, sample_rows):
+    catalog.create_source(SourceCreateRequest(
+        id=SOURCE_SQL, type=SourceType.SQL,
+        config={"url": sqlite_url}, description="SQLite"))
+    handle = catalog.create_dataset(DATASET_SQL, format="sql", source_id=SOURCE_SQL)
+
+    with handle.create_version(metadata={"source": "SAP", "date_ref": "2026"}) as ctx:
+        count = ctx.write(sample_rows)
+
+    assert count == len(sample_rows)
+    assert not ctx.skipped
+
+
+def test_produce_sql_version_committed(sqlite_url, sample_rows):
+    catalog.create_source(SourceCreateRequest(
+        id=SOURCE_SQL, type=SourceType.SQL,
+        config={"url": sqlite_url}, description="SQLite"))
+    handle = catalog.create_dataset(DATASET_SQL, format="sql", source_id=SOURCE_SQL)
+
+    with handle.create_version(metadata={"source": "SAP", "date_ref": "2026"}) as ctx:
+        ctx.write(sample_rows)
+
+    versions = catalog.list_versions(DATASET_SQL)
+    assert len(versions) == 1
+    assert versions[0]["status"] == "committed"
+    assert versions[0]["dataset_id"] == DATASET_SQL
