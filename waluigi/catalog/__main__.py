@@ -12,8 +12,8 @@ from waluigi.catalog.api.routes.schema_router import schema_router
 from waluigi.catalog.api.routes.dq_router import dq_router
 from waluigi.catalog.api.routes.chart_router import chart_router
 from waluigi.catalog.api.routes.lineage_router import lineage_router
-from waluigi.catalog.api.routes.dataset_router import dataset_router
 from waluigi.catalog.api.routes.version_router import version_router
+from waluigi.catalog.api.routes.dataset_router import dataset_router
 
 logger = logging.getLogger("waluigi")
 
@@ -30,8 +30,8 @@ app.include_router(schema_router)
 app.include_router(dq_router)
 app.include_router(chart_router)
 app.include_router(lineage_router)
-app.include_router(dataset_router)
 app.include_router(version_router)
+app.include_router(dataset_router)
 
 
 with open("logging.yaml") as f:

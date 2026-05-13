@@ -11,12 +11,12 @@ source_router = APIRouter(
 )
 
 
-@source_router.get("/", summary="List sources")
+@source_router.get("", summary="List sources")
 async def list_sources(source_service: SourceService = Depends(source_service)):
     return ok([s.to_dict() for s in source_service.list()])
 
 
-@source_router.post("/", summary="Register or update a source (upsert)", status_code=200)
+@source_router.post("", summary="Register or update a source (upsert)", status_code=200)
 async def create_source(body: SourceCreateRequest, source_service: SourceService = Depends(source_service)):
     try:
         return ok(source_service.upsert(body.id, body.type.value, body.config, body.description).to_dict())

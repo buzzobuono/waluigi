@@ -9,7 +9,7 @@ dataset_router = APIRouter(
     prefix="/datasets"
 )
 
-@dataset_router.get("/", tags=["Datasets"],
+@dataset_router.get("", tags=["Datasets"],
     summary="Find datasets",
     description="status: draft | in_review | approved | deprecated"
 )
@@ -18,7 +18,7 @@ async def find_datasets(status: DatasetStatus | None = Query(default=None, examp
     return ok([d.to_dict() for d in dataset_service.find(status, description)])
 
 
-@dataset_router.post("/", tags=["Datasets"],
+@dataset_router.post("", tags=["Datasets"],
           summary="Register a new dataset",
           status_code=201)
 async def create_dataset(body: DatasetCreateRequest, dataset_service: DatasetService = Depends(dataset_service)):
