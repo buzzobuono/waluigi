@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, HTMLResponse
 from waluigi.boss.db import WaluigiDB
 from waluigi.core.engine import WaluigiEngine
-from waluigi.core.task import DynamicTask
+from waluigi.core.task_v2 import DynamicTask, _expand_pipeline
 
 app = FastAPI()
 
@@ -109,21 +109,13 @@ async def submit(request: Request):
     data = await request.json()
 
     kind = data.get("kind")
-    if kind not in ("Job", "DAG", "Pipeline") or "spec" not in data:
-        return JSONResponse({"status": "error", "message": "Unsupported kind. Use 'kind: DAG' or 'kind: Pipeline'."}, status_code=400)
-    spec = data.get("spec", {})
-    if not spec:
-        return JSONResponse({"status": "error", "message": "Empty 'spec'"}, status_code=400)
-
     if kind == "Pipeline":
-        if not isinstance(spec, list):
-            return JSONResponse({"status": "error", "message": "kind: Pipeline requires spec to be a list of tasks."}, status_code=422)
-        from waluigi.core.task import _expand_pipeline
-        pipeline_params = data.get("params", {})
-        spec = _expand_pipeline(spec, pipeline_params)
+        spec = _expand_pipeline(data)
     elif kind in ("DAG", "Job"):
         if not isinstance(spec, dict):
             return JSONResponse({"status": "error", "message": "kind: DAG requires spec to be a dict with nested requires."}, status_code=422)
+    else:
+        return JSONResponse({"status": "error", "message": "Unsupported kind. Use 'kind: DAG' or 'kind: Pipeline'."}, status_code=400)
 
     metadata = data.get("metadata", {})
     try:

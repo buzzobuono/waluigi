@@ -41,7 +41,9 @@ def log(msg):
     
 @app.post('/execute')
 async def execute(request: Request):
+    
     data = await request.json()
+    print(data)
     workdir    = data.get("workdir", DEFAULT_WORKDIR)
     task_type  = data.get("type")
     command    = data.get("command")
