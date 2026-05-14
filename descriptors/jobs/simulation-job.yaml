@@ -1,0 +1,492 @@
+x-sources:
+    local: &local
+        id: "simulation-local"
+        type: "LOCAL"
+        description: "Local storage for simulation pipeline"
+
+kind: Job
+metadata:
+    name: "simulation-job"
+    namespace: "simulation"
+    workdir: "work"
+spec:
+    params:
+        date: "2026-05-15"
+    attribute:
+        attribute1: "valute_attribute_1"
+    tasks:
+        - id: "gen_sales"
+          taskSpec:
+              kind: Task
+              metadata:
+                name: "gen_sales"
+              spec:
+                  script: |
+                    import pandas as pd, numpy as np
+                    from waluigi.tasks._io import write_output
+                    rng = np.random.default_rng(2026)
+                    n = 500
+                    dates = pd.date_range('2026-01-01', periods=365).astype(str).tolist()
+                    df = pd.DataFrame({
+                        'id':          range(1, n + 1),
+                        'date':        rng.choice(dates, n).tolist(),
+                        'product_id':  rng.integers(1, 31, n),
+                        'customer_id': rng.integers(1, 101, n),
+                        'region_id':   rng.integers(1, 9, n),
+                        'quantity':    rng.integers(1, 100, n),
+                        'unit_price':  rng.uniform(10.0, 1000.0, n).round(2),
+                        'discount':    rng.uniform(0.0, 0.35, n).round(3),
+                    })
+                    write_output(df, [])
+          config:
+              output:
+                  dataset: "simulation/raw/sales"
+                  format: "parquet"
+                  source: *local
+          resources:
+              coin: 1
+
+        - id: "gen_products"
+          taskSpec:
+              kind: Task
+              metadata:
+                name: "gen_products"
+              spec:
+                  script: |
+                    import pandas as pd, numpy as np
+                    from waluigi.tasks._io import write_output
+                    rng = np.random.default_rng(2026)
+                    n = 30
+                    cats = ['Electronics', 'Clothing', 'Food', 'Software', 'Hardware']
+                    df = pd.DataFrame({
+                        'product_id': range(1, n + 1),
+                        'name':       [f'Product_{i:02d}' for i in range(1, n + 1)],
+                        'category':   rng.choice(cats, n).tolist(),
+                        'cost':       rng.uniform(5.0, 500.0, n).round(2),
+                    })
+                    write_output(df, [])
+          config:
+              output:
+                  dataset: "simulation/raw/products"
+                  format: "parquet"
+                  source: *local
+          resources:
+              coin: 1
+
+        - id: "gen_customers"
+          taskSpec:
+              kind: Task
+              metadata:
+                name: "gen_customers"
+              spec:
+                  script: |
+                    import pandas as pd, numpy as np
+                    from waluigi.tasks._io import write_output
+                    rng = np.random.default_rng(2026)
+                    n = 100
+                    segs = ['Enterprise', 'SMB', 'Consumer', 'Prospect']
+                    df = pd.DataFrame({
+                        'customer_id': range(1, n + 1),
+                        'name':        [f'Customer_{i:03d}' for i in range(1, n + 1)],
+                        'segment':     rng.choice(segs, n).tolist(),
+                        'region_id':   rng.integers(1, 9, n),
+                    })
+                    write_output(df, [])
+          config:
+              output:
+                  dataset: "simulation/raw/customers"
+                  format: "parquet"
+                  source: *local
+          resources:
+              coin: 1
+
+        - id: "gen_regions"
+          taskSpec:
+              kind: Task
+              metadata:
+                name: "gen_regions"
+              spec:
+                  script: |
+                    import pandas as pd
+                    from waluigi.tasks._io import write_output
+                    df = pd.DataFrame({
+                        'region_id': range(1, 9),
+                        'name':    ['North','South','East','West','Central','Northeast','Southeast','Northwest'],
+                        'country': ['IT'] * 8,
+                        'zone':    ['Nord','Sud','Est','Ovest','Centro','Nord','Sud','Nord'],
+                    })
+                    write_output(df, [])
+          config:
+              output:
+                  dataset: "simulation/raw/regions"
+                  format: "parquet"
+                  source: *local
+          resources:
+              coin: 1
+
+        - id: "select_sales"
+          taskRef:
+              name: "SelectColumns"
+          requires:
+              - "gen_sales"
+          config:
+              input:
+                  dataset: "simulation/raw/sales"
+                  source: *local
+              output:
+                  dataset: "simulation/clean/sales"
+                  format: "parquet"
+                  source: *local
+              columns:
+                  - "id"
+                  - "date"
+                  - "product_id"
+                  - "customer_id"
+                  - "region_id"
+                  - "quantity"
+                  - "unit_price"
+                  - "discount"
+          resources:
+              coin: 1
+
+        - id: "select_products"
+          taskRef:
+              name: "SelectColumns"
+          requires:
+              - "gen_products"
+          config:
+              input:
+                  dataset: "simulation/raw/products"
+                  source: *local
+              output:
+                  dataset: "simulation/clean/products"
+                  format: "parquet"
+                  source: *local
+              columns:
+                  - "product_id"
+                  - "category"
+                  - "cost"
+          resources:
+              coin: 1
+
+        - id: "select_customers"
+          taskRef:
+              name: "SelectColumns"
+          requires:
+              - "gen_customers"
+          config:
+              input:
+                  dataset: "simulation/raw/customers"
+                  source: *local
+              output:
+                  dataset: "simulation/clean/customers"
+                  format: "parquet"
+                  source: *local
+              columns:
+                  - "customer_id"
+                  - "name"
+                  - "segment"
+          resources:
+              coin: 1
+
+        - id: "select_regions"
+          taskRef:
+              name: "SelectColumns"
+          requires:
+              - "gen_regions"
+          config:
+              input:
+                  dataset: "simulation/raw/regions"
+                  source: *local
+              output:
+                  dataset: "simulation/clean/regions"
+                  format: "parquet"
+                  source: *local
+              columns:
+                  - "region_id"
+                  - "zone"
+                  - "country"
+          resources:
+              coin: 1
+
+        - id: "join_sales_products"
+          taskRef:
+              name: "JoinDatasets"
+          requires:
+              - "select_sales"
+              - "select_products"
+          config:
+              left:
+                  dataset: "simulation/clean/sales"
+                  source: *local
+              right:
+                  dataset: "simulation/clean/products"
+                  source: *local
+              join:
+                  columns:
+                      - "product_id"
+                  how: "left"
+              output:
+                  dataset: "simulation/joined/sales_products"
+                  format: "parquet"
+                  source: *local
+          resources:
+              coin: 1
+
+        - id: "join_with_customers"
+          taskRef:
+              name: "JoinDatasets"
+          requires:
+              - "join_sales_products"
+              - "select_customers"
+          config:
+              left:
+                  dataset: "simulation/joined/sales_products"
+                  source: *local
+              right:
+                  dataset: "simulation/clean/customers"
+                  source: *local
+              join:
+                  columns:
+                      - "customer_id"
+                  how: "left"
+              output:
+                  dataset: "simulation/joined/with_customers"
+                  format: "parquet"
+                  source: *local
+          resources:
+              coin: 1
+
+        - id: "join_with_regions"
+          taskRef:
+              name: "JoinDatasets"
+          requires:
+              - "join_with_customers"
+              - "select_regions"
+          config:
+              left:
+                  dataset: "simulation/joined/with_customers"
+                  source: *local
+              right:
+                  dataset: "simulation/clean/regions"
+                  source: *local
+              join:
+                  columns:
+                      - "region_id"
+                  how: "left"
+              output:
+                  dataset: "simulation/joined/full"
+                  format: "parquet"
+                  source: *local
+          resources:
+              coin: 1
+
+        - id: "add_financials"
+          taskRef:
+              name: "AddDerivedColumns"
+          requires:
+              - "join_with_regions"
+          config:
+              input:
+                  dataset: "simulation/joined/full"
+                  source: *local
+              output:
+                  dataset: "simulation/enriched/financial"
+                  format: "parquet"
+                  source: *local
+              columns:
+                  - name: "revenue"
+                    expr: "quantity * unit_price * (1 - discount)"
+                  - name: "gross_profit"
+                    expr: "revenue - quantity * cost"
+                  - name: "margin_pct"
+                    expr: "gross_profit / revenue * 100"
+          resources:
+              coin: 1
+
+        - id: "agg_by_region"
+          taskRef:
+              name: "AggregateDataset"
+          requires:
+              - "add_financials"
+          config:
+              input:
+                  dataset: "simulation/enriched/financial"
+                  source: *local
+              output:
+                  dataset: "simulation/agg/by_region"
+                  format: "parquet"
+                  source: *local
+              group_by:
+                  - "zone"
+              agg:
+                  revenue: "sum"
+                  gross_profit: "sum"
+                  quantity: "sum"
+          resources:
+              coin: 1
+
+        - id: "agg_by_category"
+          taskRef:
+              name: "AggregateDataset"
+          requires:
+              - "add_financials"
+          config:
+              input:
+                  dataset: "simulation/enriched/financial"
+                  source: *local
+              output:
+                  dataset: "simulation/agg/by_category"
+                  format: "parquet"
+                  source: *local
+              group_by:
+                  - "category"
+              agg:
+                  revenue: "sum"
+                  quantity: "sum"
+          resources:
+              coin: 1
+
+        - id: "agg_by_segment"
+          taskRef:
+              name: "AggregateDataset"
+          requires:
+              - "add_financials"
+          config:
+              input:
+                  dataset: "simulation/enriched/financial"
+                  source: *local
+              output:
+                  dataset: "simulation/agg/by_segment"
+                  format: "parquet"
+                  source: *local
+              group_by:
+                  - "segment"
+              agg:
+                  revenue: "sum"
+                  gross_profit: "sum"
+          resources:
+              coin: 1
+
+        - id: "pivot_cat_zone"
+          taskRef:
+              name: "PivotDataset"
+          requires:
+              - "add_financials"
+          config:
+              input:
+                  dataset: "simulation/enriched/financial"
+                  source: *local
+              output:
+                  dataset: "simulation/pivot/category_by_zone"
+                  format: "parquet"
+                  source: *local
+              index: "zone"
+              columns: "category"
+              values: "revenue"
+              aggfunc: "sum"
+          resources:
+              coin: 1
+
+        - id: "filter_high_value"
+          taskRef:
+              name: "FilterDataset"
+          requires:
+              - "add_financials"
+          config:
+              input:
+                  dataset: "simulation/enriched/financial"
+                  source: *local
+              output:
+                  dataset: "simulation/filtered/high_value"
+                  format: "parquet"
+                  source: *local
+              where: "revenue > 5000"
+          resources:
+              coin: 1
+
+        - id: "filter_top_regions"
+          taskRef:
+              name: "FilterDataset"
+          requires:
+              - "agg_by_region"
+          config:
+              input:
+                  dataset: "simulation/agg/by_region"
+                  source: *local
+              output:
+                  dataset: "simulation/report/top_regions"
+                  format: "parquet"
+                  source: *local
+              where: "revenue > 50000"
+          resources:
+              coin: 1
+
+        - id: "filter_top_categories"
+          taskRef:
+              name: "FilterDataset"
+          requires:
+              - "agg_by_category"
+          config:
+              input:
+                  dataset: "simulation/agg/by_category"
+                  source: *local
+              output:
+                  dataset: "simulation/report/top_categories"
+                  format: "parquet"
+                  source: *local
+              where: "revenue > 100000"
+          resources:
+              coin: 1
+
+        - id: "dedup_top_products"
+          taskRef:
+              name: "DeduplicateDataset"
+          requires:
+              - "filter_high_value"
+          config:
+              input:
+                  dataset: "simulation/filtered/high_value"
+                  source: *local
+              output:
+                  dataset: "simulation/report/top_products"
+                  format: "parquet"
+                  source: *local
+              subset:
+                  - "product_id"
+              keep: "first"
+          resources:
+              coin: 1
+
+        - id: "merge_executive_report"
+          taskRef:
+              name: "MergeDatasets"
+          requires:
+              - "filter_top_regions"
+              - "filter_top_categories"
+              - "agg_by_segment"
+              - "pivot_cat_zone"
+              - "dedup_top_products"
+          config:
+              inputs:
+                  - dataset: "simulation/report/top_regions"
+                    source: *local
+                    label: "top_regions"
+                  - dataset: "simulation/report/top_categories"
+                    source: *local
+                    label: "top_categories"
+                  - dataset: "simulation/agg/by_segment"
+                    source: *local
+                    label: "by_segment"
+                  - dataset: "simulation/pivot/category_by_zone"
+                    source: *local
+                    label: "pivot_matrix"
+                  - dataset: "simulation/report/top_products"
+                    source: *local
+                    label: "top_products"
+              output:
+                  dataset: "simulation/report/executive"
+                  format: "parquet"
+                  source: *local
+          resources:
+              coin: 1

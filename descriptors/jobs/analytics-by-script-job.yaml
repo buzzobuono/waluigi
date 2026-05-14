@@ -3,7 +3,7 @@ x-scripts:
         import pandas as pd
         from waluigi.sdk.context import context
         from waluigi.sdk.catalog import catalog
-        from waluigi.catalog.models import SourceCreateRequest, SourceType
+        from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 
         date = context.params.date
         print(f"Building global report for {date} ...")
@@ -54,7 +54,7 @@ x-scripts:
         import pandas as pd
         from waluigi.sdk.context import context
         from waluigi.sdk.catalog import catalog
-        from waluigi.catalog.models import SourceCreateRequest, SourceType
+        from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 
         source    = context.params.source.lower()
         date      = context.params.date
@@ -104,7 +104,7 @@ x-scripts:
         import pandas as pd
         from waluigi.sdk.context import context
         from waluigi.sdk.catalog import catalog
-        from waluigi.catalog.models import SourceCreateRequest, SourceType
+        from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 
         METRICS = {
             "erp":    [("revenue",     "finance"),     ("costs",       "finance"),
@@ -205,31 +205,41 @@ x-config:
               y:   {field: "value", agg: "sum", label: "Total Value"}
 
 
-kind: DAG
+kind: Job
 metadata:
+    name: "analytics-by-script-job"
+    namespace: "analytics"
     workdir: "work"
 spec:
-    id: "final_report_v2"
-    namespace: "analytics"
-    script: *report_script
     params:
         date: "2026-05-16"
-    attributes:
-        var: "pippo"
-    config:
-        <<: *cfg_source
-        charts: *cfg_report_charts
-    resources:
-        coin: 1
-    affinity:
-        - python
-    requires:
-        - namespace: "analytics"
-          id: "clean_erp_v2"
-          script: *clean_script
+    tasks:
+        - id: "extract_erp"
+          taskSpec:
+              kind: Task
+              metadata:
+                  name: "extract_erp"
+              spec:
+                  script: *extract_script
           params:
               source: "ERP"
-              date: "${parent.params.date}"
+          config: *cfg_source
+          resources:
+              coin: 1
+          affinity:
+              - python
+
+        - id: "clean_erp"
+          taskSpec:
+              kind: Task
+              metadata:
+                  name: "clean_erp"
+              spec:
+                  script: *clean_script
+          requires:
+              - "extract_erp"
+          params:
+              source: "ERP"
           attributes:
               fail_prob: "0.0"
           config:
@@ -239,24 +249,33 @@ spec:
               pdc: 1
           affinity:
               - python
-          requires:
-              - namespace: "analytics"
-                id: "extract_erp_v2"
-                script: *extract_script
-                params:
-                    source: "${parent.params.source}"
-                    date: "${parent.params.date}"
-                config: *cfg_source
-                resources:
-                    coin: 1
-                affinity:
-                    - python
-        - namespace: "analytics"
-          id: "clean_web_v2"
-          script: *clean_script
+
+        - id: "extract_web"
+          taskSpec:
+              kind: Task
+              metadata:
+                  name: "extract_web"
+              spec:
+                  script: *extract_script
           params:
               source: "WEB"
-              date: "${parent.params.date}"
+          config: *cfg_source
+          resources:
+              coin: 1
+          affinity:
+              - python
+
+        - id: "clean_web"
+          taskSpec:
+              kind: Task
+              metadata:
+                  name: "clean_web"
+              spec:
+                  script: *clean_script
+          requires:
+              - "extract_web"
+          params:
+              source: "WEB"
           attributes:
               fail_prob: "0.0"
           config:
@@ -266,24 +285,33 @@ spec:
               pdc: 1
           affinity:
               - python
-          requires:
-              - namespace: "analytics"
-                id: "extract_web_v2"
-                script: *extract_script
-                params:
-                    source: "${parent.params.source}"
-                    date: "${parent.params.date}"
-                config: *cfg_source
-                resources:
-                    coin: 1
-                affinity:
-                    - python
-        - namespace: "analytics"
-          id: "clean_social_v2"
-          script: *clean_script
+
+        - id: "extract_social"
+          taskSpec:
+              kind: Task
+              metadata:
+                  name: "extract_social"
+              spec:
+                  script: *extract_script
           params:
               source: "SOCIAL"
-              date: "${parent.params.date}"
+          config: *cfg_source
+          resources:
+              coin: 1
+          affinity:
+              - python
+
+        - id: "clean_social"
+          taskSpec:
+              kind: Task
+              metadata:
+                  name: "clean_social"
+              spec:
+                  script: *clean_script
+          requires:
+              - "extract_social"
+          params:
+              source: "SOCIAL"
           attributes:
               fail_prob: "0.0"
           config:
@@ -293,15 +321,24 @@ spec:
               pdc: 1
           affinity:
               - python
+
+        - id: "final_report"
+          taskSpec:
+              kind: Task
+              metadata:
+                  name: "final_report"
+              spec:
+                  script: *report_script
           requires:
-              - namespace: "analytics"
-                id: "extract_social_v2"
-                script: *extract_script
-                params:
-                    source: "${parent.params.source}"
-                    date: "${parent.params.date}"
-                config: *cfg_source
-                resources:
-                    coin: 1
-                affinity:
-                    - python
+              - "clean_erp"
+              - "clean_web"
+              - "clean_social"
+          attributes:
+              var: "pippo"
+          config:
+              <<: *cfg_source
+              charts: *cfg_report_charts
+          resources:
+              coin: 1
+          affinity:
+              - python

@@ -1,0 +1,44 @@
+kind: Job
+metadata:
+    name: "catalog-define-schema-job"
+    namespace: "catalog"
+    workdir: "work"
+spec:
+    tasks:
+        - id:   "catalog-define-schema-task"
+          namespace: "catalog"
+          taskRef:
+            name: "CatalogDefineSchema"
+          config:
+              dataset: "tests/test_dataset"
+              publish: true
+              columns:
+                  - name:         "date"
+                    logical_type: "date"
+                    description:  "Reference date of the record"
+                    nullable:     false
+                    pii:          false
+                  - name:         "source"
+                    logical_type: "string"
+                    description:  "Origin system identifier"
+                    nullable:     false
+                    pii:          false
+                  - name:         "metric"
+                    logical_type: "string"
+                    description:  "Metric name"
+                    nullable:     false
+                    pii:          false
+                  - name:         "value"
+                    logical_type: "float"
+                    description:  "Metric numeric value"
+                    nullable:     false
+                    pii:          false
+                  - name:         "category"
+                    logical_type: "string"
+                    description:  "Metric category"
+                    nullable:     true
+                    pii:          false
+          resources:
+              coin: 1
+          affinity:
+              - python

@@ -1,0 +1,94 @@
+kind: Job
+metadata:
+    name: analytics-by-command-job
+    workdir: "work"
+    namespace: "analytics"
+spec:
+    params:
+        date: "2026-05-20"
+    tasks:
+        - id: "extract_erp"
+          taskSpec:
+              command: "python ../source/analytics/raw_data_exctact.py"
+          params:
+              source: "ERP"
+          resources:
+              coin: 1
+          affinity:
+              - python
+
+        - id: "clean_erp"
+          taskSpec:
+              command: "python ../source/analytics/clean_data.py"
+          requires:
+              - "extract_erp"
+          params:
+              source: "ERP"
+          attributes:
+              fail_prob: "0.0"
+          resources:
+              pdc: 1
+          affinity:
+              - python
+
+        - id: "extract_web"
+          taskSpec:
+              command: "python ../source/analytics/raw_data_exctact.py"
+          params:
+              source: "WEB"
+          resources:
+              coin: 1
+          affinity:
+              - python
+
+        - id: "clean_web"
+          taskSpec:
+              command: "python ../source/analytics/clean_data.py"
+          requires:
+              - "extract_web"
+          params:
+              source: "WEB"
+          attributes:
+              fail_prob: "0.0"
+          resources:
+              pdc: 1
+          affinity:
+              - python
+
+        - id: "extract_social"
+          taskSpec:
+              command: "python ../source/analytics/raw_data_exctact.py"
+          params:
+              source: "SOCIAL"
+          resources:
+              coin: 1
+          affinity:
+              - python
+
+        - id: "clean_social"
+          taskSpec:
+              command: "python ../source/analytics/clean_data.py"
+          requires:
+              - "extract_social"
+          params:
+              source: "SOCIAL"
+          attributes:
+              fail_prob: "0.0"
+          resources:
+              pdc: 1
+          affinity:
+              - python
+
+        - id: "final_report"
+          taskSpec:
+              command: "python ../source/analytics/global_report.py"
+          requires:
+              - "clean_erp"
+              - "clean_web"
+              - "clean_social"
+          attributes:
+              var: "pippo"
+          resources:
+              coin: 1
+          affinity:
+              - python

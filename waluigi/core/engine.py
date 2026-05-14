@@ -51,7 +51,7 @@ class WaluigiEngine:
             "command": task.command,
             "script":  task.script,
             "id": task.id,
-            "job_id": job_metadata['job_id'],
+            "job_id": job_metadata['name'],
             "params": vars(task.params),
             "params_hash": task.hash(task.params),
             "attributes": vars(task.attributes),
@@ -95,7 +95,7 @@ class WaluigiEngine:
             return None
         
         # Chiedi lo stato attuale
-        r = self._register(parent_id, task, job_metadata['job_id'])
+        r = self._register(parent_id, task, job_metadata['name'])
         # Se sta già girando altrove, questo ramo muore qui.
         if r == "locked":
             log(f"⚠️ {task.id} locked")

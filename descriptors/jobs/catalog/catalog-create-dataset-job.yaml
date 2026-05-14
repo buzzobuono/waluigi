@@ -1,0 +1,19 @@
+kind: Job
+metadata:
+    name: "catalog-create-dataset-job"
+    namespace: "catalog"
+    workdir: "work"
+spec:
+    tasks:
+        - id: "catalog-create-dataset-test"
+          taskRef:
+              name: "CatalogCreateDataset"
+          config:
+              dataset: "tests/test_dataset"
+              source_id: "test-local"
+              format: "parquet"
+              description: "Test dataset"
+          resources:
+              coin: 1
+          affinity:
+              - python

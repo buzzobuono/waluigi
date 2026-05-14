@@ -8,10 +8,10 @@ import uuid
 import configargparse
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse
 from waluigi.boss.db import WaluigiDB
 from waluigi.core.engine import WaluigiEngine
-from waluigi.core.task_v2 import DynamicTask, _expand_pipeline
+from waluigi.core.dag import DAGTask, parse_definition
 
 app = FastAPI()
 
@@ -73,15 +73,16 @@ def planner_loop():
                 time.sleep(5)
                 continue
 
-            job_id = job['job_id']
-            task = DynamicTask(job['spec'])
+            job_id = job['metadata']['name']
+           
+            task = DAGTask(job['spec'])
 
             res = engine.build(
                 job_metadata=job['metadata'],
                 task=task,
                 parent_id=None
             )
-
+            
             if res is True:
                 log(f"🏁 Job completed: {job_id}")
                 db.update_job_status(job_id, "SUCCESS")
@@ -109,25 +110,20 @@ async def submit(request: Request):
     data = await request.json()
 
     kind = data.get("kind")
-    if kind == "Pipeline":
-        spec = _expand_pipeline(data)
-    elif kind in ("DAG", "Job"):
-        if not isinstance(spec, dict):
-            return JSONResponse({"status": "error", "message": "kind: DAG requires spec to be a dict with nested requires."}, status_code=422)
+    if kind == "Job":
+        spec = parse_definition(data)
     else:
-        return JSONResponse({"status": "error", "message": "Unsupported kind. Use 'kind: DAG' or 'kind: Pipeline'."}, status_code=400)
+        return JSONResponse({"status": "error", "message": "Unsupported kind. Use 'kind: Job'"}, status_code=400)
 
     metadata = data.get("metadata", {})
     try:
-        task = DynamicTask(spec)
-        job_id = f"job:{task.id}"
+        task = DAGTask(spec)
+        job_id = metadata["name"]
         status = db.get_job_status(job_id)
 
         if status and status != 'SUCCESS' and status != 'FAILED':
             log(f"⚠️ Submission rejected: {job_id} is already active.")
             return JSONResponse({"status": "rejected", "message": "already active"}, status_code=409)
-
-        metadata['job_id'] = job_id
 
         db.create_job(
             job_id=job_id,
