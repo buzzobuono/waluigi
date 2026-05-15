@@ -216,11 +216,7 @@ spec:
     tasks:
         - id: "extract_erp"
           taskSpec:
-              kind: Task
-              metadata:
-                  name: "extract_erp"
-              spec:
-                  script: *extract_script
+              script: *extract_script
           params:
               source: "ERP"
           config: *cfg_source
@@ -231,11 +227,7 @@ spec:
 
         - id: "clean_erp"
           taskSpec:
-              kind: Task
-              metadata:
-                  name: "clean_erp"
-              spec:
-                  script: *clean_script
+              script: *clean_script
           requires:
               - "extract_erp"
           params:
@@ -252,11 +244,7 @@ spec:
 
         - id: "extract_web"
           taskSpec:
-              kind: Task
-              metadata:
-                  name: "extract_web"
-              spec:
-                  script: *extract_script
+              script: *extract_script
           params:
               source: "WEB"
           config: *cfg_source
@@ -267,11 +255,7 @@ spec:
 
         - id: "clean_web"
           taskSpec:
-              kind: Task
-              metadata:
-                  name: "clean_web"
-              spec:
-                  script: *clean_script
+              script: *clean_script
           requires:
               - "extract_web"
           params:
@@ -288,11 +272,7 @@ spec:
 
         - id: "extract_social"
           taskSpec:
-              kind: Task
-              metadata:
-                  name: "extract_social"
-              spec:
-                  script: *extract_script
+              script: *extract_script
           params:
               source: "SOCIAL"
           config: *cfg_source
@@ -303,11 +283,7 @@ spec:
 
         - id: "clean_social"
           taskSpec:
-              kind: Task
-              metadata:
-                  name: "clean_social"
-              spec:
-                  script: *clean_script
+              script: *clean_script
           requires:
               - "extract_social"
           params:
@@ -324,11 +300,7 @@ spec:
 
         - id: "final_report"
           taskSpec:
-              kind: Task
-              metadata:
-                  name: "final_report"
-              spec:
-                  script: *report_script
+              script: *report_script
           requires:
               - "clean_erp"
               - "clean_web"

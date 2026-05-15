@@ -6,10 +6,10 @@ from waluigi.catalog.services.dq_service import DQService
 from waluigi.catalog.api.dependencies import dq_service
 
 dq_router = APIRouter(
-    prefix="/datasets"
+    prefix=""
 )
 
-@dq_router.get("/{dataset_id:path}/expectations", tags=["DQ Expectations"],
+@dq_router.get("/datasets/{dataset_id:path}/expectations", tags=["DQ Expectations"],
          summary="List all DQ expectations for a dataset")
 async def list_expectations(dataset_id: str, dq_service: DQService = Depends(dq_service)):
     try:
@@ -18,7 +18,7 @@ async def list_expectations(dataset_id: str, dq_service: DQService = Depends(dq_
         return ko(str(e), 404)
 
 
-@dq_router.post("/{dataset_id:path}/expectations", tags=["DQ Expectations"],
+@dq_router.post("/datasets/{dataset_id:path}/expectations", tags=["DQ Expectations"],
           summary="Add a DQ expectation to a dataset")
 async def add_expectation(dataset_id: str, body: ExpectationCreateRequest, dq_service: DQService = Depends(dq_service)):
     try:
@@ -29,7 +29,7 @@ async def add_expectation(dataset_id: str, body: ExpectationCreateRequest, dq_se
         return ko(str(e), 404)
 
 
-@dq_router.patch("/{dataset_id:path}/expectations/{exp_id}", tags=["DQ Expectations"],
+@dq_router.patch("/datasets/{dataset_id:path}/expectations/{exp_id}", tags=["DQ Expectations"],
            summary="Update a DQ expectation")
 async def update_expectation(dataset_id: str, exp_id: int, body: ExpectationUpdateRequest, dq_service: DQService = Depends(dq_service)):
     try:
@@ -39,7 +39,7 @@ async def update_expectation(dataset_id: str, exp_id: int, body: ExpectationUpda
         return ko(str(e), 404)
 
 
-@dq_router.delete("/{dataset_id:path}/expectations/{exp_id}", tags=["DQ Expectations"],
+@dq_router.delete("/datasets/{dataset_id:path}/expectations/{exp_id}", tags=["DQ Expectations"],
             summary="Delete a DQ expectation")
 async def delete_expectation(dataset_id: str, exp_id: int, dq_service: DQService = Depends(dq_service)):
     try:
@@ -47,7 +47,7 @@ async def delete_expectation(dataset_id: str, exp_id: int, dq_service: DQService
     except ValueError as e:
         return ko(str(e), 404)
     
-@dq_router.get("/{dataset_id:path}/dq", tags=["DQ Results"],
+@dq_router.get("/datasets/{dataset_id:path}/dq", tags=["DQ Results"],
          summary="List all DQ run results for a dataset (one per version)")
 async def list_dq_results(dataset_id: str, dq_service: DQService = Depends(dq_service)):
     try:
@@ -56,7 +56,7 @@ async def list_dq_results(dataset_id: str, dq_service: DQService = Depends(dq_se
         return ko(str(e), 404)
 
 
-@dq_router.get("/{dataset_id:path}/dq/{version}", tags=["DQ Results"],
+@dq_router.get("/datasets/{dataset_id:path}/dq/{version}", tags=["DQ Results"],
          summary="Get the DQ result for a specific version")
 async def get_dq_result(dataset_id: str, version: str, dq_service: DQService = Depends(dq_service)):
     try:

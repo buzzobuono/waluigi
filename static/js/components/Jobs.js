@@ -57,7 +57,7 @@ export default {
 
     async function deleteJob(jobId) {
       confirmRef.value.ask(
-        `Delete job "${jobId}"?`,
+        f`Delete job "${jobId}"?`,
         async (ok) => {
           if (!ok) return;
           await api.deleteJob(jobId);
@@ -74,7 +74,7 @@ export default {
   template: `
     <base-page
       title="Jobs"
-      subtitle="Job monitoring and managememt"
+      subtitle="Job monitoring and management"
       icon="fas fa-briefcase"
       :loading="loading && !jobs.length"
       :error="error">

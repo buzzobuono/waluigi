@@ -17,11 +17,7 @@ spec:
     tasks:
         - id: "gen_sales"
           taskSpec:
-              kind: Task
-              metadata:
-                name: "gen_sales"
-              spec:
-                  script: |
+              script: |
                     import pandas as pd, numpy as np
                     from waluigi.tasks._io import write_output
                     rng = np.random.default_rng(2026)
@@ -48,11 +44,7 @@ spec:
 
         - id: "gen_products"
           taskSpec:
-              kind: Task
-              metadata:
-                name: "gen_products"
-              spec:
-                  script: |
+              script: |
                     import pandas as pd, numpy as np
                     from waluigi.tasks._io import write_output
                     rng = np.random.default_rng(2026)
@@ -75,11 +67,7 @@ spec:
 
         - id: "gen_customers"
           taskSpec:
-              kind: Task
-              metadata:
-                name: "gen_customers"
-              spec:
-                  script: |
+              script: |
                     import pandas as pd, numpy as np
                     from waluigi.tasks._io import write_output
                     rng = np.random.default_rng(2026)
@@ -102,11 +90,7 @@ spec:
 
         - id: "gen_regions"
           taskSpec:
-              kind: Task
-              metadata:
-                name: "gen_regions"
-              spec:
-                  script: |
+              script: |
                     import pandas as pd
                     from waluigi.tasks._io import write_output
                     df = pd.DataFrame({

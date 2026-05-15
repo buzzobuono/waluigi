@@ -44,7 +44,7 @@ class WaluigiEngine:
         task_resources = getattr(task, 'resources', {'coin': 1.0})
         self.db.release_resources(task_resources)
             
-    def _dispatch(self, job_metadata, task):
+    def _dispatch_(self, job_metadata, task):
         payload = {
             "workdir": job_metadata['workdir'],
             "type":    task.type,
@@ -78,6 +78,43 @@ class WaluigiEngine:
                 continue
                 
         return False
+        
+    def _dispatch(self, job_metadata, task):
+        payload = {
+            "workdir": job_metadata['workdir'],
+            "type":    task.type,
+            "command": task.command,
+            "script":  task.script,
+            "id": task.id,
+            "job_id": job_metadata['name'],
+            "params": vars(task.params),
+            "params_hash": task.hash(task.params),
+            "attributes": vars(task.attributes),
+            "config": task.config,
+            "resources": task.resources,
+            "namespace": task.namespace
+        }
+        
+        workers = self.db.get_available_workers()
+        for worker in workers:
+            try:
+                r = requests.post(f"{worker['url']}/execute", json=payload, timeout=10)
+                if r.status_code == 202:
+                    log(f"🚀 Inviato a {worker['url']}: {task.id}")
+                    return "SUCCESS"
+                elif r.status_code == 400:
+                    log(f"💥 Errore fatale (400) dal worker {worker['url']} per {task.id}")
+                    return "FATAL_ERROR"
+                elif r.status_code == 429:
+                    log(f"⏳ Workers {worker['url']} occupato per {task.id}")
+                else:
+                    log(f"⏳ Workers {worker['url']} errore {r.status_code} per {task.id}")
+            except Exception as e:
+                log(f"❌ Worker {worker['url']} non ha risposto. Rimozione in corso.")
+                self.db.delete_worker(worker['url'])
+                continue
+                
+        return "RETRY"
         
     def registerWorker(self, worker):
         log(f"👷 Contattato dal worker: {worker['url']}")
@@ -142,11 +179,19 @@ class WaluigiEngine:
                 return False
             
             log(f"🚀 {task.id} submitted")
-            success = self._dispatch(job_metadata, task)
-            if not success:
-                log(f"❌ {task.id} cannot be submitted")
+            dispatch_status = self._dispatch(job_metadata, task)
+            
+            if dispatch_status == "FATAL_ERROR":
+                log(f"💀 {task.id} fallimento definitivo durante il dispatch")
+                self._deallocate(task)
+                self._update_task(task, "FAILED")
+                return None # Ferma la propagazione al padre
+                
+            if dispatch_status == "RETRY":
+                log(f"❌ {task.id} cannot be submitted (no workers available)")
                 self._deallocate(task)    
                 self._update_task(task, "PENDING")
+                return False
         
         except Exception as e:
             self._deallocate(task)
@@ -154,4 +199,5 @@ class WaluigiEngine:
             self._update_task(task, "PENDING")
             
         return False
+
         

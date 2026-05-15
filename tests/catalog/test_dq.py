@@ -100,7 +100,7 @@ def test_update_expectation(dataset_id):
 
 def test_dq_flow_on_commit(dataset_id, sample_data):
     # Warmup delle regole
-    catalog._get("/datasets/dq/rules")
+    catalog._get("/dq/rules")
 
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     
@@ -131,7 +131,7 @@ def test_dq_flow_on_commit(dataset_id, sample_data):
 # ── DQ Catalog ────────────────────────────────────────────────────────────────
 
 def test_list_dq_rules():
-    rules = catalog._get("/datasets/dq/rules")
+    rules = catalog._get("/dq/rules")
     assert isinstance(rules, list)
     # Verifichiamo che una delle tue regole sia presente
     assert any(r["id"] == "expect_column_values_to_not_be_null" for r in rules)
@@ -144,7 +144,7 @@ def test_get_dq_suite_enrichment(tmp_path):
     suite_file.write_text("- rule_id: expect_column_values_to_not_be_null\n  inputs: {x: col1}")
     
     # Testiamo l'arricchimento della suite
-    res = catalog._get("/datasets/dq/suite", params={"path": str(suite_file)})
+    res = catalog._get("/dq/suite", params={"path": str(suite_file)})
     assert isinstance(res, list)
     assert res[0]["found"] is True
     assert "formula" in res[0]
@@ -189,7 +189,7 @@ def test_dq_result_error_handling(dataset_id):
 
 
 def test_list_rules_is_sorted():
-    rules = catalog._get("/datasets/dq/rules")
+    rules = catalog._get("/dq/rules")
     rule_ids = [r["id"] for r in rules]
     assert rule_ids == sorted(rule_ids), "Le regole DQ non sono restituite in ordine alfabetico"
 
