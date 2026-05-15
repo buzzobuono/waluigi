@@ -2,7 +2,7 @@ import pytest
 import shutil
 import tempfile
 
-from waluigi.sdk.catalog import catalog, CatalogError
+from waluigi.sdk.catalog import CatalogError
 from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -18,7 +18,7 @@ ROWS = [
 
 
 @pytest.fixture(scope="module", autouse=True)
-def ensure_source():
+def ensure_source(catalog):
     try:
         catalog.create_source(SourceCreateRequest(
             id=SOURCE_ID, type=SourceType.LOCAL,
@@ -31,17 +31,17 @@ def ensure_source():
 
 
 @pytest.fixture(autouse=True)
-def cleanup():
-    def _clean():
+def cleanup(catalog):
+    def _clean(catalog):
         try: catalog._delete(f"/datasets/{DATASET_ID}")
         except Exception: pass
-    _clean()
+    _clean(catalog)
     yield
-    _clean()
+    _clean(catalog)
 
 
 @pytest.fixture
-def committed_version():
+def committed_version(catalog):
     """Write one version and return (handle, version_str)."""
     handle = catalog.create_dataset(DATASET_ID, format="parquet", source_id=SOURCE_ID)
     with handle.create_version(metadata={"ref": "v1"}, force=True) as ctx:
@@ -52,18 +52,18 @@ def committed_version():
 
 # ── List versions ─────────────────────────────────────────────────────────────
 
-def test_list_versions_empty_after_create():
+def test_list_versions_empty_after_create(catalog):
     catalog.create_dataset(DATASET_ID, format="parquet", source_id=SOURCE_ID)
     versions = catalog.list_versions(DATASET_ID)
     assert versions == []
 
 
-def test_list_versions_nonexistent_dataset():
+def test_list_versions_nonexistent_dataset(catalog):
     with pytest.raises(CatalogError):
         catalog.list_versions("does/not/exist")
 
 
-def test_list_versions_after_commit():
+def test_list_versions_after_commit(catalog):
     handle = catalog.create_dataset(DATASET_ID, format="parquet", source_id=SOURCE_ID)
     with handle.create_version(metadata={"ref": "v1"}, force=True) as ctx:
         ctx.write(ROWS)
@@ -76,7 +76,7 @@ def test_list_versions_after_commit():
     assert v["location"]   is not None
 
 
-def test_list_versions_newest_first():
+def test_list_versions_newest_first(catalog):
     handle = catalog.create_dataset(DATASET_ID, format="parquet", source_id=SOURCE_ID)
     for i in range(3):
         with handle.create_version(metadata={"seq": str(i)}, force=True) as ctx:
@@ -89,7 +89,7 @@ def test_list_versions_newest_first():
 
 # ── Reserve / Commit (2-phase write) ──────────────────────────────────────────
 
-def test_reserve_returns_location_and_version():
+def test_reserve_returns_location_and_version(catalog):
     catalog.create_dataset(DATASET_ID, format="parquet", source_id=SOURCE_ID)
     result = catalog._post(f"/datasets/{DATASET_ID}/_reserve",
                            json={"metadata": {}, "force": True})
@@ -99,13 +99,13 @@ def test_reserve_returns_location_and_version():
     assert result["skipped"]    is False
 
 
-def test_reserve_nonexistent_dataset():
+def test_reserve_nonexistent_dataset(catalog):
     with pytest.raises(CatalogError):
         catalog._post("/datasets/does/not/exist/_reserve",
                       json={"metadata": {}, "force": True})
 
 
-def test_reserve_dedup_same_metadata_returns_skipped():
+def test_reserve_dedup_same_metadata_returns_skipped(catalog):
     handle = catalog.create_dataset(DATASET_ID, format="parquet", source_id=SOURCE_ID)
     meta = {"run": "daily", "date": "2026-01-01"}
     with handle.create_version(metadata=meta) as ctx:
@@ -117,7 +117,7 @@ def test_reserve_dedup_same_metadata_returns_skipped():
     assert result["version"] is not None
 
 
-def test_reserve_force_bypasses_dedup():
+def test_reserve_force_bypasses_dedup(catalog):
     handle = catalog.create_dataset(DATASET_ID, format="parquet", source_id=SOURCE_ID)
     meta = {"run": "daily", "date": "2026-01-01"}
     with handle.create_version(metadata=meta) as ctx:
@@ -130,7 +130,7 @@ def test_reserve_force_bypasses_dedup():
     assert result["version"] != first_version
 
 
-def test_commit_wrong_status_returns_409(committed_version):
+def test_commit_wrong_status_returns_409(catalog, committed_version):
     _, version = committed_version
     with pytest.raises(CatalogError) as exc_info:
         catalog._post(f"/datasets/{DATASET_ID}/_commit/{version}",
@@ -138,7 +138,7 @@ def test_commit_wrong_status_returns_409(committed_version):
     assert "409" in str(exc_info.value)
 
 
-def test_commit_nonexistent_version():
+def test_commit_nonexistent_version(catalog):
     catalog.create_dataset(DATASET_ID, format="parquet", source_id=SOURCE_ID)
     with pytest.raises(CatalogError):
         catalog._post(f"/datasets/{DATASET_ID}/_commit/9999-fake-version",
@@ -147,7 +147,7 @@ def test_commit_nonexistent_version():
 
 # ── Fail ──────────────────────────────────────────────────────────────────────
 
-def test_fail_reserved_version_removes_it():
+def test_fail_reserved_version_removes_it(catalog):
     catalog.create_dataset(DATASET_ID, format="parquet", source_id=SOURCE_ID)
     reserve = catalog._post(f"/datasets/{DATASET_ID}/_reserve",
                             json={"metadata": {}, "force": True})
@@ -160,7 +160,7 @@ def test_fail_reserved_version_removes_it():
     assert not any(v["version"] == version for v in versions)
 
 
-def test_fail_nonexistent_version():
+def test_fail_nonexistent_version(catalog):
     catalog.create_dataset(DATASET_ID, format="parquet", source_id=SOURCE_ID)
     with pytest.raises(CatalogError):
         catalog._post(f"/datasets/{DATASET_ID}/_fail/9999-fake-version", json={})
@@ -168,20 +168,20 @@ def test_fail_nonexistent_version():
 
 # ── Deprecate ─────────────────────────────────────────────────────────────────
 
-def test_deprecate_version(committed_version):
+def test_deprecate_version(catalog, committed_version):
     _, version = committed_version
     result = catalog._delete(f"/datasets/{DATASET_ID}/_deprecate/{version}")
     assert result["status"] == "deprecated"
 
 
-def test_deprecated_version_not_in_list(committed_version):
+def test_deprecated_version_not_in_list(catalog, committed_version):
     handle, version = committed_version
     catalog._delete(f"/datasets/{DATASET_ID}/_deprecate/{version}")
     versions = catalog.list_versions(DATASET_ID)
     assert not any(v["version"] == version for v in versions)
 
 
-def test_deprecate_then_force_create_new(committed_version):
+def test_deprecate_then_force_create_new(catalog, committed_version):
     handle, version = committed_version
     catalog._delete(f"/datasets/{DATASET_ID}/_deprecate/{version}")
 
@@ -193,7 +193,7 @@ def test_deprecate_then_force_create_new(committed_version):
     assert versions[0]["version"] != version
 
 
-def test_deprecate_nonexistent_version():
+def test_deprecate_nonexistent_version(catalog):
     catalog.create_dataset(DATASET_ID, format="parquet", source_id=SOURCE_ID)
     with pytest.raises(CatalogError):
         catalog._delete(f"/datasets/{DATASET_ID}/_deprecate/9999-fake-version")
@@ -201,7 +201,7 @@ def test_deprecate_nonexistent_version():
 
 # ── Preview ───────────────────────────────────────────────────────────────────
 
-def test_preview_returns_rows_and_columns(committed_version):
+def test_preview_returns_rows_and_columns(catalog, committed_version):
     _, version = committed_version
     result = catalog._get(f"/datasets/{DATASET_ID}/_preview/{version}")
     assert result["dataset_id"] == DATASET_ID
@@ -210,7 +210,7 @@ def test_preview_returns_rows_and_columns(committed_version):
     assert len(result["rows"])  == len(ROWS)
 
 
-def test_preview_limit(committed_version):
+def test_preview_limit(catalog, committed_version):
     _, version = committed_version
     result = catalog._get(f"/datasets/{DATASET_ID}/_preview/{version}",
                           params={"limit": 2})
@@ -218,7 +218,7 @@ def test_preview_limit(committed_version):
     assert len(result["rows"]) == 2
 
 
-def test_preview_offset(committed_version):
+def test_preview_offset(catalog, committed_version):
     _, version = committed_version
     result_all    = catalog._get(f"/datasets/{DATASET_ID}/_preview/{version}")
     result_offset = catalog._get(f"/datasets/{DATASET_ID}/_preview/{version}",
@@ -226,13 +226,13 @@ def test_preview_offset(committed_version):
     assert result_offset["rows"][0] == result_all["rows"][1]
 
 
-def test_preview_nonexistent_version():
+def test_preview_nonexistent_version(catalog):
     catalog.create_dataset(DATASET_ID, format="parquet", source_id=SOURCE_ID)
     with pytest.raises(CatalogError):
         catalog._get(f"/datasets/{DATASET_ID}/_preview/9999-fake-version")
 
 
-def test_preview_nonexistent_dataset():
+def test_preview_nonexistent_dataset(catalog):
     with pytest.raises(CatalogError):
         catalog._get("/datasets/does/not/exist/_preview/2026-01-01T00:00:00+00:00")
 
@@ -244,7 +244,7 @@ DATASET_VIRTUAL    = "test/versions/virtual"
 
 
 @pytest.fixture(scope="module", autouse=True)
-def ensure_sql_source():
+def ensure_sql_source(catalog):
     tmp = tempfile.mkdtemp()
     try:
         catalog.create_source(SourceCreateRequest(
@@ -259,7 +259,7 @@ def ensure_sql_source():
 
 
 @pytest.fixture(autouse=True)
-def cleanup_virtual():
+def cleanup_virtual(catalog):
     try: catalog._delete(f"/datasets/{DATASET_VIRTUAL}")
     except Exception: pass
     yield
@@ -267,7 +267,7 @@ def cleanup_virtual():
     except Exception: pass
 
 
-def test_register_virtual_returns_version():
+def test_register_virtual_returns_version(catalog):
     result = catalog._post(f"/datasets/{DATASET_VIRTUAL}/_register-virtual", json={
         "source_id": SOURCE_SQL_VIRTUAL,
         "location":  "SELECT * FROM orders",
@@ -279,7 +279,7 @@ def test_register_virtual_returns_version():
     assert result["version"]     is not None
 
 
-def test_register_virtual_appears_in_versions():
+def test_register_virtual_appears_in_versions(catalog):
     catalog._post(f"/datasets/{DATASET_VIRTUAL}/_register-virtual", json={
         "source_id": SOURCE_SQL_VIRTUAL,
         "location":  "SELECT 1",
@@ -289,7 +289,7 @@ def test_register_virtual_appears_in_versions():
     assert len(versions) >= 1
 
 
-def test_register_virtual_nonexistent_source():
+def test_register_virtual_nonexistent_source(catalog):
     with pytest.raises(CatalogError):
         catalog._post(f"/datasets/{DATASET_VIRTUAL}/_register-virtual", json={
             "source_id": "no_such_source",

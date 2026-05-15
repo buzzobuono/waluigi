@@ -1,13 +1,13 @@
 import pytest
 import uuid
 import logging
-from waluigi.sdk.catalog import catalog, CatalogError
+from waluigi.sdk.catalog import CatalogError
 from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 
 SOURCE_ID = "test_schema_local"
 
 @pytest.fixture(scope="module", autouse=True)
-def ensure_source():
+def ensure_source(catalog):
     try:
         catalog.create_source(SourceCreateRequest(
             id=SOURCE_ID, type=SourceType.LOCAL,
@@ -18,7 +18,7 @@ def ensure_source():
     except Exception: pass
 
 @pytest.fixture
-def dataset_id():
+def dataset_id(catalog):
     uid = str(uuid.uuid4())[:8]
     id_ = f"test/unit/schema_{uid}"
     yield id_
@@ -34,7 +34,7 @@ def sample_data():
 
 # ── Schema Lifecycle Tests ───────────────────────────────────────────────────
 
-def test_schema_inference_on_write(dataset_id, sample_data):
+def test_schema_inference_on_write(catalog, dataset_id, sample_data):
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     
     with handle.create_version(force=True) as ctx:
@@ -49,7 +49,7 @@ def test_schema_inference_on_write(dataset_id, sample_data):
     assert all(c["status"] == "inferred" for c in columns)
 
 
-def test_patch_column_pii_with_warning(dataset_id, sample_data, caplog):
+def test_patch_column_pii_with_warning(catalog, dataset_id, sample_data, caplog):
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     with handle.create_version(force=True) as ctx:
         ctx.write(sample_data)
@@ -71,7 +71,7 @@ def test_patch_column_pii_with_warning(dataset_id, sample_data, caplog):
     assert any("pii_type is 'none'" in record.message for record in caplog.records)
 
 
-def test_approve_column_logic(dataset_id, sample_data):
+def test_approve_column_logic(catalog, dataset_id, sample_data):
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     with handle.create_version(force=True) as ctx:
         ctx.write(sample_data)
@@ -85,7 +85,7 @@ def test_approve_column_logic(dataset_id, sample_data):
     assert schema["summary"]["published"] == 1
 
 
-def test_publish_full_schema(dataset_id, sample_data):
+def test_publish_full_schema(catalog, dataset_id, sample_data):
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     with handle.create_version(force=True) as ctx:
         ctx.write(sample_data)
@@ -99,7 +99,7 @@ def test_publish_full_schema(dataset_id, sample_data):
     assert schema["summary"]["inferred"] == 0
 
 
-def test_delete_column_from_schema(dataset_id, sample_data):
+def test_delete_column_from_schema(catalog, dataset_id, sample_data):
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     with handle.create_version(force=True) as ctx:
         ctx.write(sample_data)
@@ -110,13 +110,13 @@ def test_delete_column_from_schema(dataset_id, sample_data):
     assert not any(c["column_name"] == "age" for c in schema["columns"])
 
 
-def test_schema_not_found_errors():
+def test_schema_not_found_errors(catalog):
     with pytest.raises(CatalogError) as exc:
         catalog._get("/datasets/invalid/path/schema")
     assert "404" in str(exc.value)
 
 
-def test_patch_upsert_logic(dataset_id):
+def test_patch_upsert_logic(catalog, dataset_id):
     """Verifica che il patch crei la colonna se non esiste (upsert)."""
     catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     
@@ -132,7 +132,7 @@ def test_patch_upsert_logic(dataset_id):
 
 # ── Extended Schema Tests ─────────────────────────────────────────────────────
 
-def test_schema_summary_counters(dataset_id, sample_data):
+def test_schema_summary_counters(catalog, dataset_id, sample_data):
     """Verifica che i contatori nel summary riflettano accuratamente lo stato dello schema."""
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     with handle.create_version(force=True) as ctx:
@@ -154,7 +154,7 @@ def test_schema_summary_counters(dataset_id, sample_data):
     assert summary["draft"] == 1
 
 
-def test_patch_multiple_fields(dataset_id, sample_data):
+def test_patch_multiple_fields(catalog, dataset_id, sample_data):
     """Verifica la persistenza di più metadati semantici su una colonna."""
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     with handle.create_version(force=True) as ctx:
@@ -177,7 +177,7 @@ def test_patch_multiple_fields(dataset_id, sample_data):
         assert col[key] == value
 
 
-def test_set_in_review_logic(dataset_id, sample_data):
+def test_set_in_review_logic(catalog, dataset_id, sample_data):
     """Verifica che ogni patch metta il dataset in stato 'in_review'."""
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     with handle.create_version(force=True) as ctx:
@@ -201,7 +201,7 @@ def test_set_in_review_logic(dataset_id, sample_data):
     # significa che lo status NON cambia con la patch.
     assert col_age["status"] == "published"
 
-def test_delete_and_re_infer_column(dataset_id, sample_data):
+def test_delete_and_re_infer_column(catalog, dataset_id, sample_data):
     """Testa cosa succede se eliminiamo una colonna e poi riscriviamo i dati."""
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     with handle.create_version(force=True) as ctx:
@@ -219,7 +219,7 @@ def test_delete_and_re_infer_column(dataset_id, sample_data):
     assert any(c["column_name"] == "age" for c in schema["columns"])
 
 
-def test_approve_nonexistent_column_fails(dataset_id, sample_data):
+def test_approve_nonexistent_column_fails(catalog, dataset_id, sample_data):
     """Verifica il comportamento del service quando si approva una colonna fantasma."""
     catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     
@@ -230,7 +230,7 @@ def test_approve_nonexistent_column_fails(dataset_id, sample_data):
     assert "Column not found" in str(exc.value)
 
 
-def test_schema_integrity_after_publish(dataset_id, sample_data):
+def test_schema_integrity_after_publish(catalog, dataset_id, sample_data):
     """Assicura che dopo la pubblicazione i dati siano coerenti."""
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     with handle.create_version(force=True) as ctx:

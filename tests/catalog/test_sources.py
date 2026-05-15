@@ -1,27 +1,27 @@
 import pytest
-from waluigi.sdk.catalog import catalog, CatalogError
+from waluigi.sdk.catalog import CatalogError
 from waluigi.catalog.api.schemas import SourceCreateRequest, SourceUpdateRequest, SourceType
 
 @pytest.fixture(scope="module")
-def source_id():
+def source_id(catalog):
     return "pg-dwh-test"
 
 @pytest.fixture(autouse=True)
-def cleanup(source_id):
-    def _delete():
+def cleanup(catalog, source_id):
+    def _delete(catalog):
         try:
             catalog.delete_source(source_id)
         except:
             pass
-    _delete()
+    _delete(catalog)
     yield
-    _delete()
+    _delete(catalog)
 
-def test_list_sources_initial():
+def test_list_sources_initial(catalog):
     sources = catalog.list_sources()
     assert isinstance(sources, list)
 
-def test_create_and_get_source(source_id):
+def test_create_and_get_source(catalog, source_id):
     new_source = SourceCreateRequest(
         id=source_id,
         type=SourceType.SQL,
@@ -36,7 +36,7 @@ def test_create_and_get_source(source_id):
     assert source["id"] == source_id
     assert source["config"]["host"] == "10.0.0.1"
 
-def test_update_source(source_id):
+def test_update_source(catalog, source_id):
     catalog.create_source(SourceCreateRequest(id=source_id, type=SourceType.SQL, description="Test description", config={}))
     
     update_data = SourceUpdateRequest(
@@ -50,7 +50,7 @@ def test_update_source(source_id):
     assert updated["description"] == "Updated Description"
     assert updated["config"]["host"] == "10.0.0.2"
 
-def test_delete_source(source_id):
+def test_delete_source(catalog, source_id):
     catalog.create_source(SourceCreateRequest(id=source_id, type=SourceType.SQL, description="Test description", config={}))
     
     catalog.delete_source(source_id)
@@ -59,7 +59,7 @@ def test_delete_source(source_id):
         catalog.get_source(source_id)
         
 
-def test_create_source_is_idempotent(source_id):
+def test_create_source_is_idempotent(catalog, source_id):
     data = SourceCreateRequest(
         id=source_id, 
         type=SourceType.SQL, 
@@ -75,7 +75,7 @@ def test_create_source_is_idempotent(source_id):
     assert any(s["id"] == source_id for s in sources)
     assert len([s for s in sources if s["id"] == source_id]) == 1
 
-def test_create_existing_source_type_mismatch_fails(source_id):
+def test_create_existing_source_type_mismatch_fails(catalog, source_id):
     initial_data = SourceCreateRequest(
         id=source_id, 
         type=SourceType.SQL, 

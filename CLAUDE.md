@@ -13,6 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 wlboss --port 8082 --db-path ./db/waluigi.db
 wlworker --boss-url http://localhost:8082 --port 5001 --slots 2
 wlcatalog --port 9000 --data-path ./data --db-path ./db/catalog.db
+wlconsole --port 8080   # web console with JWT auth, proxies Boss + Catalog
 
 # CLI client
 wlctl --url http://localhost:8082 apply -f descriptors/analytics.yaml
@@ -30,7 +31,7 @@ wlctl delete namespace <ns>
 
 # Tests
 pytest tests/
-pytest tests/catalog/test_catalog.py   # run a single test file
+pytest tests/catalog/test_datasets.py   # run a single test file
 
 # Local dev environment
 docker compose up
@@ -42,15 +43,16 @@ Config uses `ConfigArgParse` — all CLI flags map to env vars with component pr
 
 ## Architecture
 
-Three independent processes communicate over HTTP:
+Four independent processes communicate over HTTP:
 
 | Component | Port | Role |
 |-----------|------|------|
 | Boss | 8082 | Control plane — SQLite state, planner loop, DAG execution |
 | Worker | 5001+ | Execution plane — receives pushed tasks, forks subprocesses |
 | Catalog | 9000 | Optional — dataset metadata, schema tracking, data quality |
+| Console | 8080 | Optional — web UI with JWT auth, proxies Boss + Catalog APIs |
 
-Entry points (defined in `pyproject.toml`): `wlboss`, `wlworker`, `wlcatalog`, `wlctl`.
+Entry points (defined in `pyproject.toml`): `wlboss`, `wlworker`, `wlcatalog`, `wlconsole`, `wlctl`.
 
 ### DAG Execution Flow
 
@@ -68,18 +70,26 @@ Entry points (defined in `pyproject.toml`): `wlboss`, `wlworker`, `wlcatalog`, `
 | `waluigi/boss/__main__.py` | Boss FastAPI app, planner loop, all REST endpoints |
 | `waluigi/boss/db.py` | SQLite schema and all DB query functions (`WaluigiDB`) |
 | `waluigi/core/engine.py` | Recursive DAG planner: `build()`, `_dispatch()`, resource allocation |
-| `waluigi/core/task.py` | `DynamicTask` model, param resolution (`${parent.params.KEY}`), task hashing |
+| `waluigi/core/dag.py` | `DAGTask` model, YAML pipeline parser, param resolution (`${parent.params.KEY}`) |
 | `waluigi/core/responses.py` | Standard response envelope (`data` + `diagnostic`) |
+| `waluigi/core/utils.py` | Logging setup from YAML, Pydantic v1/v2 compat shim |
 | `waluigi/worker.py` | Worker FastAPI app, subprocess execution, log streaming, heartbeat |
 | `waluigi/cli.py` | `wlctl` command implementations |
-| `waluigi/catalog/__main__.py` | Catalog FastAPI app, all dataset/source/schema endpoints |
+| `waluigi/console.py` | Web console FastAPI app — JWT auth (HS256/PBKDF2), user CRUD, transparent proxy to Boss + Catalog |
+| `waluigi/catalog/__main__.py` | Catalog FastAPI app — wires up all routers via `include_router` |
+| `waluigi/catalog/config.py` | Catalog ConfigArgParse config (port, db-url, data-path, rules-path) |
 | `waluigi/catalog/db.py` | Catalog SQLite schema and queries |
-| `waluigi/catalog/models.py` | Pydantic request/response models for Catalog |
+| `waluigi/catalog/api/schemas.py` | Pydantic request/response models for all Catalog endpoints |
+| `waluigi/catalog/api/routes/` | Separate FastAPI routers (dataset, source, version, schema, browser, chart, dq, lineage, materialize, metadata) |
+| `waluigi/catalog/services/` | Service layer between routers and DB (dataset, source, chart, dq, lineage, materialize, metadata, schema, version) |
 | `waluigi/catalog/entities.py` | Catalog DB entity dataclasses |
-| `waluigi/sdk/task.py` | `Task` base class for task scripts (reads env vars) |
+| `waluigi/catalog/utils.py` | Schema inference from files (CSV/Parquet/JSON), ISO timestamp helpers |
+| `waluigi/sdk/context.py` | Singleton `context` — reads `WALUIGI_PARAM_*` / `WALUIGI_ATTRIBUTE_*` / `WALUIGI_CONFIG` from env |
 | `waluigi/sdk/catalog.py` | `CatalogClient`, `DatasetReader`, `DatasetWriter` |
 | `waluigi/sdk/dataquality.py` | `DQManager` — YAML-rule-based data validation |
 | `waluigi/sdk/connectors/` | Pluggable storage connectors (local, S3, SFTP, SQL) |
+| `waluigi/tasks/` | Built-in reusable task scripts: filter, aggregate, join, merge, pivot, deduplicate, select, add_derived_columns, catalog_* |
+| `waluigi/tasks/_io.py` | Helper functions for built-in tasks: `read_input()`, `write_output()` with automatic lineage |
 | `waluigi/_deprecated/` | Old code — ignore entirely |
 
 ### Task State Machine
@@ -137,7 +147,7 @@ Boss uses WAL mode with `busy_timeout=30s`. Multiple Boss replicas can run concu
 ### Worker Subprocess Contract
 
 - Exit code 0 → `SUCCESS`; non-zero → `FAILED`
-- Task scripts access inputs via `os.environ["WALUIGI_PARAM_KEY"]` or via `from waluigi.sdk.task import Task`
+- Task scripts access inputs via `os.environ["WALUIGI_PARAM_KEY"]` or via `from waluigi.sdk.context import context` (`context.params.KEY`)
 - Log buffering: worker sends logs in batches of 5 lines to reduce HTTP overhead
 - Worker registers with Boss via heartbeat (configurable interval); `free_slots = SLOTS - active_tasks_count`
 
@@ -203,6 +213,23 @@ All Boss and Catalog endpoints return:
 - `GET/POST /datasets/{id}/metadata/{version}` — Get or set version metadata
 - `GET /datasets/{id}/lineage/{version}` — Get upstream/downstream lineage
 
+**Charts:**
+- `GET /datasets/{id}/charts` — List chart definitions
+- `POST /datasets/{id}/charts` — Create chart definition (ECharts spec)
+- `PATCH /datasets/{id}/charts/{chart_id}` — Update chart
+- `DELETE /datasets/{id}/charts/{chart_id}` — Delete chart
+- `GET /datasets/{id}/charts/{chart_id}/render` — Render chart as ECharts option for a specific version
+- `GET /datasets/{id}/charts/{key}/render` — Render chart by key
+
+**Data Quality:**
+- `GET /datasets/{id}/expectations` — List DQ expectations
+- `POST /datasets/{id}/expectations` — Add expectation
+- `PATCH /datasets/{id}/expectations/{exp_id}` — Update expectation
+- `DELETE /datasets/{id}/expectations/{exp_id}` — Delete expectation
+- `GET /datasets/{id}/dq/{version}` — DQ results for a version
+- `GET /dq/rules` — List available DQ rule catalog
+- `GET /dq/suites/{path}` — Parse and return a DQ suite YAML
+
 **Browse:**
 - `GET /folders/{prefix}/` — List datasets and virtual sub-prefixes (S3 ListObjects semantics)
 
@@ -219,12 +246,11 @@ Dataset status: `draft` → `in_review` → `approved` → `deprecated`
 ## SDK Usage (Task Scripts)
 
 ```python
-from waluigi.sdk.task import Task
+from waluigi.sdk.context import context   # reads WALUIGI_PARAM_* / WALUIGI_ATTRIBUTE_* / WALUIGI_CONFIG from env
 from waluigi.sdk.catalog import CatalogClient
 
-task = Task()          # reads WALUIGI_PARAM_* and WALUIGI_ATTRIBUTE_* from env
-date = task.params.date
-job_id = task.job_id   # WALUIGI_JOB_ID
+date = context.params.date
+job_id = context.job_id   # WALUIGI_JOB_ID
 
 catalog = CatalogClient()   # reads WALUIGI_CATALOG_URL from env
 
@@ -236,6 +262,28 @@ df = reader.read()
 with catalog.produce("sales/clean/transactions", metadata={"date": date}, inputs=[reader]) as writer:
     writer.write(df)
 ```
+
+### Built-in Tasks (`waluigi/tasks/`)
+
+Reusable task scripts invocable from YAML descriptors without custom code:
+
+| Task script | Function |
+|-------------|----------|
+| `filter_dataset.py` | `df.query(where_clause)` |
+| `select_columns.py` | Column projection |
+| `add_derived_columns.py` | Compute new columns via expressions |
+| `aggregate_dataset.py` | Group-by aggregation |
+| `join_datasets.py` | Join two datasets |
+| `merge_datasets.py` | Union/concat datasets |
+| `pivot_dataset.py` | Pivot table |
+| `deduplicate_dataset.py` | Drop duplicate rows |
+| `catalog_create_dataset.py` | Create Catalog dataset via params |
+| `catalog_create_source.py` | Create Catalog source via params |
+| `catalog_define_schema.py` | Define/publish schema |
+| `catalog_set_expectations.py` | Attach DQ expectations from YAML |
+| `catalog_set_charts.py` | Attach chart definitions from YAML |
+
+All built-in tasks use `waluigi/tasks/_io.py` helpers (`read_input()` / `write_output()`) which handle source upsert and lineage automatically.
 
 ## Storage Connectors
 
@@ -269,7 +317,7 @@ Formulas are validated via AST whitelist before execution (no arbitrary code). `
 
 **Task hashing:** `id + sorted(key:value)` pairs from params and attributes — used for idempotency. Same task ID + same params = same record; same ID + different params = distinct record.
 
-**Parameter interpolation:** `${parent.params.KEY}` in child task spec is resolved at `DynamicTask` construction time against the parent's params namespace.
+**Parameter interpolation:** `${parent.params.KEY}` in child task spec is resolved at `DAGTask` construction time (`core/dag.py`) against the parent's params namespace.
 
 **Version format:** ISO 8601 timestamp with milliseconds (e.g., `2026-04-11T10:00:00.123+00:00`).
 
@@ -288,18 +336,32 @@ Formulas are validated via AST whitelist before execution (no arbitrary code). `
 ## Tests
 
 `tests/conftest.py` auto-starts a Catalog server for integration tests. Test files:
-- `tests/catalog/` — Catalog integration tests (datasets, folders, sources, data produce/resolve)
-- `tests/dq_test.py` — Data quality rule tests
+- `tests/test_worker.py` — Worker unit tests (hash, HTTP helpers, `/execute` endpoint, subprocess, slot management)
+- `tests/catalog/test_datasets.py` — Dataset CRUD, lifecycle, find by status
+- `tests/catalog/test_sources.py` — Source CRUD and upsert
+- `tests/catalog/test_versions.py` — Version list, reserve/commit, deprecate, preview
+- `tests/catalog/test_schema.py` — Schema get, patch column, publish
+- `tests/catalog/test_metadata.py` — Metadata key-value per version
+- `tests/catalog/test_folders.py` — Folder browse (virtual prefixes)
+- `tests/catalog/test_dataset_produce.py` — End-to-end produce/resolve via SDK
+- `tests/catalog/test_dq.py` — DQ expectations CRUD and results
+- `tests/catalog/test_charts.py` — Chart definitions lifecycle and render (ECharts)
+- `tests/catalog/test_lineage.py` — Lineage chain (RAW→SILVER→GOLD), version isolation
+- `tests/dq_test.py` — Data quality rule formula tests
 - `tests/cf_test.py` — Codice fiscale (Italian tax code) coherence rule test
 - `tests/describe_rule_test.py` — Rule description tests
 - `tests/rules_list_test.py` — Rule listing tests
 
 ## Docker / Deployment
 
-`docker-compose.yml` runs 3 services: `boss` (1 replica), `worker` (3 replicas), `catalog` (1 replica). Shared volumes: `/db` (SQLite), `/data` (datasets), `/work` (task working dirs).
+`docker-compose.yml` runs 4 services: `boss` (1 replica), `worker` (3 replicas), `catalog` (1 replica), `console` (1 replica). Shared volumes: `/db` (SQLite), `/data` (datasets), `/work` (task working dirs).
 
-Dockerfiles: `Dockerfile.boss`, `Dockerfile.worker`, `Dockerfile.catalog`.
+Dockerfiles: `Dockerfile.boss`, `Dockerfile.worker`, `Dockerfile.catalog`, `Dockerfile.console`.
+
+Swarm deployment: `deploy-to-swarm.sh` / `clean-from-swarm.sh`.
 
 ## Web Console
 
-Static single-page app in `static/`. Vue-style components served directly by Boss. Key views: Namespaces, Jobs, Tasks, Workers, Resources, DAG chart, Log modal, Catalog, Lineage, Dataset preview.
+Two-tier setup:
+1. **Static SPA** (`static/`) — Vue-style components served by the Console process. Key views: Namespaces, Jobs, Tasks, Workers, Resources, DAG chart, Log modal, Catalog, Lineage, Dataset preview, Charts.
+2. **Console server** (`waluigi/console.py`) — FastAPI app that handles JWT auth (HS256 + PBKDF2 passwords), user management (admin-only CRUD), and acts as an authenticated reverse proxy to Boss and Catalog APIs.

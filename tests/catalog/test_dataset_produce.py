@@ -3,7 +3,6 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from waluigi.sdk.catalog import catalog, CatalogError
 from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 
 # ── Shared rows fixture ───────────────────────────────────────────────────────
@@ -26,7 +25,7 @@ SOURCE_LOCAL   = "produce_local"
 DATASET_LOCAL  = "test/produce/sales_local"
 
 @pytest.fixture(autouse=True)
-def cleanup_local():
+def cleanup_local(catalog):
     def _clean():
         try: catalog._delete(f"/datasets/{DATASET_LOCAL}")
         except Exception: pass
@@ -37,7 +36,7 @@ def cleanup_local():
     _clean()
 
 
-def test_produce_local_row_count(sample_rows):
+def test_produce_local_row_count(catalog, sample_rows):
     catalog.create_source(SourceCreateRequest(
         id=SOURCE_LOCAL, type=SourceType.LOCAL, config={}, description="Local"))
     handle = catalog.create_dataset(DATASET_LOCAL, format="parquet", source_id=SOURCE_LOCAL)
@@ -49,7 +48,7 @@ def test_produce_local_row_count(sample_rows):
     assert not ctx.skipped
 
 
-def test_produce_local_version_committed(sample_rows):
+def test_produce_local_version_committed(catalog, sample_rows):
     catalog.create_source(SourceCreateRequest(
         id=SOURCE_LOCAL, type=SourceType.LOCAL, config={}, description="Local"))
     handle = catalog.create_dataset(DATASET_LOCAL, format="parquet", source_id=SOURCE_LOCAL)
@@ -65,7 +64,7 @@ def test_produce_local_version_committed(sample_rows):
     assert ver["location"] is not None
 
 
-def test_produce_local_readable_after_commit(sample_rows):
+def test_produce_local_readable_after_commit(catalog, sample_rows):
     catalog.create_source(SourceCreateRequest(
         id=SOURCE_LOCAL, type=SourceType.LOCAL, config={}, description="Local"))
     handle = catalog.create_dataset(DATASET_LOCAL, format="parquet", source_id=SOURCE_LOCAL)
@@ -79,7 +78,7 @@ def test_produce_local_readable_after_commit(sample_rows):
     assert set(df.columns) >= {"date", "product", "quantity", "revenue"}
 
 
-def test_produce_local_dedup_skips_on_same_metadata(sample_rows):
+def test_produce_local_dedup_skips_on_same_metadata(catalog, sample_rows):
     catalog.create_source(SourceCreateRequest(
         id=SOURCE_LOCAL, type=SourceType.LOCAL, config={}, description="Local"))
     handle = catalog.create_dataset(DATASET_LOCAL, format="parquet", source_id=SOURCE_LOCAL)
@@ -96,7 +95,7 @@ def test_produce_local_dedup_skips_on_same_metadata(sample_rows):
     assert len(catalog.list_versions(DATASET_LOCAL)) == 1
 
 
-def test_produce_local_force_creates_new_version(sample_rows):
+def test_produce_local_force_creates_new_version(catalog, sample_rows):
     catalog.create_source(SourceCreateRequest(
         id=SOURCE_LOCAL, type=SourceType.LOCAL, config={}, description="Local"))
     handle = catalog.create_dataset(DATASET_LOCAL, format="parquet", source_id=SOURCE_LOCAL)
@@ -113,7 +112,7 @@ def test_produce_local_force_creates_new_version(sample_rows):
     assert len(catalog.list_versions(DATASET_LOCAL)) == 2
 
 
-def test_produce_local_version_metadata_stored(sample_rows):
+def test_produce_local_version_metadata_stored(catalog, sample_rows):
     catalog.create_source(SourceCreateRequest(
         id=SOURCE_LOCAL, type=SourceType.LOCAL, config={}, description="Local"))
     handle = catalog.create_dataset(DATASET_LOCAL, format="parquet", source_id=SOURCE_LOCAL)
@@ -141,7 +140,7 @@ def sqlite_url():
 
 
 @pytest.fixture(autouse=True)
-def cleanup_sql():
+def cleanup_sql(catalog):
     def _clean():
         try: catalog._delete(f"/datasets/{DATASET_SQL}")
         except Exception: pass
@@ -152,7 +151,7 @@ def cleanup_sql():
     _clean()
 
 
-def test_produce_sql_row_count(sqlite_url, sample_rows):
+def test_produce_sql_row_count(catalog, sqlite_url, sample_rows):
     catalog.create_source(SourceCreateRequest(
         id=SOURCE_SQL, type=SourceType.SQL,
         config={"url": sqlite_url}, description="SQLite"))
@@ -165,7 +164,7 @@ def test_produce_sql_row_count(sqlite_url, sample_rows):
     assert not ctx.skipped
 
 
-def test_produce_sql_version_committed(sqlite_url, sample_rows):
+def test_produce_sql_version_committed(catalog, sqlite_url, sample_rows):
     catalog.create_source(SourceCreateRequest(
         id=SOURCE_SQL, type=SourceType.SQL,
         config={"url": sqlite_url}, description="SQLite"))

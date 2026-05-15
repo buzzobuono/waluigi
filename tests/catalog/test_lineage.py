@@ -1,12 +1,12 @@
 import pytest
 import uuid
-from waluigi.sdk.catalog import catalog, CatalogError
+from waluigi.sdk.catalog import CatalogError
 from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 
 SOURCE_ID = "lineage_test_source"
 
 @pytest.fixture(scope="module", autouse=True)
-def setup_lineage_source():
+def setup_lineage_source(catalog):
     try:
         catalog.create_source(SourceCreateRequest(
             id=SOURCE_ID, type=SourceType.LOCAL, config={}, description="Source for lineage tests"))
@@ -16,7 +16,7 @@ def setup_lineage_source():
     except Exception: pass
 
 @pytest.fixture
-def ds_names():
+def ds_names(catalog):
     uid = str(uuid.uuid4())[:8]
     names = {
         "raw": f"test/lineage/raw_{uid}",
@@ -30,7 +30,7 @@ def ds_names():
 
 # ── Suite di Test ────────────────────────────────────────────────────────────
 
-def test_lineage_full_chain(ds_names):
+def test_lineage_full_chain(catalog, ds_names):
     """Test della catena completa: RAW -> SILVER -> GOLD."""
     # 1. Produzione RAW
     raw_h = catalog.create_dataset(ds_names["raw"], source_id=SOURCE_ID)
@@ -67,7 +67,7 @@ def test_lineage_full_chain(ds_names):
     assert lineage["downstream"][0]["version"] == v_gold
 
 
-def test_lineage_version_isolation(ds_names):
+def test_lineage_version_isolation(catalog, ds_names):
     """Verifica che il lineage sia specifico per versione e non 'sporcato' da altre versioni."""
     raw_h = catalog.create_dataset(ds_names["raw"], source_id=SOURCE_ID)
     
@@ -93,7 +93,7 @@ def test_lineage_version_isolation(ds_names):
     assert all(u["version"] != v2 for u in lineage["upstream"])
 
 
-def test_lineage_multiple_inputs(ds_names):
+def test_lineage_multiple_inputs(catalog, ds_names):
     """Test per dataset che hanno più di un upstream."""
     # Produciamo due sorgenti diverse
     raw_a = ds_names["raw"] + "_a"
@@ -127,7 +127,7 @@ def test_lineage_multiple_inputs(ds_names):
     assert raw_b in upstream_ids
 
 
-def test_lineage_mandatory_version_error():
+def test_lineage_mandatory_version_error(catalog):
     """Verifica che la mancanza della versione nel path causi errore (404 o 405)."""
     # L'SDK, se passiamo stringa vuota, genera un URL troncato che non matcha la route
     with pytest.raises(CatalogError) as exc:
@@ -137,7 +137,7 @@ def test_lineage_mandatory_version_error():
     assert "404" in str(exc.value)
 
 
-def test_lineage_non_existent_version(ds_names):
+def test_lineage_non_existent_version(catalog, ds_names):
     """Verifica 404 se la versione è sintatticamente corretta nel path ma inesistente nel DB."""
     with pytest.raises(CatalogError) as exc:
         catalog.get_lineage(ds_names["raw"], "ghost_version_99")

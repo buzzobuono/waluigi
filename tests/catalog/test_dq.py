@@ -1,12 +1,12 @@
 import pytest
 import uuid
-from waluigi.sdk.catalog import catalog, CatalogError
+from waluigi.sdk.catalog import CatalogError
 from waluigi.catalog.api.schemas import DatasetStatus, SourceCreateRequest, SourceType
 
 SOURCE_ID = "test_dq_local"
 
 @pytest.fixture(scope="module", autouse=True)
-def ensure_source():
+def ensure_source(catalog):
     try:
         catalog.create_source(SourceCreateRequest(
             id=SOURCE_ID, type=SourceType.LOCAL,
@@ -20,7 +20,7 @@ def ensure_source():
         pass
 
 @pytest.fixture
-def dataset_id():
+def dataset_id(catalog):
     uid = str(uuid.uuid4())[:8]
     id_ = f"test/unit/ds_{uid}"
     yield id_
@@ -31,11 +31,11 @@ def dataset_id():
 
 # ── Basic CRUD ────────────────────────────────────────────────────────────────
 
-def test_list_datasets_returns_list():
+def test_list_datasets_returns_list(catalog):
     result = catalog.list_datasets()
     assert isinstance(result, list)
 
-def test_create_and_get_dataset(dataset_id):
+def test_create_and_get_dataset(catalog, dataset_id):
     handle = catalog.create_dataset(dataset_id, format="parquet",
                                     description="Dataset di test unitario")
     assert handle is not None
@@ -45,17 +45,17 @@ def test_create_and_get_dataset(dataset_id):
     assert dataset["format"] == "parquet"
     assert dataset["status"] == DatasetStatus.DRAFT
 
-def test_create_dataset_idempotent(dataset_id):
+def test_create_dataset_idempotent(catalog, dataset_id):
     catalog.create_dataset(dataset_id, format="csv", description="first")
     catalog.create_dataset(dataset_id, format="csv", description="second")
     dataset = catalog.get_dataset(dataset_id)
     assert dataset["id"] == dataset_id
 
-def test_get_nonexistent_dataset():
+def test_get_nonexistent_dataset(catalog):
     with pytest.raises(CatalogError):
         catalog.get_dataset("does/not/exist")
 
-def test_delete_dataset(dataset_id):
+def test_delete_dataset(catalog, dataset_id):
     catalog.create_dataset(dataset_id, format="csv")
     catalog._delete(f"/datasets/{dataset_id}")
     with pytest.raises(CatalogError):
@@ -63,7 +63,7 @@ def test_delete_dataset(dataset_id):
 
 # ── DQ Expectations Management ────────────────────────────────────────────────
 
-def test_add_and_list_expectations(dataset_id):
+def test_add_and_list_expectations(catalog, dataset_id):
     catalog.create_dataset(dataset_id, format="parquet")
     
     catalog._post(f"/datasets/{dataset_id}/expectations", json={
@@ -78,7 +78,7 @@ def test_add_and_list_expectations(dataset_id):
     assert len(expectations) == 1
     assert expectations[0]["rule_id"] == "expect_column_values_to_not_be_null"
 
-def test_update_expectation(dataset_id):
+def test_update_expectation(catalog, dataset_id):
     catalog.create_dataset(dataset_id, format="parquet")
     exp = catalog._post(f"/datasets/{dataset_id}/expectations", json={
         "rule_id": "expect_column_values_to_be_between",
@@ -98,7 +98,7 @@ def test_update_expectation(dataset_id):
 
 # ── DQ Execution (Flow) ───────────────────────────────────────────────────────
 
-def test_dq_flow_on_commit(dataset_id, sample_data):
+def test_dq_flow_on_commit(catalog, dataset_id, sample_data):
     # Warmup delle regole
     catalog._get("/dq/rules")
 
@@ -130,7 +130,7 @@ def test_dq_flow_on_commit(dataset_id, sample_data):
 
 # ── DQ Catalog ────────────────────────────────────────────────────────────────
 
-def test_list_dq_rules():
+def test_list_dq_rules(catalog):
     rules = catalog._get("/dq/rules")
     assert isinstance(rules, list)
     # Verifichiamo che una delle tue regole sia presente
@@ -138,7 +138,7 @@ def test_list_dq_rules():
 
 # ── Ulteriori Test di Integrazione DQ ─────────────────────────────────────────
 
-def test_get_dq_suite_enrichment(tmp_path):
+def test_get_dq_suite_enrichment(catalog, tmp_path):
     # Creiamo un file suite temporaneo
     suite_file = tmp_path / "my_suite.yaml"
     suite_file.write_text("- rule_id: expect_column_values_to_not_be_null\n  inputs: {x: col1}")
@@ -151,12 +151,12 @@ def test_get_dq_suite_enrichment(tmp_path):
     assert res[0]["rule_id"] == "expect_column_values_to_not_be_null"
 
 
-def test_list_dq_results_not_found():
+def test_list_dq_results_not_found(catalog):
     with pytest.raises(CatalogError):
         catalog._get("/datasets/non_existent_ds/dq")
 
 
-def test_add_expectation_invalid_dataset():
+def test_add_expectation_invalid_dataset(catalog):
     with pytest.raises(CatalogError):
         catalog._post("/datasets/ghost_ds/expectations", json={
             "rule_id": "expect_column_values_to_not_be_null",
@@ -165,7 +165,7 @@ def test_add_expectation_invalid_dataset():
         })
 
 
-def test_dq_result_error_handling(dataset_id):
+def test_dq_result_error_handling(catalog, dataset_id):
     """Testa che se la DQ fallisce per errore tecnico, il risultato venga comunque salvato con l'errore."""
     # create_dataset restituisce già l'handle
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
@@ -188,7 +188,7 @@ def test_dq_result_error_handling(dataset_id):
     assert results[0]["passed"] == 0
 
 
-def test_list_rules_is_sorted():
+def test_list_rules_is_sorted(catalog):
     rules = catalog._get("/dq/rules")
     rule_ids = [r["id"] for r in rules]
     assert rule_ids == sorted(rule_ids), "Le regole DQ non sono restituite in ordine alfabetico"

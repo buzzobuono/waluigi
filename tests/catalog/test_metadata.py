@@ -1,12 +1,12 @@
 import pytest
 import uuid
-from waluigi.sdk.catalog import catalog, CatalogError
+from waluigi.sdk.catalog import CatalogError
 from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 
 SOURCE_ID = "test_metadata_local"
 
 @pytest.fixture(scope="module", autouse=True)
-def ensure_source():
+def ensure_source(catalog):
     try:
         catalog.create_source(SourceCreateRequest(
             id=SOURCE_ID, type=SourceType.LOCAL,
@@ -20,7 +20,7 @@ def ensure_source():
         pass
 
 @pytest.fixture
-def dataset_id():
+def dataset_id(catalog):
     uid = str(uuid.uuid4())[:8]
     id_ = f"test/unit/meta_{uid}"
     yield id_
@@ -35,7 +35,7 @@ def sample_data():
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def get_latest_version_str(dataset_id: str) -> str:
+def get_latest_version_str(catalog, dataset_id: str) -> str:
     """Recupera la stringa 'version' dell'ultima versione disponibile."""
     versions = catalog.list_versions(dataset_id)
     if not versions:
@@ -45,13 +45,13 @@ def get_latest_version_str(dataset_id: str) -> str:
 
 # ── Metadata Management Tests ─────────────────────────────────────────────────
 
-def test_metadata_crud_flow(dataset_id, sample_data):
+def test_metadata_crud_flow(catalog, dataset_id, sample_data):
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     
     with handle.create_version(metadata={"ref": "v1.0"}, force=True) as ctx:
         ctx.write(sample_data)
     
-    v_str = get_latest_version_str(dataset_id)
+    v_str = get_latest_version_str(catalog, dataset_id)
     base_url = f"/datasets/{dataset_id}/versions/{v_str}/metadata"
 
     # POST
@@ -71,19 +71,19 @@ def test_metadata_crud_flow(dataset_id, sample_data):
     assert "team" not in metadata_after
 
 
-def test_metadata_version_not_found(dataset_id):
+def test_metadata_version_not_found(catalog, dataset_id):
     catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     with pytest.raises(CatalogError) as exc:
         catalog._get(f"/datasets/{dataset_id}/versions/fake-version-2026/metadata")
     assert "404" in str(exc.value)
 
 
-def test_set_metadata_reserved_sys_key(dataset_id, sample_data):
+def test_set_metadata_reserved_sys_key(catalog, dataset_id, sample_data):
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     with handle.create_version(force=True) as ctx:
         ctx.write(sample_data)
 
-    v_str = get_latest_version_str(dataset_id)
+    v_str = get_latest_version_str(catalog, dataset_id)
     
     # Tentativo di usare sys.* (riservato)
     with pytest.raises(CatalogError) as exc:
@@ -93,12 +93,12 @@ def test_set_metadata_reserved_sys_key(dataset_id, sample_data):
     assert "reserved" in str(exc.value).lower()
 
 
-def test_delete_protected_sys_metadata(dataset_id, sample_data):
+def test_delete_protected_sys_metadata(catalog, dataset_id, sample_data):
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     with handle.create_version(metadata={"ref": "audit-v1"}, force=True) as ctx:
         ctx.write(sample_data)
 
-    v_str = get_latest_version_str(dataset_id)
+    v_str = get_latest_version_str(catalog, dataset_id)
     
     # Non si possono cancellare chiavi di sistema tramite questo servizio
     with pytest.raises(CatalogError):
@@ -106,18 +106,18 @@ def test_delete_protected_sys_metadata(dataset_id, sample_data):
         catalog._delete(f"/datasets/{dataset_id}/versions/{v_str}/metadata/sys.ref")
 
 
-def test_metadata_isolation_between_versions(dataset_id, sample_data):
+def test_metadata_isolation_between_versions(catalog, dataset_id, sample_data):
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     
     # Versione A
     with handle.create_version(metadata={"tag": "alpha"}, force=True) as ctx:
         ctx.write(sample_data)
-    v_alpha = get_latest_version_str(dataset_id)
+    v_alpha = get_latest_version_str(catalog, dataset_id)
     
     # Versione B
     with handle.create_version(metadata={"tag": "beta"}, force=True) as ctx:
         ctx.write(sample_data)
-    v_beta = get_latest_version_str(dataset_id)
+    v_beta = get_latest_version_str(catalog, dataset_id)
     
     assert v_alpha != v_beta
 
@@ -130,13 +130,13 @@ def test_metadata_isolation_between_versions(dataset_id, sample_data):
 
 # ── Extended Metadata Tests ───────────────────────────────────────────────────
 
-def test_metadata_update_existing_key(dataset_id, sample_data):
+def test_metadata_update_existing_key(catalog, dataset_id, sample_data):
     """Testa l'aggiornamento di una chiave esistente (POST sovrascrive)."""
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     with handle.create_version(force=True) as ctx:
         ctx.write(sample_data)
     
-    v_str = get_latest_version_str(dataset_id)
+    v_str = get_latest_version_str(catalog, dataset_id)
     base_url = f"/datasets/{dataset_id}/versions/{v_str}/metadata"
 
     # Primo set
@@ -148,13 +148,13 @@ def test_metadata_update_existing_key(dataset_id, sample_data):
     assert metadata["status"] == "updated"
 
 
-def test_metadata_special_characters_in_value(dataset_id, sample_data):
+def test_metadata_special_characters_in_value(catalog, dataset_id, sample_data):
     """Testa la gestione di stringhe complesse (JSON, spazi, caratteri speciali)."""
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     with handle.create_version(force=True) as ctx:
         ctx.write(sample_data)
     
-    v_str = get_latest_version_str(dataset_id)
+    v_str = get_latest_version_str(catalog, dataset_id)
     complex_value = '{"project": "waluigi", "tags": ["test", "🚀"], "path": "C:\\\\temp"}'
     
     catalog._post(f"/datasets/{dataset_id}/versions/{v_str}/metadata", 
@@ -164,26 +164,26 @@ def test_metadata_special_characters_in_value(dataset_id, sample_data):
     assert metadata["config_json"] == complex_value
 
 
-def test_delete_nonexistent_key(dataset_id, sample_data):
+def test_delete_nonexistent_key(catalog, dataset_id, sample_data):
     """Verifica che la cancellazione di una chiave inesistente dia 404."""
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     with handle.create_version(force=True) as ctx:
         ctx.write(sample_data)
     
-    v_str = get_latest_version_str(dataset_id)
+    v_str = get_latest_version_str(catalog, dataset_id)
     
     with pytest.raises(CatalogError) as exc:
         catalog._delete(f"/datasets/{dataset_id}/versions/{v_str}/metadata/ghost_key")
     assert "404" in str(exc.value)
 
 
-def test_set_metadata_on_deprecated_version(dataset_id, sample_data):
+def test_set_metadata_on_deprecated_version(catalog, dataset_id, sample_data):
     """Verifica se è possibile operare sui metadati di una versione deprecata."""
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     with handle.create_version(force=True) as ctx:
         ctx.write(sample_data)
     
-    v_str = get_latest_version_str(dataset_id)
+    v_str = get_latest_version_str(catalog, dataset_id)
     
     # Depreca la versione
     catalog._delete(f"/datasets/{dataset_id}/_deprecate/{v_str}")
@@ -197,13 +197,13 @@ def test_set_metadata_on_deprecated_version(dataset_id, sample_data):
     assert meta["post_deprecate"] == "true"
 
 
-def test_metadata_large_number_of_keys(dataset_id, sample_data):
+def test_metadata_large_number_of_keys(catalog, dataset_id, sample_data):
     """Testa la tenuta con un numero elevato di metadati."""
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     with handle.create_version(force=True) as ctx:
         ctx.write(sample_data)
     
-    v_str = get_latest_version_str(dataset_id)
+    v_str = get_latest_version_str(catalog, dataset_id)
     base_url = f"/datasets/{dataset_id}/versions/{v_str}/metadata"
 
     for i in range(50):
@@ -214,12 +214,12 @@ def test_metadata_large_number_of_keys(dataset_id, sample_data):
     assert metadata["key_49"] == "val_49"
 
 
-def test_metadata_error_status_codes(dataset_id, sample_data):
+def test_metadata_error_status_codes(catalog, dataset_id, sample_data):
     """Verifica specificamente i codici HTTP ritornati dal router."""
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     with handle.create_version(force=True) as ctx:
         ctx.write(sample_data)
-    v_str = get_latest_version_str(dataset_id)
+    v_str = get_latest_version_str(catalog, dataset_id)
 
     # Caso 422: Chiave riservata (str(e) contiene "reserved")
     with pytest.raises(CatalogError) as exc:

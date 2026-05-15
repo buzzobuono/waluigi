@@ -1,5 +1,4 @@
 import pytest
-from waluigi.sdk.catalog import catalog, CatalogError
 from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 
 SOURCE_ID = "folders_local"
@@ -16,7 +15,7 @@ DATASETS = [
 
 
 @pytest.fixture(scope="module", autouse=True)
-def setup_folder_datasets():
+def setup_folder_datasets(catalog):
     try:
         catalog.create_source(SourceCreateRequest(
             id=SOURCE_ID, type=SourceType.LOCAL,
@@ -42,7 +41,7 @@ def setup_folder_datasets():
 
 # ── Response shape ────────────────────────────────────────────────────────────
 
-def test_root_returns_dict():
+def test_root_returns_dict(catalog):
     result = catalog.list_folders("")
     assert isinstance(result, dict)
     assert "prefix"   in result
@@ -50,21 +49,21 @@ def test_root_returns_dict():
     assert "prefixes" in result
 
 
-def test_prefix_field_has_trailing_slash():
+def test_prefix_field_has_trailing_slash(catalog):
     result = catalog.list_folders(PREFIX)
     assert result["prefix"].endswith("/")
 
 
 # ── Direct children ───────────────────────────────────────────────────────────
 
-def test_direct_datasets_listed():
+def test_direct_datasets_listed(catalog):
     result = catalog.list_folders(PREFIX)
     ids = [d["id"] for d in result["datasets"]]
     assert f"{PREFIX}/alpha" in ids
     assert f"{PREFIX}/beta"  in ids
 
 
-def test_deep_datasets_not_in_direct_list():
+def test_deep_datasets_not_in_direct_list(catalog):
     result = catalog.list_folders(PREFIX)
     ids = [d["id"] for d in result["datasets"]]
     assert f"{PREFIX}/sub/gamma"         not in ids
@@ -73,30 +72,30 @@ def test_deep_datasets_not_in_direct_list():
 
 # ── Sub-prefixes ──────────────────────────────────────────────────────────────
 
-def test_sub_prefix_appears_as_prefix():
+def test_sub_prefix_appears_as_prefix(catalog):
     result = catalog.list_folders(PREFIX)
     assert f"{PREFIX}/sub/" in result["prefixes"]
 
 
-def test_sub_prefix_not_in_datasets():
+def test_sub_prefix_not_in_datasets(catalog):
     result = catalog.list_folders(PREFIX)
     ids = [d["id"] for d in result["datasets"]]
     assert f"{PREFIX}/sub/" not in ids
 
 
-def test_drill_into_sub_prefix():
+def test_drill_into_sub_prefix(catalog):
     result = catalog.list_folders(f"{PREFIX}/sub")
     ids = [d["id"] for d in result["datasets"]]
     assert f"{PREFIX}/sub/gamma" in ids
     assert f"{PREFIX}/sub/delta" in ids
 
 
-def test_drill_into_sub_prefix_shows_deeper_prefix():
+def test_drill_into_sub_prefix_shows_deeper_prefix(catalog):
     result = catalog.list_folders(f"{PREFIX}/sub")
     assert f"{PREFIX}/sub/deep/" in result["prefixes"]
 
 
-def test_deepest_level_has_no_further_prefixes():
+def test_deepest_level_has_no_further_prefixes(catalog):
     result = catalog.list_folders(f"{PREFIX}/sub/deep")
     assert f"{PREFIX}/sub/deep/epsilon" in [d["id"] for d in result["datasets"]]
     assert result["prefixes"] == []
@@ -104,13 +103,13 @@ def test_deepest_level_has_no_further_prefixes():
 
 # ── Edge cases ────────────────────────────────────────────────────────────────
 
-def test_nonexistent_prefix_returns_empty():
+def test_nonexistent_prefix_returns_empty(catalog):
     result = catalog.list_folders("does/not/exist/anywhere")
     assert result["datasets"] == []
     assert result["prefixes"] == []
 
 
-def test_dataset_fields_present():
+def test_dataset_fields_present(catalog):
     result = catalog.list_folders(PREFIX)
     assert len(result["datasets"]) >= 2
     for d in result["datasets"]:
