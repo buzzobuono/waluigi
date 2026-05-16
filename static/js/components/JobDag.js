@@ -35,14 +35,14 @@ export default {
     };
 
     const resetTask = async (id) => { 
-      if (confirm(`Reset task \${id}?`)) { 
+      if (confirm(`Reset task "${id}"?`)) { 
         await api.resetTask(id); 
         await load(); 
       } 
     };
     
     const deleteTask = async (id) => { 
-      if (confirm(`Delete task \${id}?`)) { 
+      if (confirm(`Delete task "${id}"?`)) { 
         await api.deleteTask(id); 
         await load(); 
       } 

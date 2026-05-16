@@ -33,6 +33,7 @@ spec:
                         'unit_price':  rng.uniform(10.0, 1000.0, n).round(2),
                         'discount':    rng.uniform(0.0, 0.35, n).round(3),
                     })
+                    sleep(10)
                     write_output(df, [])
           config:
               output:

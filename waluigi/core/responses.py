@@ -1,11 +1,11 @@
 from typing import Any
 from fastapi.responses import JSONResponse
 
-def ok(data: Any, messages: list[str] = None) -> JSONResponse:
+def ok(data: Any, messages: list[str] = None, status: int = 200) -> JSONResponse:
     return JSONResponse({
         "data": data,
         "diagnostic": {"result": "OK", "messages": messages or []},
-    })
+    }, status_code=status)
 
 
 def warn(data: Any, messages: list[str]) -> JSONResponse:

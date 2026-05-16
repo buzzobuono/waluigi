@@ -39,7 +39,7 @@ def _run_and_wait(worker_url, boss_url, task_id, marker, **extra):
 
 
 sys.argv = ["wlworker"]
-from waluigi.worker import _hash  # noqa: E402
+from waluigi.worker.services.worker_service import _hash  # noqa: E402
 
 
 def test_hash_empty_dict():
@@ -67,7 +67,7 @@ def test_execute_400_missing_command_type_script(worker_url):
         "namespace": "ns",
     })
     assert r.status_code == 400
-    assert "No type, command or script" in r.json()["message"]
+    assert "No type, command or script provided" in r.json()["diagnostic"]["messages"]
 
 
 def test_execute_400_unknown_task_type(worker_url):
@@ -78,7 +78,7 @@ def test_execute_400_unknown_task_type(worker_url):
         "type": "NoSuchTask",
     })
     assert r.status_code == 400
-    assert "Unknown task type" in r.json()["message"]
+    assert "Unknown task type" in r.json()["diagnostic"]["messages"]
 
 
 def test_execute_202_command_accepted(worker_url, boss_url):
@@ -89,7 +89,7 @@ def test_execute_202_command_accepted(worker_url, boss_url):
         "command": "echo DONE:v-cmd",
     })
     assert r.status_code == 202
-    assert r.json() == {"status": "submitted", "id": "v-cmd"}
+    assert "Task submitted" in r.json()["diagnostic"]["messages"]
     assert _wait_for_log(boss_url, "v-cmd", "DONE:v-cmd")
     time.sleep(0.3)
 
@@ -236,4 +236,5 @@ def test_execute_429_when_slots_full(worker_url):
         "command": "echo hi",
     })
     assert r3.status_code == 429
-    assert r3.json()["status"] == "busy"
+    assert "Worker too busy. No slot available." in r3.json()["diagnostic"]["messages"]
+    

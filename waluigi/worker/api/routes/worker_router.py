@@ -1,0 +1,94 @@
+import asyncio
+import threading
+import logging
+from fastapi import APIRouter, Request, Depends
+
+from waluigi.core.responses import ok, ko
+from waluigi.worker.services.worker_service import WorkerService
+from waluigi.worker.api.dependencies import get_slot_manager, get_worker_service
+from waluigi.worker.api.schemas import ExecuteTaskRequest
+from waluigi.worker.config import args
+from waluigi.worker.slot_manager import SlotManager
+
+logger = logging.getLogger("waluigi")
+
+lock = asyncio.Lock()
+active_tasks_count = 0
+
+
+worker_router = APIRouter(
+    prefix="",
+    tags=["Worker"]
+)
+
+
+@worker_router.post("/execute",
+    summary="Submit an idempotent task execution request",
+    description=(
+        "Submits a new task for execution. The server guarantees idempotency "
+        "by tracking the unique task 'id' and "
+        "deterministic execution 'params' to prevent duplicate processing."
+    )
+)
+async def execute(
+    body: ExecuteTaskRequest, 
+    slot_manager: SlotManager = Depends(get_slot_manager),
+    worker_service: WorkerService = Depends(get_worker_service)
+):
+    try:
+        workdir    = body.workdir if body.workdir is not None else args.default_workdir
+        task_type  = body.type
+        command    = body.command
+        script     = body.script
+        id         = body.id
+        job_id     = body.job_id
+        namespace  = body.namespace
+        params     = body.params
+        attributes = body.attributes
+        config     = body.config
+        resources  = body.resources
+        
+        if body.type:
+            from waluigi.tasks import get_command
+            try:
+                command = get_command(task_type)
+            except ValueError as e:
+                msg = "Unknown task type"
+                logger.error(msg)
+                return ko(msg, 400)
+        elif script:
+            command = "python -c \"import os; exec(os.environ['WALUIGI_SCRIPT'])\""
+        elif not command:
+            msg = "No type, command or script provided"
+            logger.error(msg)
+            return ko(msg, 400)
+            
+        if not await slot_manager.acquire_slot():
+            msg = "Worker too busy. No slot available."
+            logger.info(msg)
+            return ko(msg, 429)
+        
+        logger.info(f"Task recieved: {id}")
+    
+        try:
+            asyncio.create_task(
+                worker_service.run_command_async(command, id, job_id, namespace, params, attributes, config, resources, workdir, script)
+            )
+        except Exception as e:
+            logger.error(f"Error: {e}")
+            await slot_manager.release_slot()
+            return ko("Task execution error", 500)    
+            
+        return ok(None, "Task submitted", 202)
+    except ValueError as e:
+        return ko(str(e), 400)
+
+@worker_router.get("/slots",
+    summary="Get available slot",
+    description=(
+        "Get available slot number"
+    )
+)
+async def get_slots(slot_manager: SlotManager = Depends(get_slot_manager)):
+    available = await slot_manager.get_available_slots()
+    return ok({"available_slots": available})

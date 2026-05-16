@@ -57,7 +57,7 @@ export default {
 
     async function deleteJob(jobId) {
       confirmRef.value.ask(
-        f`Delete job "${jobId}"?`,
+        `Delete job "${jobId}"?`,
         async (ok) => {
           if (!ok) return;
           await api.deleteJob(jobId);
