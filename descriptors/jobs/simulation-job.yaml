@@ -311,7 +311,7 @@ spec:
               coin: 1
 
         - id: "agg_by_category"
-          rtaskRef:
+          taskRef:
               name: "AggregateDataset"
           requires:
               - "add_financials"
