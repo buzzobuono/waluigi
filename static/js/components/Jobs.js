@@ -25,6 +25,7 @@ export default {
     const columns = [
       { key: 'job_id', label: 'Job ID' },
       { key: 'status', label: 'Status' },
+      { key: 'started_at', label: 'Started At' },
       { key: 'locked_by', label: 'Locked By' },
       { key: 'locked_until', label: 'Locked Until' },
       { key: 'actions', label: 'Actions', class: 'text-right pr-3' }
@@ -118,6 +119,12 @@ export default {
           <template #cell(status)="{ item }">
             <span :class="['badge shadow', 'badge-' + STATUS_MAP[item.status].color, item.status === 'RUNNING' ? 'blink' : '']">
               {{ item.status }}
+            </span>
+          </template>
+
+          <template #cell(started_at)="{ item }">
+            <span class="text-muted small">
+              {{ item.started_at ? new Date(item.started_at + 'Z').toLocaleString() : '—' }}
             </span>
           </template>
 

@@ -42,6 +42,7 @@ class WaluigiDB:
                     metadata TEXT,
                     spec TEXT,
                     status TEXT,
+                    started_at TIMESTAMP,
                     locked_by TEXT,
                     locked_until TIMESTAMP
                 )""")
@@ -208,10 +209,11 @@ class WaluigiDB:
             # Questa query fa TUTTO in un colpo solo:
             # Trova, Locka e Restituisce i dati della riga modificata.
             query = """
-                UPDATE jobs 
-                SET locked_by = ?, 
+                UPDATE jobs
+                SET locked_by = ?,
                     locked_until = datetime('now', '+60 seconds'),
-                    status = 'RUNNING'
+                    status = 'RUNNING',
+                    started_at = COALESCE(started_at, datetime('now'))
                 WHERE job_id = (
                     SELECT job_id FROM jobs 
                     WHERE status NOT IN ('SUCCESS', 'FAILED')
@@ -257,9 +259,9 @@ class WaluigiDB:
     
     def list_jobs(self, status=None):
         if status:
-            cursor = self.conn.execute("SELECT job_id, status, locked_by, locked_until FROM jobs WHERE status = ?", (status,))
+            cursor = self.conn.execute("SELECT job_id, status, locked_by, locked_until, started_at FROM jobs WHERE status = ?", (status,))
         else:
-            cursor = self.conn.execute("SELECT job_id, status, locked_by, locked_until FROM jobs")
+            cursor = self.conn.execute("SELECT job_id, status, locked_by, locked_until, started_at FROM jobs")
         columns = [column[0] for column in cursor.description]
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
     
