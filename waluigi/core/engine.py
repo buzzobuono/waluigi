@@ -120,8 +120,6 @@ class WaluigiEngine:
             log(f"✅ {task.id} is complete")
             return True
         
-        log(f"📌 {task.id} is not complete")
-            
         all_deps_ready = True
         for dep in task.requires():
             res = self.build(job_metadata=job_metadata,
@@ -155,7 +153,7 @@ class WaluigiEngine:
                 self._deallocate(task)
                 return False
             
-            log(f"🚀 {task.id} submitted")
+            
             dispatch_status = self._dispatch(job_metadata, task)
             
             if dispatch_status == "WORKERS_SATURATED":
@@ -174,6 +172,8 @@ class WaluigiEngine:
                 self._deallocate(task)    
                 self._update_task(task, "PENDING")
                 return False
+            
+            log(f"🚀 {task.id} submitted")
         
         except Exception as e:
             self._deallocate(task)

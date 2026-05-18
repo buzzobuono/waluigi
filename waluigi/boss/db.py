@@ -233,6 +233,36 @@ class WaluigiDB:
                 }
         return None
     
+    def list_runnable_job_ids(self):
+        cursor = self.conn.execute("""
+            SELECT job_id FROM jobs
+            WHERE status NOT IN ('SUCCESS', 'FAILED')
+            AND (locked_until IS NULL OR locked_until < datetime('now'))
+        """)
+        return [row[0] for row in cursor.fetchall()]
+
+    def claim_job_by_id(self, boss_id, job_id):
+        with self.conn:
+            cursor = self.conn.execute("""
+                UPDATE jobs
+                SET locked_by = ?,
+                    locked_until = datetime('now', '+60 seconds'),
+                    status = 'RUNNING',
+                    started_at = COALESCE(started_at, datetime('now'))
+                WHERE job_id = ?
+                AND status NOT IN ('SUCCESS', 'FAILED')
+                AND (locked_until IS NULL OR locked_until < datetime('now'))
+                RETURNING job_id, metadata, spec
+            """, (boss_id, job_id))
+            res = cursor.fetchone()
+        if res:
+            return {
+                "job_id": res[0],
+                "metadata": json.loads(res[1]),
+                "spec": json.loads(res[2])
+            }
+        return None
+
     def update_job_status(self, job_id, status):
         with self.conn:
             self.conn.execute("""

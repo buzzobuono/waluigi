@@ -1,7 +1,7 @@
 x-config: &config
     sleep_duration: 10
 
-kind: Job
+kind: StatefulJob
 metadata:
     name: "orchestration-test-job"
     namespace: "simulation"

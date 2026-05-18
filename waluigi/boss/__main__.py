@@ -65,41 +65,44 @@ async def update(request: Request):
         
 def planner_loop():
     while True:
-        log(f"🧠 Planner started: {BOSS_ID}")
         try:
-            job = db.claim_job(BOSS_ID)
-            if not job:
-                log(f"🧠 No job found")
+            runnable = db.list_runnable_job_ids()
+            if not runnable:
+                log(f"🧠 No jobs to run")
                 time.sleep(5)
                 continue
 
-            job_id = job['metadata']['name']
-            log(f"🧠 Job claimed: {job_id}")
-            task = DAGTask(job['spec'])
+            for job_id in runnable:
+                job = db.claim_job_by_id(BOSS_ID, job_id)
+                if not job:
+                    continue  # another boss claimed it first
 
-            res = engine.build(
-                job_metadata=job['metadata'],
-                task=task,
-                parent_id=None
-            )
-            
-            if res is True:
-                log(f"🏁 Job completed: {job_id}")
-                db.update_job_status(job_id, "SUCCESS")
-            elif res is None:
-                log(f"💀 Job {job_id} failed because blocked by an error")
-                db.update_job_status(job_id, "FAILED")
-            elif res == "PAUSE":
-                log(f"⏳ Job {job_id} temporarily paused: workers are saturated")
+                log(f"🧠 Job claimed: {job_id}")
+                try:
+                    task = DAGTask(job['spec'])
+                    res = engine.build(
+                        job_metadata=job['metadata'],
+                        task=task,
+                        parent_id=None
+                    )
+                    if res is True:
+                        log(f"🏁 Job completed: {job_id}")
+                        db.update_job_status(job_id, "SUCCESS")
+                    elif res is None:
+                        log(f"💀 Job {job_id} failed")
+                        db.update_job_status(job_id, "FAILED")
+                    elif res == "PAUSE":
+                        log(f"⏳ Job {job_id} paused: workers saturated")
+                except Exception as e:
+                    log(f"❌ Error on {job_id}: {e}")
+                finally:
+                    db.release_job(job_id)
+                    log(f"🧠 Job released: {job_id}")
 
-            db.release_job(job_id)
-            log(f"🧠 Job released: {job_id}")
             time.sleep(5)
 
         except Exception as e:
-            log(f"❌ Error: {e}")
-            if 'job_id' in locals():
-                db.release_job(job_id)
+            log(f"❌ Planner error: {e}")
             time.sleep(5)
 
 @app.post('/worker/register')
@@ -113,26 +116,39 @@ async def submit(request: Request):
     data = await request.json()
 
     kind = data.get("kind")
-    if kind == "Job":
-        spec = parse_definition(data)
-    else:
-        return JSONResponse({"status": "error", "message": "Unsupported kind. Use 'kind: Job'"}, status_code=400)
+    timestamp = None
 
-    metadata = data.get("metadata", {})
+    if kind == "Job":
+        timestamp = time.time()
+        data = dict(data)
+        spec_dict = dict(data.get('spec', {}))
+        spec_dict['params'] = {**spec_dict.get('params', {}), 'timestamp': timestamp}
+        tasks_list = spec_dict.get('tasks', [])
+        suffixed = {t['id']: f"{t['id']}@{timestamp}" for t in tasks_list if 'id' in t}
+        spec_dict['tasks'] = [
+            {**dict(t), 'id': suffixed[t['id']], 'requires': [suffixed.get(r, r) for r in t.get('requires', [])]}
+            for t in tasks_list
+        ]
+        data['spec'] = spec_dict
+    elif kind != "StatefulJob":
+        return JSONResponse({"status": "error", "message": "Unsupported kind. Use 'kind: StatefulJob' or 'kind: Job'"}, status_code=400)
+
+    spec = parse_definition(data)
+    metadata = dict(data.get("metadata", {}))
+    metadata['timestamp'] = timestamp
+
     try:
         task = DAGTask(spec)
-        job_id = metadata["name"]
-        status = db.get_job_status(job_id)
+        base_name = metadata["name"]
+        job_id = f"{base_name}@{timestamp}" if timestamp else base_name
 
-        if status and status != 'SUCCESS' and status != 'FAILED':
-            log(f"⚠️ Submission rejected: {job_id} is already active.")
-            return JSONResponse({"status": "rejected", "message": "already active"}, status_code=409)
+        if not timestamp:
+            status = db.get_job_status(job_id)
+            if status and status != 'SUCCESS' and status != 'FAILED':
+                log(f"⚠️ Submission rejected: {job_id} is already active.")
+                return JSONResponse({"status": "rejected", "message": "already active"}, status_code=409)
 
-        db.create_job(
-            job_id=job_id,
-            metadata=metadata,
-            spec=spec
-        )
+        db.create_job(job_id=job_id, metadata=metadata, spec=spec)
         engine.registerJob(job_id, task, None)
         
         log(f"📥 Job submitted: {job_id}")
