@@ -95,6 +95,7 @@ class WorkerService:
             
     async def _update_boss(self, id, namespace, params, attributes, resources, status):
         return await _post("/update", json={
+            "worker_url": f"http://{args.host}:{args.port}",
             "id": id,
             "namespace": namespace,
             "params": _hash(params),

@@ -1,0 +1,90 @@
+x-config: &config
+    sleep_duration: 10
+
+kind: Job
+metadata:
+    name: "orchestration-test-job"
+    namespace: "simulation"
+    workdir: "work"
+spec:
+    params:
+        date: "2026-05-16"
+    attribute:
+        attribute1: "valute_attribute_1"
+    tasks:
+        - id: "parallel_task_1"
+          taskSpec:
+              script: |
+                    from waluigi.sdk.context import context
+                    import time
+                    time.sleep(context.config.sleep_duration)
+          config: *config
+          resources:
+              coin: 1
+
+        - id: "parallel_task_2"
+          taskSpec:
+              script: |
+                    from waluigi.sdk.context import context
+                    import time
+                    time.sleep(context.config.sleep_duration)
+          config: *config
+          resources:
+              coin: 1
+
+        - id: "parallel_task_3"
+          taskSpec:
+              script: |
+                    from waluigi.sdk.context import context
+                    import time
+                    time.sleep(context.config.sleep_duration)
+          config: *config
+          resources:
+              coin: 1
+
+        - id: "parallel_task_4"
+          taskSpec:
+              script: |
+                    from waluigi.sdk.context import context
+                    import time
+                    time.sleep(context.config.sleep_duration)
+          config: *config
+          resources:
+              coin: 1
+
+        - id: "parallel_task_5"
+          taskSpec:
+              script: |
+                    from waluigi.sdk.context import context
+                    import time
+                    time.sleep(context.config.sleep_duration)
+          config: *config
+          resources:
+              coin: 1
+
+        - id: "parallel_task_6"
+          taskSpec:
+              script: |
+                    from waluigi.sdk.context import context
+                    import time
+                    time.sleep(context.config.sleep_duration)
+          config: *config
+          resources:
+              coin: 1
+
+        - id: "final_join_step"
+          taskSpec:
+              script: |
+                    from waluigi.sdk.context import context
+                    import time
+                    time.sleep(context.config.sleep_duration)
+          requires:
+              - "parallel_task_1"
+              - "parallel_task_2"
+              - "parallel_task_3"
+              - "parallel_task_4"
+              - "parallel_task_5"
+              - "parallel_task_6"
+          config: *config
+          resources:
+              coin: 1

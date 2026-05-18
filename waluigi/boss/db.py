@@ -79,6 +79,30 @@ class WaluigiDB:
         row = cursor.fetchone()
         return row[0] if row else None
         
+    def get_worker_slots(self, url):
+        cursor = self.conn.execute("SELECT max_slots, free_slots FROM workers WHERE url = ?", (url,))
+        row = cursor.fetchone()
+        if row:
+            return {"max_slots": row[0], "free_slots": row[1]}
+        return None
+    
+    def acquire_worker_slot(self, url):
+        with self.conn:
+            cursor = self.conn.execute("""
+                UPDATE workers 
+                SET free_slots = free_slots - 1 
+                WHERE url = ? AND free_slots > 0 AND status = 'ALIVE'
+            """, (url,))
+            return cursor.rowcount > 0
+    
+    def release_worker_slot(self, url):
+        with self.conn:
+            self.conn.execute("""
+                UPDATE workers 
+                SET free_slots = MIN(max_slots, free_slots + 1) 
+                WHERE url = ? AND status = 'ALIVE'
+            """, (url,))
+    
     def try_to_lock(self, id):
         """Tenta il passaggio a RUNNING. Ritorna True solo se ha successo atomico."""
         with self.conn:

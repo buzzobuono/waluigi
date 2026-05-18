@@ -8,17 +8,24 @@ class WaluigiEngine:
     def __init__(self, db):
         self.db = db
         
+    def registerJob(self, job_id, task, parent_id):
+        params_hash = task.hash(task.params)
+        attributes_hash = task.hash(task.attributes)
+        self.db.register_task(task.id, task.namespace, parent_id, params_hash, attributes_hash, job_id=job_id)
+        for dep in task.requires():
+            self.registerJob(job_id, dep, task.id)
+            
     def _register(self, parent_id, task, job_id):
         id = task.id
         params_hash = task.hash(task.params)
         attributes_hash = task.hash(task.attributes)
         status = self.db.get_task_status(id, params_hash)
         if status == "RUNNING":
-            return "locked"
+            return status
         self.db.register_task(id, task.namespace, parent_id, params_hash, attributes_hash, job_id=job_id)
         if status == "SUCCESS":
-            return "already_done"
-        return "ok"
+            return status
+        return status
             
     def _update_task(self, task, status):
         id = task.id
@@ -43,41 +50,6 @@ class WaluigiEngine:
     def _deallocate(self, task):
         task_resources = getattr(task, 'resources', {'coin': 1.0})
         self.db.release_resources(task_resources)
-            
-    def _dispatch_(self, job_metadata, task):
-        payload = {
-            "workdir": job_metadata['workdir'],
-            "type":    task.type,
-            "command": task.command,
-            "script":  task.script,
-            "id": task.id,
-            "job_id": job_metadata['name'],
-            "params": vars(task.params),
-            "params_hash": task.hash(task.params),
-            "attributes": vars(task.attributes),
-            "config": task.config,
-            "resources": task.resources,
-            "namespace": task.namespace
-        }
-        
-        workers = self.db.get_available_workers()
-        for worker in workers:
-            try:
-                # Timeout generoso per permettere al worker di caricare i moduli
-                r = requests.post(f"{worker['url']}/execute", json=payload, timeout=10)
-                if r.status_code == 202:
-                    log(f"🚀 Inviato a {worker['url']}: {task.id}")
-                    return True
-                elif r.status_code == 429:
-                    log(f"⏳ Workers {worker['url']} occupato per {task.id}")
-                else:
-                    log(f"⏳ Workers {worker['url']} errore per {task.id}")
-            except Exception as e:
-                log(f"❌ Worker {worker['url']} non ha risposto correttamente. Lo rimuovo dai worker registrati.")
-                self.db.delete_worker(worker['url'])
-                continue
-                
-        return False
         
     def _dispatch(self, job_metadata, task):
         payload = {
@@ -96,24 +68,40 @@ class WaluigiEngine:
         }
         
         workers = self.db.get_available_workers()
+        if not workers:
+            return "WORKERS_SATURATED"
+        all_busy = True
         for worker in workers:
+            log(self.db.get_worker_slots(worker['url']))
+            if not self.db.acquire_worker_slot(worker['url']):
+                log(f"💥 Errore fatale (400) dal worker {worker['url']} per {task.id}")
+                continue
+            log(f"⏳ Slot acquired by worker {worker['url']} for {task.id}")
+            log(self.db.get_worker_slots(worker['url']))  
             try:
                 r = requests.post(f"{worker['url']}/execute", json=payload, timeout=10)
                 if r.status_code == 202:
                     log(f"🚀 Inviato a {worker['url']}: {task.id}")
                     return "SUCCESS"
-                elif r.status_code == 400:
+                    
+                self.db.release_worker_slot(worker['url'])
+                
+                if r.status_code == 400:
                     log(f"💥 Errore fatale (400) dal worker {worker['url']} per {task.id}")
                     return "FATAL_ERROR"
                 elif r.status_code == 429:
                     log(f"⏳ Workers {worker['url']} occupato per {task.id}")
                 else:
                     log(f"⏳ Workers {worker['url']} errore {r.status_code} per {task.id}")
+                    all_busy = False
             except Exception as e:
                 log(f"❌ Worker {worker['url']} non ha risposto. Rimozione in corso.")
                 self.db.delete_worker(worker['url'])
+                all_busy = False
                 continue
                 
+        if all_busy:
+            return "WORKERS_SATURATED"
         return "RETRY"
         
     def registerWorker(self, worker):
@@ -121,28 +109,15 @@ class WaluigiEngine:
         self.db.register_worker(worker['url'], worker['max_slots'], worker['free_slots'])
         
     def build(self, job_metadata, task, parent_id):
-        task.engine = self
-        
-        # Recupero dello stato attuale dal DB
         status = self.db.get_task_status(task.id, task.hash(task.params))
-        # SE IL TASK È FALLITO: Blocchiamo questo ramo.
-        # Ritorna False per fermare il padre, ma non aggiorniamo il padre a FAILED.
         if status == "FAILED":
-            log(f"🛑 {task.id} is FAILED. Blocking parent execution.")
+            log(f"🛑 {task.id} is fail. Fail job processing.")
             return None
-        
-        # Chiedi lo stato attuale
-        r = self._register(parent_id, task, job_metadata['name'])
-        # Se sta già girando altrove, questo ramo muore qui.
-        if r == "locked":
-            log(f"⚠️ {task.id} locked")
+        elif status == "RUNNING":
+            log(f"⚠️ {task.id} is running")
             return False
-            
-        # Check di completamento (Idempotenza)
-        if status == "SUCCESS":
+        elif status == "SUCCESS":
             log(f"✅ {task.id} is complete")
-            if r != "already_done":
-                self._update_task(task, "SUCCESS")
             return True
         
         log(f"📌 {task.id} is not complete")
@@ -153,6 +128,8 @@ class WaluigiEngine:
                 task=dep,
                 parent_id=task.id
                 )
+            if res == "PAUSE":
+                return "PAUSE"
             if res is None: 
                 return None # Propaga lo stop al padre senza fare update
             if res is False:
@@ -181,6 +158,11 @@ class WaluigiEngine:
             log(f"🚀 {task.id} submitted")
             dispatch_status = self._dispatch(job_metadata, task)
             
+            if dispatch_status == "WORKERS_SATURATED":
+                self._deallocate(task)
+                self._update_task(task, "PENDING")
+                return "PAUSE"
+                
             if dispatch_status == "FATAL_ERROR":
                 log(f"💀 {task.id} fallimento definitivo durante il dispatch")
                 self._deallocate(task)
@@ -199,5 +181,3 @@ class WaluigiEngine:
             self._update_task(task, "PENDING")
             
         return False
-
-        

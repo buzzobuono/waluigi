@@ -55,26 +55,26 @@ async def update(request: Request):
         task_resources = data.get('resources', {'coin': 1.0})
         db.release_resources(task_resources)
         log(f"♻️ Resources released for {id}")
+        worker_url = data.get('worker_url')
+        if worker_url:
+            db.release_worker_slot(worker_url)
+            log(f"👷 Slot released for worker: {worker_url}")
         
     db.update_task(id, data.get('namespace'), data.get('params'), data.get('attributes'), status)
     return JSONResponse({"status": "updated"}, status_code=200)
         
 def planner_loop():
-    log(f"🧠 Planner Loop started: {BOSS_ID}")
-
     while True:
+        log(f"🧠 Planner started: {BOSS_ID}")
         try:
-            #if not engine.workers:
-            #    time.sleep(5)
-            #    continue
-
             job = db.claim_job(BOSS_ID)
             if not job:
+                log(f"🧠 No job found")
                 time.sleep(5)
                 continue
 
             job_id = job['metadata']['name']
-           
+            log(f"🧠 Job claimed: {job_id}")
             task = DAGTask(job['spec'])
 
             res = engine.build(
@@ -89,8 +89,11 @@ def planner_loop():
             elif res is None:
                 log(f"💀 Job {job_id} failed because blocked by an error")
                 db.update_job_status(job_id, "FAILED")
+            elif res == "PAUSE":
+                log(f"⏳ Job {job_id} temporarily paused: workers are saturated")
 
             db.release_job(job_id)
+            log(f"🧠 Job released: {job_id}")
             time.sleep(5)
 
         except Exception as e:
@@ -130,7 +133,8 @@ async def submit(request: Request):
             metadata=metadata,
             spec=spec
         )
-
+        engine.registerJob(job_id, task, None)
+        
         log(f"📥 Job submitted: {job_id}")
         return JSONResponse({
             "status": "submitted",
@@ -247,4 +251,3 @@ def main():
     
 if __name__ == "__main__":
     main()
-    
