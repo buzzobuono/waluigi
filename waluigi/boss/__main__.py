@@ -229,6 +229,14 @@ async def get_job_tasks(job_id: str):
 async def get_jobs():
     return db.list_jobs()
     
+@app.post('/api/jobs/{job_id}/cancel')
+async def cancel_job(job_id: str):
+    ok = db.cancel_job(job_id)
+    if not ok:
+        return JSONResponse({"status": "error", "message": "Job not found or already terminal"}, status_code=409)
+    log(f"🚫 Job cancelled: {job_id}")
+    return JSONResponse({"status": "cancelled"})
+
 @app.delete('/api/jobs/{job_id}')
 async def delete_job(job_id: str):
     return db.delete_job(job_id)
