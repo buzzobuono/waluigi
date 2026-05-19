@@ -17,14 +17,15 @@ from waluigi.catalog.services.materialize_service import MaterializeService
 
 logger = logging.getLogger("waluigi")
 
-def get_db():
-    try:
-        db = CatalogDB(args.db_url)
-        logger.info(f"Database ready: {args.db_url}")
-    except Exception as e:
-        print("QUI")
-        logger.error(f"Critical DB error: {e}")
-    return db
+_db: CatalogDB | None = None
+
+def init_db(url: str):
+    global _db
+    _db = CatalogDB(url)
+    logger.info(f"Database ready: {url}")
+
+def get_db() -> CatalogDB:
+    return _db
 
 def catalog_browser_service(db=Depends(get_db)) -> CatalogBrowserService:
     return CatalogBrowserService(db)
