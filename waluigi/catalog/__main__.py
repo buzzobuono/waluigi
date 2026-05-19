@@ -4,6 +4,7 @@ import uvicorn
 from fastapi import FastAPI
 
 from waluigi.catalog.config import args
+from waluigi.catalog.api.dependencies import init_db
 
 from waluigi.catalog.api.routes.browser_router import browser_router
 from waluigi.catalog.api.routes.source_router import source_router
@@ -46,6 +47,8 @@ def main():
     logger.info(f"  URL     : http://{args.host}:{args.port}")
     logger.info(f"  DB      : {args.db_url}")
     logger.info(f"  Data    : {args.data_path}")
+
+    init_db(args.db_url)
 
     uvicorn.run(app, host=args.bind_address, port=args.port, log_config=None)
 

@@ -139,7 +139,7 @@ _t_version_metadata = Table("version_metadata", _meta,
 class CatalogDB:
 
     def __init__(self, url: str):
-        kwargs = {}
+        kwargs = {"pool_pre_ping": True}
         if url.startswith("sqlite"):
             kwargs["connect_args"] = {"check_same_thread": False}
         self.engine = create_engine(url, **kwargs)
