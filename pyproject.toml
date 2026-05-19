@@ -6,7 +6,6 @@ build-backend = "setuptools.build_meta"
 name = "waluigi"
 version = "0.1.0"
 dependencies = [
-    "requests",
     "tabulate",
     "ConfigArgParse",
     "pyyaml",

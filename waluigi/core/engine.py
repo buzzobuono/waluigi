@@ -1,4 +1,4 @@
-import requests
+import httpx
 
 def log(msg):
     print(f"[Boss 🐢] {msg}", flush=True)
@@ -79,7 +79,7 @@ class WaluigiEngine:
             log(f"⏳ Slot acquired by worker {worker['url']} for {task.id}")
             log(self.db.get_worker_slots(worker['url']))  
             try:
-                r = requests.post(f"{worker['url']}/execute", json=payload, timeout=10)
+                r = httpx.post(f"{worker['url']}/execute", json=payload, timeout=10)
                 if r.status_code == 202:
                     log(f"🚀 Inviato a {worker['url']}: {task.id}")
                     return "SUCCESS"

@@ -1,10 +1,10 @@
 import logging
 import asyncio
-import httpx
 import yaml
 import uvicorn
 from fastapi import FastAPI
 
+from waluigi.core.http import AsyncHttpClient
 from waluigi.worker.config import args
 
 from waluigi.worker.api.routes.worker_router import worker_router
@@ -21,15 +21,15 @@ app = FastAPI(
 app.include_router(worker_router)
 
 async def heartbeat():
-    async with httpx.AsyncClient() as client:
+    async with AsyncHttpClient(args.boss_url, timeout=5) as client:
         while True:
             try:
-                await client.post(f"{args.boss_url}/worker/register", json={
+                await client.post("/worker/register", json={
                     "url": f"http://{args.host}:{args.port}",
                     "status": "ALIVE",
                     "max_slots": args.slots,
                     "free_slots": await slot_manager.get_available_slots()
-                }, timeout=5)
+                })
                 logger.info("Registrato con successo al Boss.")
             except Exception as e:
                 logger.error("Boss non raggiungibile...")

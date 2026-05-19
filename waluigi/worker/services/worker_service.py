@@ -2,20 +2,12 @@ import asyncio
 import json
 import logging
 import os
-import httpx
 
+from waluigi.core.http import AsyncHttpClient
 from waluigi.worker.config import args
 from waluigi.worker.slot_manager import SlotManager
 
 logger = logging.getLogger("waluigi")
-
-
-async def _post(endpoint, **kwargs):
-    async with httpx.AsyncClient() as client:
-        r = await client.post(f"{args.boss_url}{endpoint}", timeout=5, **kwargs)
-        if 500 <= r.status_code < 600:
-            raise RuntimeError(f"[bossd] Server error {r.status_code} on {endpoint}")
-        return r
 
 def _hash(nsdict):
     return " ".join(
@@ -27,6 +19,7 @@ class WorkerService:
 
     def __init__(self, slot_manager: SlotManager):
         self.slot_manager = slot_manager
+        self._boss = AsyncHttpClient(args.boss_url, timeout=5)
         
     async def run_command_async(self, command, id, job_id, namespace, params, attributes, config, resources, workdir, script=None):
         try:
@@ -84,17 +77,23 @@ class WorkerService:
             await self.slot_manager.release_slot()
         
 
+    async def _post(self, endpoint, **kwargs):
+        r = await self._boss.post(endpoint, **kwargs)
+        if 500 <= r.status_code < 600:
+            raise RuntimeError(f"[bossd] Server error {r.status_code} on {endpoint}")
+        return r
+
     async def _send_logs(self, task_id, lines):
         try:
-            await _post(f"/api/logs/{task_id}", json={
+            await self._post(f"/api/logs/{task_id}", json={
                 "worker_id": args.id,
                 "logs": lines
             })
         except Exception as e:
             logger.error(f"Error in sending log for {task_id}: {e}")
-            
+
     async def _update_boss(self, id, namespace, params, attributes, resources, status):
-        return await _post("/update", json={
+        return await self._post("/update", json={
             "worker_url": f"http://{args.host}:{args.port}",
             "id": id,
             "namespace": namespace,
