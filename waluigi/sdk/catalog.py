@@ -2,6 +2,7 @@ from __future__ import annotations
 import os
 import httpx
 import logging
+from waluigi.core.http import HttpClient
 from typing import Any, Dict, Iterator, List, Union
 import pandas as pd
 import pyarrow as pa
@@ -61,6 +62,7 @@ class CatalogClient:
         ).rstrip("/")
         self._task_id = os.environ.get("WALUIGI_TASK_ID", "unknown")
         self._job_id  = os.environ.get("WALUIGI_JOB_ID",  "unknown")
+        self._http    = HttpClient(self.url)
 
     # ── BROWSE ────────────────────────────────────────────────────────────────
 
@@ -206,16 +208,16 @@ class CatalogClient:
         return data
 
     def _get(self, path: str, params: dict = None) -> Any:
-        return self._unwrap(httpx.get(f"{self.url}{path}", params=params))
+        return self._unwrap(self._http.get(path, params=params))
 
     def _post(self, path: str, json: dict = None, params: dict = None) -> Any:
-        return self._unwrap(httpx.post(f"{self.url}{path}", json=json, params=params))
+        return self._unwrap(self._http.post(path, json=json, params=params))
 
     def _patch(self, path: str, json: dict = None, params: dict = None) -> Any:
-        return self._unwrap(httpx.patch(f"{self.url}{path}", json=json, params=params))
+        return self._unwrap(self._http.patch(path, json=json, params=params))
 
     def _delete(self, path: str, params: dict = None) -> Any:
-        return self._unwrap(httpx.delete(f"{self.url}{path}", params=params))
+        return self._unwrap(self._http.delete(path, params=params))
 
 
 # ── DatasetHandle ──────────────────────────────────────────────────────────────

@@ -1,6 +1,5 @@
 import sys
 import json
-import requests
 import yaml
 import argparse
 import time
@@ -8,11 +7,14 @@ import os
 from pathlib import Path
 from tabulate import tabulate
 
+from waluigi.core.http import HttpClient
+
 class WaluigiCLI:
     def __init__(self, base_url):
         self.base_url = base_url.rstrip('/')
         self.config_dir = Path.home() / '.waluigi'
         self.token_file = self.config_dir / 'token'
+        self._http = HttpClient(self.base_url)
         self._ensure_config_dir()
 
     def _ensure_config_dir(self):
@@ -40,9 +42,9 @@ class WaluigiCLI:
         try:
             payload = {
                 "username": username,
-                "password": password    
+                "password": password
             }
-            r = requests.post(f"{self.base_url}/auth/login", json=payload)
+            r = self._http.post("/auth/login", json=payload)
             if r.status_code == 200:
                 data = r.json()
                 token = data.get("token")
@@ -74,10 +76,10 @@ class WaluigiCLI:
             kind = doc.get('kind')
             
             if kind in ('StatefulJob', 'Job'):
-                r = requests.post(f"{self.base_url}/boss/submit", json=doc, headers=self._get_headers())
+                r = self._http.post("/boss/submit", json=doc, headers=self._get_headers())
                 print(json.dumps(r.json(), indent=2))
             elif kind == 'ClusterResources':
-                r = requests.post(f"{self.base_url}/boss/api/resources", json=doc, headers=self._get_headers())
+                r = self._http.post("/boss/api/resources", json=doc, headers=self._get_headers())
                 print(json.dumps(r.json(), indent=2))
             else:
                 print(f"Error: Type '{kind}' not supported")
@@ -86,7 +88,7 @@ class WaluigiCLI:
         
     def describe_job(self, key):
         try:
-            r = requests.get(f"{self.base_url}/boss/api/active/describe/{key}", headers=self._get_headers())
+            r = self._http.get(f"/boss/api/active/describe/{key}", headers=self._get_headers())
             if r.status_code == 200:
                 data = r.json()
                 print(f"Object details in memory for: {key}")
@@ -98,18 +100,16 @@ class WaluigiCLI:
             print(f"Connection error: {e}")
             
     def reset(self, scope, target):
-        url = f"{self.base_url}/boss/api/reset/{scope}/{target}"
-        r = requests.post(url, headers=self._get_headers())
+        r = self._http.post(f"/boss/api/reset/{scope}/{target}", headers=self._get_headers())
         print(f"Result code: {r.status_code}")
 
     def delete(self, scope, target):
-        url = f"{self.base_url}/boss/api/delete/{scope}/{target}"
-        r = requests.post(url, headers=self._get_headers())
+        r = self._http.post(f"/boss/api/delete/{scope}/{target}", headers=self._get_headers())
         print(f"Result code: {r.status_code}")
         
     def get_namespaces(self):
         try:
-            r = requests.get(f"{self.base_url}/boss/api/namespaces", headers=self._get_headers())
+            r = self._http.get("/boss/api/namespaces", headers=self._get_headers())
             if r.status_code == 200:
                 data = r.json()
                 if not data:
@@ -129,7 +129,7 @@ class WaluigiCLI:
         
     def get_jobs(self):
         try:
-            r = requests.get(f"{self.base_url}/boss/api/jobs", headers=self._get_headers())
+            r = self._http.get("/boss/api/jobs", headers=self._get_headers())
             if r.status_code == 200:
                 data = r.json()
                 if not data:
@@ -149,7 +149,7 @@ class WaluigiCLI:
     
     def get_tasks(self, job_id=None, namespace=None):
         try:
-            r = requests.get(f"{self.base_url}/boss/api/tasks", headers=self._get_headers())
+            r = self._http.get("/boss/api/tasks", headers=self._get_headers())
             if r.status_code == 200:
                 data = r.json()
                 if job_id:
@@ -179,7 +179,7 @@ class WaluigiCLI:
    
     def get_resources(self):
         try:
-            r = requests.get(f"{self.base_url}/boss/api/resources", headers=self._get_headers())
+            r = self._http.get("/boss/api/resources", headers=self._get_headers())
             if r.status_code == 200:
                 data = r.json()
                 if not data:
@@ -203,7 +203,7 @@ class WaluigiCLI:
    
     def get_workers(self):
         try:
-            r = requests.get(f"{self.base_url}/boss/api/workers", headers=self._get_headers())
+            r = self._http.get("/boss/api/workers", headers=self._get_headers())
             if r.status_code == 200:
                 data = r.json()
                 if not data:
@@ -235,7 +235,7 @@ class WaluigiCLI:
                 else:
                     params = {'limit': limit}
                 
-                r = requests.get(f"{self.base_url}/boss/api/logs/{task_id}", params=params, headers=self._get_headers())
+                r = self._http.get(f"/boss/api/logs/{task_id}", params=params, headers=self._get_headers())
                 if r.status_code != 200:
                     print(f"Error: {r.status_code}")
                     break
