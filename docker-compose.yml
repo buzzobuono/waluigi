@@ -12,7 +12,7 @@ services:
     volumes:
       - ./db:/db
     deploy:
-      replicas: 1
+      replicas: 3
 
   worker:
     image: buzzobuono/waluigi-worker:latest
@@ -28,7 +28,7 @@ services:
       - ./source:/source
       - ./data:/data
     deploy:
-      replicas: 3
+      replicas: 15
   
   catalog:
     image: buzzobuono/waluigi-catalog:latest

@@ -9,6 +9,7 @@ import LogModal from './LogModal.js';
 import ConfirmDialog from './ConfirmDialog.js';
 
 const { ref, computed, onMounted } = Vue;
+const PAGE_SIZE = 10;
 
 export default {
   name: 'Tasks',
@@ -21,6 +22,7 @@ export default {
     const error        = ref(null);
     const logModalRef  = ref(null);
     const confirmRef   = ref(null);
+    const pages        = ref({});
 
     const STATUS_COLOR = {
       SUCCESS: '#28a745',
@@ -43,6 +45,7 @@ export default {
       error.value   = null;
       try {
         tasks.value = await api.tasks();
+        pages.value = {};
       } catch (e) {
         error.value = e.message;
       } finally {
@@ -104,12 +107,35 @@ export default {
       if (logModalRef.value) logModalRef.value.show(id);
     }
 
+    function getNsPage(ns) {
+      return pages.value[ns] || 1;
+    }
+
+    function changeNsPage(ns, delta) {
+      const total = Math.max(1, Math.ceil((byNamespace.value[ns] || []).length / PAGE_SIZE));
+      const next  = getNsPage(ns) + delta;
+      if (next >= 1 && next <= total) pages.value = { ...pages.value, [ns]: next };
+    }
+
+    function totalPagesFor(taskList) {
+      return Math.max(1, Math.ceil(taskList.length / PAGE_SIZE));
+    }
+
+    function pagedTasksFor(ns, taskList) {
+      const start = (getNsPage(ns) - 1) * PAGE_SIZE;
+      return taskList.slice(start, start + PAGE_SIZE);
+    }
+
+    function rangeStartFor(ns) { return (getNsPage(ns) - 1) * PAGE_SIZE + 1; }
+    function rangeEndFor(ns, taskList) { return Math.min(getNsPage(ns) * PAGE_SIZE, taskList.length); }
+
     onMounted(load);
 
     return {
       tasks, loading, error, columns, STATUS_COLOR,
-      filterNs, byNamespace, logModalRef, confirmRef,
-      load, resetTask, deleteTask, resetNs, deleteNs, openLogs
+      filterNs, byNamespace, logModalRef, confirmRef, pages,
+      load, resetTask, deleteTask, resetNs, deleteNs, openLogs,
+      getNsPage, changeNsPage, totalPagesFor, pagedTasksFor, rangeStartFor, rangeEndFor
     };
   },
 
@@ -157,7 +183,7 @@ export default {
         </template>
 
         <template #tools>
-          <base-button-group class="ml-auto">
+          <base-button-group>
             <base-button
               label="Reset"
               icon="fas fa-history"
@@ -171,9 +197,28 @@ export default {
               @click="deleteNs(ns)"
             />
           </base-button-group>
+          <base-button-group class="ml-auto">
+            <base-button
+              :disabled="loading || getNsPage(ns) <= 1"
+              icon="fas fa-chevron-left"
+              color="outline-primary"
+              @click="changeNsPage(ns, -1)"
+            />
+            <base-button
+              :label="String(getNsPage(ns)) + ' / ' + String(totalPagesFor(taskList))"
+              :disabled="true"
+              color="outline-secondary"
+            />
+            <base-button
+              :disabled="loading || getNsPage(ns) >= totalPagesFor(taskList)"
+              icon="fas fa-chevron-right"
+              color="outline-primary"
+              @click="changeNsPage(ns, 1)"
+            />
+          </base-button-group>
         </template>
 
-        <base-table :columns="columns" :items="taskList">
+        <base-table :columns="columns" :items="pagedTasksFor(ns, taskList)">
 
           <template #cell(id)="{ item }">
             <a href="#" @click.prevent="openLogs(item.id)">
@@ -209,6 +254,13 @@ export default {
           </template>
 
         </base-table>
+
+        <template #footer>
+          <div class="text-muted small">
+            {{ taskList.length ? rangeStartFor(ns) + ' – ' + rangeEndFor(ns, taskList) + ' of ' + taskList.length : 'No tasks' }}
+          </div>
+        </template>
+
       </base-panel>
 
       <log-modal ref="logModalRef" />

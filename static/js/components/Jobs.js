@@ -17,18 +17,20 @@ export default {
   },
 
   setup() {
-    const jobs       = ref([]);
-    const loading    = ref(false);
-    const error      = ref(null);
-    const confirmRef = ref(null);
+    const jobs        = ref([]);
+    const loading     = ref(false);
+    const error       = ref(null);
+    const confirmRef  = ref(null);
+    const currentPage = ref(1);
+    const PAGE_SIZE   = 10;
 
     const columns = [
-      { key: 'job_id', label: 'Job ID' },
-      { key: 'status', label: 'Status' },
+      { key: 'job_id',     label: 'Job ID' },
+      { key: 'status',     label: 'Status' },
       { key: 'started_at', label: 'Started At' },
-      { key: 'locked_by', label: 'Locked By' },
+      { key: 'locked_by',  label: 'Locked By' },
       { key: 'locked_until', label: 'Locked Until' },
-      { key: 'actions', label: 'Actions', class: 'text-right pr-3' }
+      { key: 'actions',    label: 'Actions', class: 'text-right pr-3' }
     ];
 
     const STATUS_MAP = {
@@ -44,6 +46,7 @@ export default {
       error.value   = null;
       try {
         jobs.value = await api.jobs();
+        currentPage.value = 1;
       } catch (e) {
         error.value = e.message;
       } finally {
@@ -56,6 +59,21 @@ export default {
       jobs.value.forEach(j => { if (c[j.status] !== undefined) c[j.status]++; });
       return c;
     });
+
+    const totalPages = computed(() => Math.max(1, Math.ceil(jobs.value.length / PAGE_SIZE)));
+
+    const pagedJobs = computed(() => {
+      const start = (currentPage.value - 1) * PAGE_SIZE;
+      return jobs.value.slice(start, start + PAGE_SIZE);
+    });
+
+    const rangeStart = computed(() => (currentPage.value - 1) * PAGE_SIZE + 1);
+    const rangeEnd   = computed(() => Math.min(currentPage.value * PAGE_SIZE, jobs.value.length));
+
+    function changePage(delta) {
+      const next = currentPage.value + delta;
+      if (next >= 1 && next <= totalPages.value) currentPage.value = next;
+    }
 
     async function cancelJob(jobId) {
       confirmRef.value.ask(
@@ -81,7 +99,11 @@ export default {
 
     onMounted(load);
 
-    return { jobs, loading, error, columns, STATUS_MAP, counts, confirmRef, load, cancelJob, deleteJob };
+    return {
+      jobs, pagedJobs, loading, error, columns, STATUS_MAP,
+      counts, confirmRef, currentPage, totalPages, rangeStart, rangeEnd,
+      changePage, load, cancelJob, deleteJob
+    };
   },
 
   template: `
@@ -115,15 +137,38 @@ export default {
       </template>
 
       <base-panel :no-padding="true">
+
+        <template #tools>
+          <base-button-group class="ml-auto">
+            <base-button
+              :disabled="loading || currentPage <= 1"
+              icon="fas fa-chevron-left"
+              color="outline-primary"
+              @click="changePage(-1)"
+            />
+            <base-button
+              :label="String(currentPage) + ' / ' + String(totalPages)"
+              :disabled="true"
+              color="outline-secondary"
+            />
+            <base-button
+              :disabled="loading || currentPage >= totalPages"
+              icon="fas fa-chevron-right"
+              color="outline-primary"
+              @click="changePage(1)"
+            />
+          </base-button-group>
+        </template>
+
         <base-table
           :columns="columns"
-          :items="jobs">
+          :items="pagedJobs">
 
           <template #cell(job_id)="{ item }">
             <div>
-              <i class="fas fa-project-diagram mr-2 mr-2 opacity-75"></i>
-              <router-link :to="'/jobs/' + encodeURIComponent(item.job_id)" >
-                  {{ item.job_id }}
+              <i class="fas fa-project-diagram mr-2 opacity-75"></i>
+              <router-link :to="'/jobs/' + encodeURIComponent(item.job_id)">
+                {{ item.job_id }}
               </router-link>
             </div>
           </template>
@@ -159,6 +204,13 @@ export default {
           </template>
 
         </base-table>
+
+        <template #footer>
+          <div class="text-muted small">
+            {{ jobs.length ? rangeStart + ' – ' + rangeEnd + ' of ' + jobs.length : 'No jobs' }}
+          </div>
+        </template>
+
       </base-panel>
 
       <confirm-dialog title="Confirm" ref="confirmRef" />
