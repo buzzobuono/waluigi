@@ -81,6 +81,7 @@ export const api = {
   },
 
   jobs:      () => _get('/boss/api/jobs'),
+  cancelJob: (jobId) => _postJson(`/boss/api/jobs/${_enc(jobId)}/cancel`, {}),
   deleteJob: (jobId) => _delete(`/boss/api/jobs/${_enc(jobId)}`),
   jobTasks: (jobId) => _get(`/boss/api/jobs/${_enc(jobId)}/tasks`),
 

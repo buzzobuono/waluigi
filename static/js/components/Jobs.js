@@ -32,10 +32,11 @@ export default {
     ];
 
     const STATUS_MAP = {
-      RUNNING: { color: 'warning', icon: 'fas fa-spinner fa-spin' },
-      SUCCESS: { color: 'success', icon: 'fas fa-check' },
-      FAILED:  { color: 'danger',  icon: 'fas fa-times' },
-      PENDING: { color: 'secondary', icon: 'fas fa-clock' }
+      RUNNING:   { color: 'warning',   icon: 'fas fa-spinner fa-spin' },
+      SUCCESS:   { color: 'success',   icon: 'fas fa-check' },
+      FAILED:    { color: 'danger',    icon: 'fas fa-times' },
+      PENDING:   { color: 'secondary', icon: 'fas fa-clock' },
+      CANCELLED: { color: 'dark',      icon: 'fas fa-ban' }
     };
 
     async function load() {
@@ -51,10 +52,21 @@ export default {
     }
 
     const counts = computed(() => {
-      const c = { RUNNING: 0, SUCCESS: 0, FAILED: 0, PENDING: 0 };
+      const c = { RUNNING: 0, SUCCESS: 0, FAILED: 0, PENDING: 0, CANCELLED: 0 };
       jobs.value.forEach(j => { if (c[j.status] !== undefined) c[j.status]++; });
       return c;
     });
+
+    async function cancelJob(jobId) {
+      confirmRef.value.ask(
+        `Cancel job "${jobId}"?`,
+        async (ok) => {
+          if (!ok) return;
+          await api.cancelJob(jobId);
+          await load();
+        }
+      );
+    }
 
     async function deleteJob(jobId) {
       confirmRef.value.ask(
@@ -69,7 +81,7 @@ export default {
 
     onMounted(load);
 
-    return { jobs, loading, error, columns, STATUS_MAP, counts, confirmRef, load, deleteJob };
+    return { jobs, loading, error, columns, STATUS_MAP, counts, confirmRef, load, cancelJob, deleteJob };
   },
 
   template: `
@@ -129,12 +141,21 @@ export default {
           </template>
 
           <template #cell(actions)="{ item }">
-            <base-button
-              icon="fas fa-trash"
-              color="outline-danger"
-              title="Delete Job"
-              @click.stop="deleteJob(item.job_id)"
-            />
+            <base-button-group>
+              <base-button
+                v-if="item.status === 'RUNNING' || item.status === 'PENDING'"
+                icon="fas fa-ban"
+                color="outline-warning"
+                title="Cancel Job"
+                @click.stop="cancelJob(item.job_id)"
+              />
+              <base-button
+                icon="fas fa-trash"
+                color="outline-danger"
+                title="Delete Job"
+                @click.stop="deleteJob(item.job_id)"
+              />
+            </base-button-group>
           </template>
 
         </base-table>

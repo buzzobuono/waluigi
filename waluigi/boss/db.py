@@ -236,7 +236,7 @@ class WaluigiDB:
     def list_runnable_job_ids(self):
         cursor = self.conn.execute("""
             SELECT job_id FROM jobs
-            WHERE status NOT IN ('SUCCESS', 'FAILED')
+            WHERE status NOT IN ('SUCCESS', 'FAILED', 'CANCELLED')
             AND (locked_until IS NULL OR locked_until < datetime('now'))
         """)
         return [row[0] for row in cursor.fetchall()]
@@ -250,7 +250,7 @@ class WaluigiDB:
                     status = 'RUNNING',
                     started_at = COALESCE(started_at, datetime('now'))
                 WHERE job_id = ?
-                AND status NOT IN ('SUCCESS', 'FAILED')
+                AND status NOT IN ('SUCCESS', 'FAILED', 'CANCELLED')
                 AND (locked_until IS NULL OR locked_until < datetime('now'))
                 RETURNING job_id, metadata, spec
             """, (boss_id, job_id))
@@ -295,23 +295,29 @@ class WaluigiDB:
         columns = [column[0] for column in cursor.description]
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
     
+    def cancel_job(self, job_id):
+        with self.conn:
+            cursor = self.conn.execute("""
+                UPDATE jobs SET status = 'CANCELLED', locked_by = NULL, locked_until = NULL
+                WHERE job_id = ? AND status NOT IN ('SUCCESS', 'FAILED', 'CANCELLED')
+            """, (job_id,))
+        return cursor.rowcount > 0
+
     def delete_job(self, job_id):
         try:
             with self.conn:
                 # 1. Tentiamo di eliminare i task associati solo se il job è cancellabile
                 # Usiamo una subquery per sicurezza: cancella task solo se il job è SUCCESS o FAILED
                 self.conn.execute("""
-                    DELETE FROM tasks 
-                    WHERE job_id = ? 
-                    AND job_id IN (SELECT job_id FROM jobs WHERE status IN ('SUCCESS', 'FAILED'))
+                    DELETE FROM tasks
+                    WHERE job_id = ?
+                    AND job_id IN (SELECT job_id FROM jobs WHERE status IN ('SUCCESS', 'FAILED', 'CANCELLED'))
                 """, (job_id,))
 
-                # 2. Tentiamo di eliminare il job aggiungendo lo stato nel WHERE
-                # Se è in RUNNING, rowcount sarà 0 perché la condizione non è soddisfatta
                 cursor = self.conn.execute("""
-                    DELETE FROM jobs 
-                    WHERE job_id = ? 
-                    AND status IN ('SUCCESS', 'FAILED')
+                    DELETE FROM jobs
+                    WHERE job_id = ?
+                    AND status IN ('SUCCESS', 'FAILED', 'CANCELLED')
                 """, (job_id,))
 
                 # Se rowcount è > 0, significa che il job esisteva ed era in uno stato valido
