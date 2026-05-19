@@ -20,6 +20,7 @@ p = configargparse.ArgParser(auto_env_var_prefix='WALUIGI_BOSS_')
 p.add('--id', default=str(uuid.uuid4()), help='Unique ID')
 p.add('--port', type=int, default=8082)
 p.add('--host', default=socket.gethostname(), help='Hostname')
+p.add('--tick', default=15, help='Scheduler interval')
 p.add('--bind-address', default='0.0.0.0', help='Binding IP')
 p.add('--db-path', default=os.path.join(os.getcwd(), "db/waluigi.db"), help='Sqlite DB Path')
 
@@ -69,7 +70,7 @@ def planner_loop():
             runnable = db.list_runnable_job_ids()
             if not runnable:
                 log(f"🧠 No jobs to run")
-                time.sleep(5)
+                time.sleep(args.tick)
                 continue
 
             for job_id in runnable:
@@ -99,11 +100,11 @@ def planner_loop():
                     db.release_job(job_id)
                     log(f"🧠 Job released: {job_id}")
 
-            time.sleep(5)
+            time.sleep(args.tick)
 
         except Exception as e:
             log(f"❌ Planner error: {e}")
-            time.sleep(5)
+            time.sleep(args.tick)
 
 @app.post('/worker/register')
 async def register(request: Request):
@@ -264,7 +265,8 @@ def main():
     log(f"    ID: {args.id}")
     log(f"    Binding: {args.bind_address}:{args.port}")
     log(f"    URL: http://{args.host}:{args.port}")
-    log(f"    DB: {args.db_path}")
+    log(f"    DB Path: {args.db_path}")
+    log(f"    Tick: {args.tick}")
 
     threading.Thread(target=planner_loop, daemon=True).start()
 
