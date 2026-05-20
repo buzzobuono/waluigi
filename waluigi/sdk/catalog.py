@@ -2,12 +2,12 @@ from __future__ import annotations
 import os
 import httpx
 import logging
-from waluigi.core.http import HttpClient
+from waluigi.commons.http import HttpClient
 from typing import Any, Dict, Iterator, List, Union
 import pandas as pd
 import pyarrow as pa
 
-from waluigi.core.utils import _model_dump
+from waluigi.commons.utils import _model_dump
 from waluigi.catalog.api.schemas import (
     DatasetCreateRequest, DatasetFormat, DatasetStatus,
     SourceCreateRequest,

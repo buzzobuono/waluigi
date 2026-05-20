@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
-from waluigi.core.responses import ok, ko
-from waluigi.core.utils import _model_dump
+from waluigi.commons.responses import ok, ko
+from waluigi.commons.utils import _model_dump
 from waluigi.catalog.api.schemas import ExpectationCreateRequest, ExpectationUpdateRequest
 from waluigi.catalog.services.dq_service import DQService
 from waluigi.catalog.config.dependencies import dq_service

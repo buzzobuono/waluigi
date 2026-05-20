@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from waluigi.core.responses import ok, ko
+from waluigi.commons.responses import ok, ko
 from waluigi.catalog.services.browser_service import CatalogBrowserService
 from waluigi.catalog.config.dependencies import catalog_browser_service
 

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from waluigi.core.responses import ok, ko
+from waluigi.commons.responses import ok, ko
 from waluigi.catalog.api.schemas import MetadataSetRequest
 from waluigi.catalog.services.lineage_service import LineageService
 from waluigi.catalog.config.dependencies import lineage_service

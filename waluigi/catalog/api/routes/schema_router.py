@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends
 
-from waluigi.core.utils import _model_dump
+from waluigi.commons.utils import _model_dump
 from waluigi.catalog.api.schemas import SchemaPublishRequest, SchemaColumnPatch
-from waluigi.core.responses import ok, warn, ko
+from waluigi.commons.responses import ok, warn, ko
 from waluigi.catalog.services.schema_service import SchemaService
 from waluigi.catalog.config.dependencies import schema_service
 

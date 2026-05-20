@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, Query
 
-from waluigi.core.utils import _model_dump
+from waluigi.commons.utils import _model_dump
 from waluigi.catalog.api.schemas import ChartCreateRequest, ChartUpdateRequest
-from waluigi.core.responses import ok, warn, ko
+from waluigi.commons.responses import ok, warn, ko
 from waluigi.catalog.services.chart_service import ChartService
 from waluigi.catalog.config.dependencies import chart_service
 

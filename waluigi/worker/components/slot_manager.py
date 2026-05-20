@@ -1,5 +1,5 @@
 import asyncio
-from waluigi.worker.config import args
+from waluigi.worker.config.args import args
 
 class SlotManager:
     def __init__(self):

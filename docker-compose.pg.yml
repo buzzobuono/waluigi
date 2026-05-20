@@ -1,0 +1,103 @@
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: catalog
+      POSTGRES_USER: catalog
+      POSTGRES_PASSWORD: ${CATALOG_PG_PASSWORD:?CATALOG_PG_PASSWORD must be set}
+    volumes:
+      - catalog_pgdata:/var/lib/postgresql/data
+    ports:
+      - target: 5432
+        published: 5432
+        protocol: tcp
+        mode: host
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U catalog -d catalog"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+
+  boss:
+    image: buzzobuono/waluigi-boss:latest
+    ports:
+      - target: 8082
+        published: 8082
+        protocol: tcp
+        mode: ingress
+    environment:
+      - WALUIGI_BOSS_DB_PATH=/db/waluigi.db
+    volumes:
+      - ./db:/db
+    deploy:
+      replicas: 3
+
+  worker:
+    image: buzzobuono/waluigi-worker:latest
+    depends_on:
+      - boss
+    environment:
+      - WALUIGI_WORKER_BOSS_URL=http://boss:8082
+      - WALUIGI_WORKER_WORKDIR=/work
+      - WALUIGI_WORKER_SLOTS=1
+      - WALUIGI_CATALOG_URL=http://catalog:9000
+    volumes:
+      - ./work:/work
+      - ./source:/source
+      - ./data:/data
+    deploy:
+      replicas: 15
+
+  catalog:
+    image: buzzobuono/waluigi-catalog:latest
+    depends_on:
+      - postgres
+    ports:
+      - target: 9000
+        published: 9000
+        protocol: tcp
+        mode: ingress
+    environment:
+      - WALUIGI_CATALOG_DB_URL=postgresql+psycopg2://catalog:${CATALOG_PG_PASSWORD:?CATALOG_PG_PASSWORD must be set}@postgres/catalog
+      - WALUIGI_CATALOG_DATA_PATH=/data
+    volumes:
+      - ./data:/data
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 10
+
+  console:
+    image: buzzobuono/waluigi-console:latest
+    depends_on:
+      - boss
+      - catalog
+    ports:
+      - target: 8080
+        published: 8080
+        protocol: tcp
+        mode: ingress
+    environment:
+      - WALUIGI_CONSOLE_BOSS_URL=http://boss:8082
+      - WALUIGI_CONSOLE_CATALOG_URL=http://catalog:9000
+      - WALUIGI_CONSOLE_DB_PATH=/db/console.db
+      - WALUIGI_CONSOLE_DATA_PATH=/data
+    volumes:
+      - ./db:/db
+      - ./data:/data
+    deploy:
+      replicas: 1
+
+volumes:
+  catalog_pgdata:

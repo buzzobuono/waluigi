@@ -3,12 +3,12 @@ import threading
 import logging
 from fastapi import APIRouter, Request, Depends
 
-from waluigi.core.responses import ok, ko
+from waluigi.commons.responses import ok, ko
 from waluigi.worker.services.worker_service import WorkerService
-from waluigi.worker.api.dependencies import get_slot_manager, get_worker_service
+from waluigi.worker.config.dependencies import get_slot_manager, get_worker_service
 from waluigi.worker.api.schemas import ExecuteTaskRequest
-from waluigi.worker.config import args
-from waluigi.worker.slot_manager import SlotManager
+from waluigi.worker.config.args import args
+from waluigi.worker.components.slot_manager import SlotManager
 
 logger = logging.getLogger("waluigi")
 

@@ -10,8 +10,8 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from waluigi.boss.db import WaluigiDB
-from waluigi.core.engine import WaluigiEngine
-from waluigi.core.dag import DAGTask, parse_definition
+from waluigi.commons.engine import WaluigiEngine
+from waluigi.commons.dag import DAGTask, parse_definition
 
 app = FastAPI()
 

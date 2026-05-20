@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
-from waluigi.core.responses import ok, warn, ko
-from waluigi.core.utils import _model_dump
+from waluigi.commons.responses import ok, warn, ko
+from waluigi.commons.utils import _model_dump
 from waluigi.catalog.api.schemas import DatasetCreateRequest, DatasetUpdateRequest, DatasetStatus, ApproveRequest
 from waluigi.catalog.services.dataset_service import DatasetService
 from waluigi.catalog.config.dependencies import dataset_service

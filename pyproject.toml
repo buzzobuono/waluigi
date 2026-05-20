@@ -15,7 +15,8 @@ dependencies = [
     "pandas",
     "pyarrow",
     "boto3",
-    "sqlalchemy"
+    "sqlalchemy",
+    "psycopg2-binary"
 ]
 
 [tool.setuptools.packages.find]

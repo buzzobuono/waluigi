@@ -4,11 +4,11 @@ import yaml
 import uvicorn
 from fastapi import FastAPI
 
-from waluigi.core.http import AsyncHttpClient
-from waluigi.worker.config import args
+from waluigi.commons.http import AsyncHttpClient
+from waluigi.worker.config.args import args
 
 from waluigi.worker.api.routes.worker_router import worker_router
-from waluigi.worker.slot_manager import slot_manager
+from waluigi.worker.components.slot_manager import slot_manager
 
 logger = logging.getLogger("waluigi")
 

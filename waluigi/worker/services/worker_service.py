@@ -3,9 +3,9 @@ import json
 import logging
 import os
 
-from waluigi.core.http import AsyncHttpClient
-from waluigi.worker.config import args
-from waluigi.worker.slot_manager import SlotManager
+from waluigi.commons.http import AsyncHttpClient
+from waluigi.worker.config.args import args
+from waluigi.worker.components.slot_manager import SlotManager
 
 logger = logging.getLogger("waluigi")
 

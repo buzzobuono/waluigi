@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from tabulate import tabulate
 
-from waluigi.core.http import HttpClient
+from waluigi.commons.http import HttpClient
 
 class WaluigiCLI:
     def __init__(self, base_url):

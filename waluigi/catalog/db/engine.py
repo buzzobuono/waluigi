@@ -147,14 +147,14 @@ def create_catalog_engine(url: str):
             dbapi_conn.execute("PRAGMA foreign_keys=ON")
 
     _meta.create_all(engine)
-    with engine.begin() as conn:
-        for ddl in (
-            "ALTER TABLE datasets ADD COLUMN approved_by TEXT",
-            "ALTER TABLE datasets ADD COLUMN approved_at TEXT",
-        ):
-            try:
+    for ddl in (
+        "ALTER TABLE datasets ADD COLUMN approved_by TEXT",
+        "ALTER TABLE datasets ADD COLUMN approved_at TEXT",
+    ):
+        try:
+            with engine.begin() as conn:
                 conn.execute(text(ddl))
-            except Exception:
-                pass
+        except Exception:
+            pass
 
     return engine
