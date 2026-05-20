@@ -11,6 +11,7 @@ from waluigi.catalog.repositories.schema_repo import SchemaRepository
 from waluigi.catalog.repositories.lineage_repo import LineageRepository
 from waluigi.catalog.repositories.expectation_repo import ExpectationRepository
 from waluigi.catalog.utils import _infer_schema, _version_id, _safe_json_value
+from waluigi.catalog.api.schemas import VersionResponse
 from waluigi.sdk.connectors import ConnectorFactory
 
 logger = logging.getLogger("waluigi")
@@ -43,10 +44,10 @@ class VersionService:
         self.data_path    = data_path
         self.dq_service   = dq_service
 
-    def list_versions(self, dataset_id: str) -> list[dict]:
+    def list_versions(self, dataset_id: str) -> list[VersionResponse]:
         if not self.datasets.exists(dataset_id):
             raise ValueError("Dataset not found")
-        return [v.to_dict() for v in self.versions.list(dataset_id)]
+        return [VersionResponse.from_entity(v) for v in self.versions.list(dataset_id)]
 
     def deprecate(self, dataset_id: str, version: str) -> dict:
         if not self.versions.deprecate(dataset_id, version):

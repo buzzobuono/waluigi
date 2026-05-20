@@ -142,3 +142,81 @@ class ScanRequest(BaseModel):
     data_path: Optional[str] = None
     prefix:    Optional[str] = None
 
+
+# ---------------------------------------------------------------------------
+# Response models — define the public API contract independently of DB schema
+# ---------------------------------------------------------------------------
+
+class SourceResponse(BaseModel):
+    id:          str
+    type:        str
+    config:      Dict[str, Any]
+    description: Optional[str]
+    createdate:  str
+    updatedate:  str
+
+    @classmethod
+    def from_entity(cls, e) -> "SourceResponse":
+        return cls(
+            id=e.id, type=e.type, config=e.config,
+            description=e.description,
+            createdate=e.createdate, updatedate=e.updatedate,
+        )
+
+
+class DatasetResponse(BaseModel):
+    id:          str
+    format:      str
+    description: Optional[str]
+    status:      str
+    source_id:   Optional[str]
+    dq_suite:    Optional[str]
+    createdate:  str
+    updatedate:  str
+
+    @classmethod
+    def from_entity(cls, e) -> "DatasetResponse":
+        return cls(
+            id=e.id, format=e.format, description=e.description,
+            status=e.status, source_id=e.source_id, dq_suite=e.dq_suite,
+            createdate=e.createdate, updatedate=e.updatedate,
+        )
+
+
+class VersionResponse(BaseModel):
+    dataset_id: str
+    version:    str
+    location:   str
+    status:     str
+    createdate: str
+    updatedate: str
+
+    @classmethod
+    def from_entity(cls, e) -> "VersionResponse":
+        return cls(
+            dataset_id=e.dataset_id, version=e.version,
+            location=e.location, status=e.status,
+            createdate=e.createdate, updatedate=e.updatedate,
+        )
+
+
+class ExpectationResponse(BaseModel):
+    id:         int
+    dataset_id: str
+    rule_id:    str
+    inputs:     Dict[str, Any]
+    params:     Dict[str, Any]
+    tolerance:  float
+    position:   int
+    createdate: str
+    updatedate: str
+
+    @classmethod
+    def from_entity(cls, e) -> "ExpectationResponse":
+        return cls(
+            id=e.id, dataset_id=e.dataset_id, rule_id=e.rule_id,
+            inputs=e.inputs, params=e.params,
+            tolerance=e.tolerance, position=e.position,
+            createdate=e.createdate, updatedate=e.updatedate,
+        )
+

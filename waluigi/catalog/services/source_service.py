@@ -1,6 +1,7 @@
 import logging
 
 from waluigi.catalog.repositories.source_repo import SourceRepository
+from waluigi.catalog.api.schemas import SourceResponse
 
 logger = logging.getLogger("waluigi")
 
@@ -10,15 +11,15 @@ class SourceService:
     def __init__(self, repo: SourceRepository):
         self.repo = repo
 
-    def list(self) -> list[dict]:
-        return [s.to_dict() for s in self.repo.list()]
+    def list(self) -> list[SourceResponse]:
+        return [SourceResponse.from_entity(s) for s in self.repo.list()]
 
-    def get(self, id: str) -> dict | None:
+    def get(self, id: str) -> SourceResponse | None:
         source = self.repo.get(id)
-        return source.to_dict() if source else None
+        return SourceResponse.from_entity(source) if source else None
 
     def upsert(self, id: str, source_type: str, config: dict,
-               description: str | None) -> dict:
+               description: str | None) -> SourceResponse:
         existing = self.repo.get(id)
         if existing and existing.type != source_type:
             raise ValueError(
@@ -26,12 +27,12 @@ class SourceService:
                 f"to '{source_type}' — create a new source instead"
             )
         self.repo.upsert(id, source_type, config, description)
-        return self.repo.get(id).to_dict()
+        return SourceResponse.from_entity(self.repo.get(id))
 
-    def update(self, id: str, **kwargs) -> dict | None:
+    def update(self, id: str, **kwargs) -> SourceResponse | None:
         if not self.repo.update(id, **kwargs):
             return None
-        return self.repo.get(id).to_dict()
+        return SourceResponse.from_entity(self.repo.get(id))
 
     def delete(self, id: str) -> bool:
         return self.repo.delete(id)

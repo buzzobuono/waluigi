@@ -4,6 +4,7 @@ from waluigi.catalog.db.base import atomic
 from waluigi.catalog.repositories.dataset_repo import DatasetRepository
 from waluigi.catalog.repositories.source_repo import SourceRepository
 from waluigi.catalog.repositories.schema_repo import SchemaRepository
+from waluigi.catalog.api.schemas import DatasetResponse
 
 logger = logging.getLogger("waluigi")
 
@@ -16,22 +17,22 @@ class DatasetService:
         self.sources  = sources
         self.schema   = schema
 
-    def find(self, status=None, description=None) -> list[dict]:
-        if not status and not description:
-            return [d.to_dict() for d in self.datasets.list()]
-        return [d.to_dict() for d in self.datasets.find(status=status, description=description)]
+    def find(self, status=None, description=None) -> list[DatasetResponse]:
+        datasets = self.datasets.list() if not status and not description \
+                   else self.datasets.find(status=status, description=description)
+        return [DatasetResponse.from_entity(d) for d in datasets]
 
-    def get(self, id: str) -> tuple[dict, list]:
+    def get(self, id: str) -> tuple[DatasetResponse, list]:
         dataset = self.datasets.get(id)
         if not dataset:
             raise ValueError("Dataset not found")
         msgs = []
         if dataset.status != "approved":
             msgs.append(f"Dataset status is '{dataset.status}' — not yet approved")
-        return dataset.to_dict(), msgs
+        return DatasetResponse.from_entity(dataset), msgs
 
     def create(self, id: str, fmt: str, description=None,
-               source_id=None, dq_suite=None) -> dict:
+               source_id=None, dq_suite=None) -> DatasetResponse:
         source_id = source_id or None
         if source_id and not self.sources.exists(source_id):
             raise ValueError("Source not found")
@@ -44,12 +45,12 @@ class DatasetService:
                 f"to '{fmt}' — create a new dataset instead"
             )
         self.datasets.create(id, fmt, description, source_id, dq_suite)
-        return self.datasets.get(id).to_dict()
+        return DatasetResponse.from_entity(self.datasets.get(id))
 
-    def update(self, id: str, **kwargs) -> dict | None:
+    def update(self, id: str, **kwargs) -> DatasetResponse | None:
         if not self.datasets.update(id, **kwargs):
             return None
-        return self.datasets.get(id).to_dict()
+        return DatasetResponse.from_entity(self.datasets.get(id))
 
     def delete(self, id: str) -> bool:
         return self.datasets.delete(id)

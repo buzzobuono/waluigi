@@ -5,6 +5,7 @@ import logging
 from waluigi.catalog.repositories.dataset_repo import DatasetRepository
 from waluigi.catalog.repositories.dq_result_repo import DQResultRepository
 from waluigi.catalog.repositories.expectation_repo import ExpectationRepository
+from waluigi.catalog.api.schemas import ExpectationResponse
 from waluigi.sdk.dataquality import DQManager
 
 logger = logging.getLogger("waluigi")
@@ -105,24 +106,27 @@ class DQService:
             raise ValueError("No DQ result for this version")
         return row
 
-    def list_expectations(self, dataset_id: str) -> list[dict]:
+    def list_expectations(self, dataset_id: str) -> list[ExpectationResponse]:
         if not self.datasets.exists(dataset_id):
             raise ValueError("Dataset not found")
-        return [e.to_dict() for e in self.expectations.list(dataset_id)]
+        return [ExpectationResponse.from_entity(e)
+                for e in self.expectations.list(dataset_id)]
 
     def add_expectation(self, dataset_id: str, rule_id: str, inputs: dict,
-                        params: dict, tolerance: float, position: int) -> dict:
+                        params: dict, tolerance: float, position: int) -> ExpectationResponse:
         if not self.datasets.exists(dataset_id):
             raise ValueError("Dataset not found")
-        return self.expectations.add(dataset_id, rule_id, inputs, params,
-                                     tolerance, position).to_dict()
+        entity = self.expectations.add(dataset_id, rule_id, inputs, params,
+                                       tolerance, position)
+        return ExpectationResponse.from_entity(entity)
 
-    def update_expectation(self, dataset_id: str, exp_id: int, **updates) -> dict:
+    def update_expectation(self, dataset_id: str, exp_id: int,
+                           **updates) -> ExpectationResponse:
         if not self.datasets.exists(dataset_id):
             raise ValueError("Dataset not found")
         if not self.expectations.update(dataset_id, exp_id, **updates):
             raise ValueError("Expectation not found")
-        return self.expectations.get(dataset_id, exp_id).to_dict()
+        return ExpectationResponse.from_entity(self.expectations.get(dataset_id, exp_id))
 
     def delete_expectation(self, dataset_id: str, exp_id: int) -> dict:
         if not self.datasets.exists(dataset_id):
