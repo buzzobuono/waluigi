@@ -43,10 +43,10 @@ class VersionService:
         self.data_path    = data_path
         self.dq_service   = dq_service
 
-    def list_versions(self, dataset_id: str) -> list:
+    def list_versions(self, dataset_id: str) -> list[dict]:
         if not self.datasets.exists(dataset_id):
             raise ValueError("Dataset not found")
-        return self.versions.list(dataset_id)
+        return [v.to_dict() for v in self.versions.list(dataset_id)]
 
     def deprecate(self, dataset_id: str, version: str) -> dict:
         if not self.versions.deprecate(dataset_id, version):

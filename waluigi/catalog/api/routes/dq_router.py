@@ -13,7 +13,7 @@ dq_router = APIRouter(
          summary="List all DQ expectations for a dataset")
 async def list_expectations(dataset_id: str, dq_service: DQService = Depends(dq_service)):
     try:
-        return ok([e.to_dict() for e in dq_service.list_expectations(dataset_id)])
+        return ok(dq_service.list_expectations(dataset_id))
     except ValueError as e:
         return ko(str(e), 404)
 
@@ -24,7 +24,7 @@ async def add_expectation(dataset_id: str, body: ExpectationCreateRequest, dq_se
     try:
         return ok(dq_service.add_expectation(
             dataset_id, body.rule_id, body.inputs,
-            body.params, body.tolerance, body.position).to_dict())
+            body.params, body.tolerance, body.position))
     except ValueError as e:
         return ko(str(e), 404)
 
@@ -34,7 +34,7 @@ async def add_expectation(dataset_id: str, body: ExpectationCreateRequest, dq_se
 async def update_expectation(dataset_id: str, exp_id: int, body: ExpectationUpdateRequest, dq_service: DQService = Depends(dq_service)):
     try:
         updates = {k: v for k, v in _model_dump(body).items() if v is not None}
-        return ok(dq_service.update_expectation(dataset_id, exp_id, **updates).to_dict())
+        return ok(dq_service.update_expectation(dataset_id, exp_id, **updates))
     except ValueError as e:
         return ko(str(e), 404)
 

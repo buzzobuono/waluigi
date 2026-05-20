@@ -16,10 +16,10 @@ class DatasetService:
         self.sources  = sources
         self.schema   = schema
 
-    def find(self, status=None, description=None) -> list:
+    def find(self, status=None, description=None) -> list[dict]:
         if not status and not description:
-            return self.datasets.list()
-        return self.datasets.find(status=status, description=description)
+            return [d.to_dict() for d in self.datasets.list()]
+        return [d.to_dict() for d in self.datasets.find(status=status, description=description)]
 
     def get(self, id: str) -> tuple[dict, list]:
         dataset = self.datasets.get(id)
@@ -28,7 +28,7 @@ class DatasetService:
         msgs = []
         if dataset.status != "approved":
             msgs.append(f"Dataset status is '{dataset.status}' — not yet approved")
-        return dataset, msgs
+        return dataset.to_dict(), msgs
 
     def create(self, id: str, fmt: str, description=None,
                source_id=None, dq_suite=None) -> dict:
@@ -44,12 +44,12 @@ class DatasetService:
                 f"to '{fmt}' — create a new dataset instead"
             )
         self.datasets.create(id, fmt, description, source_id, dq_suite)
-        return self.datasets.get(id)
+        return self.datasets.get(id).to_dict()
 
     def update(self, id: str, **kwargs) -> dict | None:
         if not self.datasets.update(id, **kwargs):
             return None
-        return self.datasets.get(id)
+        return self.datasets.get(id).to_dict()
 
     def delete(self, id: str) -> bool:
         return self.datasets.delete(id)
