@@ -63,7 +63,8 @@ async function _delete(url) {
   return _handle(r, url);
 }
 
-function _enc(s)  { return encodeURIComponent(s); }
+function _enc(s)    { return encodeURIComponent(s); }
+function _unwrap(r) { return r?.data !== undefined ? r.data : r; }
 
 export const api = {
   adminUsers:      ()            => _get('/auth/users'),
@@ -80,23 +81,23 @@ export const api = {
     return r.json();
   },
 
-  jobs:      () => _get('/boss/api/jobs'),
-  cancelJob: (jobId) => _postJson(`/boss/api/jobs/${_enc(jobId)}/cancel`, {}),
-  deleteJob: (jobId) => _delete(`/boss/api/jobs/${_enc(jobId)}`),
-  jobTasks: (jobId) => _get(`/boss/api/jobs/${_enc(jobId)}/tasks`),
+  jobs:      ()      => _get('/boss/api/jobs').then(_unwrap),
+  cancelJob: (jobId) => _postJson(`/boss/api/jobs/${_enc(jobId)}/cancel`, {}).then(_unwrap),
+  deleteJob: (jobId) => _delete(`/boss/api/jobs/${_enc(jobId)}`).then(_unwrap),
+  jobTasks:  (jobId) => _get(`/boss/api/jobs/${_enc(jobId)}/tasks`).then(_unwrap),
 
-  namespaces: () => _get('/boss/api/namespaces'),
-  resetNamespace:  (ns) => _post(`/boss/api/reset/namespace/${_enc(ns)}`),
-  deleteNamespace: (ns) => _post(`/boss/api/delete/namespace/${_enc(ns)}`),
+  namespaces:      ()   => _get('/boss/api/namespaces').then(_unwrap),
+  resetNamespace:  (ns) => _post(`/boss/api/reset/namespace/${_enc(ns)}`).then(_unwrap),
+  deleteNamespace: (ns) => _post(`/boss/api/delete/namespace/${_enc(ns)}`).then(_unwrap),
 
-  tasks:     () => _get('/boss/api/tasks'),
-  resetTask:       (id) => _post(`/boss/api/reset/task/${_enc(id)}`),
-  deleteTask:      (id) => _post(`/boss/api/delete/task/${_enc(id)}`),
-  logs:      (taskId, limit = 100) => _get(`/boss/api/logs/${_enc(taskId)}`, { limit }),
+  tasks:     ()  => _get('/boss/api/tasks').then(_unwrap),
+  resetTask: (id) => _post(`/boss/api/reset/task/${_enc(id)}`).then(_unwrap),
+  deleteTask: (id) => _post(`/boss/api/delete/task/${_enc(id)}`).then(_unwrap),
+  logs:      (taskId, limit = 100) => _get(`/boss/api/logs/${_enc(taskId)}`, { limit }).then(_unwrap),
 
-  workers:   () => _get('/boss/api/workers'),
+  workers:   () => _get('/boss/api/workers').then(_unwrap),
 
-  resources: () => _get('/boss/api/resources'),
+  resources: () => _get('/boss/api/resources').then(_unwrap),
 
   catalogSources:       ()      => _get('/catalog/sources'),
   catalogCreateSource:  (body)  => _postJson('/catalog/sources', body),
