@@ -17,7 +17,7 @@ version_router = APIRouter(
          summary="List all committed versions (newest first)")
 async def list_versions(dataset_id: str, version_service: VersionService = Depends(version_service)):
     try:
-        return ok([v.to_dict() for v in version_service.list_versions(dataset_id)])
+        return ok(version_service.list_versions(dataset_id))
     except ValueError as e:
         return ko(str(e), 404)  
 

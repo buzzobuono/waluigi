@@ -15,7 +15,7 @@ dataset_router = APIRouter(
 )
 async def find_datasets(status: DatasetStatus | None = Query(default=None, example=DatasetStatus.DRAFT),
                         description: str | None = Query(default=None, example="sales dataset"), dataset_service: DatasetService = Depends(dataset_service)):
-    return ok([d.to_dict() for d in dataset_service.find(status, description)])
+    return ok(dataset_service.find(status, description))
 
 
 @dataset_router.post("", tags=["Datasets"],
@@ -24,7 +24,7 @@ async def find_datasets(status: DatasetStatus | None = Query(default=None, examp
 async def create_dataset(body: DatasetCreateRequest, dataset_service: DatasetService = Depends(dataset_service)):
     try:
         return ok(dataset_service.create(
-            body.id, body.format.value, body.description, body.source_id, body.dq_suite).to_dict())
+            body.id, body.format.value, body.description, body.source_id, body.dq_suite))
     except ValueError as e:
         msg = str(e)
         if "Source not found" in msg:      return ko(msg, 404)
@@ -37,8 +37,7 @@ async def create_dataset(body: DatasetCreateRequest, dataset_service: DatasetSer
 async def get_dataset(id: str, dataset_service: DatasetService = Depends(dataset_service)):
     try:
         dataset, msgs = dataset_service.get(id)
-        d = dataset.to_dict()
-        return warn(d, msgs) if msgs else ok(d)
+        return warn(dataset, msgs) if msgs else ok(dataset)
     except ValueError as e:
         return ko(str(e), 404)
 
@@ -49,7 +48,7 @@ async def update_dataset(id: str, body: DatasetUpdateRequest, dataset_service: D
     dataset = dataset_service.update(id, **_model_dump(body))
     if not dataset:
         return ko("Dataset not found", 404)
-    return ok(dataset.to_dict())
+    return ok(dataset)
 
 
 @dataset_router.delete("/{id:path}", tags=["Datasets"],

@@ -1,16 +1,17 @@
 from typing import Any
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 
 def ok(data: Any, messages: list[str] = None, status: int = 200) -> JSONResponse:
     return JSONResponse({
-        "data": data,
+        "data": jsonable_encoder(data),
         "diagnostic": {"result": "OK", "messages": messages or []},
     }, status_code=status)
 
 
 def warn(data: Any, messages: list[str]) -> JSONResponse:
     return JSONResponse({
-        "data": data,
+        "data": jsonable_encoder(data),
         "diagnostic": {"result": "WARN", "messages": messages},
     })
 
