@@ -3,7 +3,7 @@ from waluigi.core.responses import ok, warn, ko
 from waluigi.core.utils import _model_dump
 from waluigi.catalog.api.schemas import DatasetCreateRequest, DatasetUpdateRequest, DatasetStatus, ApproveRequest
 from waluigi.catalog.services.dataset_service import DatasetService
-from waluigi.catalog.api.dependencies import dataset_service
+from waluigi.catalog.config.dependencies import dataset_service
 
 dataset_router = APIRouter(
     prefix="/datasets"

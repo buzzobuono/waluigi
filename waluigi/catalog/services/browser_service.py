@@ -7,8 +7,8 @@ logger = logging.getLogger("waluigi")
 
 class CatalogBrowserService:
 
-    def __init__(self, repo: FolderRepository):
-        self.repo = repo
+    def __init__(self, folders_repository: FolderRepository):
+        self.folders_repository = folders_repository
 
     def list_folders(self, prefix: str) -> list:
-        return self.repo.list_folders(prefix)
+        return self.folders_repository.list_folders(prefix)

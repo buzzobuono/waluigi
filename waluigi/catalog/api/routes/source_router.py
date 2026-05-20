@@ -3,7 +3,7 @@ from waluigi.core.responses import ok, ko
 from waluigi.core.utils import _model_dump
 from waluigi.catalog.api.schemas import SourceCreateRequest, SourceUpdateRequest
 from waluigi.catalog.services.source_service import SourceService
-from waluigi.catalog.api.dependencies import source_service
+from waluigi.catalog.config.dependencies import source_service
 
 source_router = APIRouter(
     prefix="/sources",

@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends
 import os
 
-from waluigi.catalog.config import args
+from waluigi.catalog.config.args import args
 from waluigi.core.utils import _model_dump
 from waluigi.core.responses import ok, warn, ko
 from waluigi.catalog.api.schemas import ReserveRequest, CommitRequest, VirtualRegisterRequest, ScanRequest
 from waluigi.catalog.services.version_service import VersionService
-from waluigi.catalog.api.dependencies import version_service
+from waluigi.catalog.config.dependencies import version_service
 
 version_router = APIRouter(
     prefix="/datasets",

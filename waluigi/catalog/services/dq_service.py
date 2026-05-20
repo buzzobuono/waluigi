@@ -13,14 +13,14 @@ logger = logging.getLogger("waluigi")
 
 class DQService:
 
-    def __init__(self, datasets: DatasetRepository,
-                 dq_results: DQResultRepository,
-                 expectations: ExpectationRepository,
+    def __init__(self, datasets_repository: DatasetRepository,
+                 dq_results_repository: DQResultRepository,
+                 expectations_repository: ExpectationRepository,
                  dq_manager: DQManager):
-        self.datasets      = datasets
-        self.dq_results    = dq_results
-        self.expectations  = expectations
-        self.dq_manager    = dq_manager
+        self.datasets_repository      = datasets_repository
+        self.dq_results_repository    = dq_results_repository
+        self.expectations_repository  = expectations_repository
+        self.dq_manager               = dq_manager
 
     def run_on_commit(self, dataset_id: str, version: str,
                       connector, location: str, fmt: str,
@@ -37,7 +37,7 @@ class DQService:
                  "score": r.score, "error": r.error}
                 for r in result.results
             ]
-            row = self.dq_results.save(
+            row = self.dq_results_repository.save(
                 dataset_id, version,
                 score=result.score, passed=result.passed,
                 total=result.total, success=result.success,
@@ -50,7 +50,7 @@ class DQService:
             return row
         except Exception as e:
             logger.warning(f"DQ run skipped for {dataset_id}@{version}: {e}")
-            self.dq_results.save(
+            self.dq_results_repository.save(
                 dataset_id, version,
                 score=0.0, passed=0, total=0, success=False,
                 details=[], error=str(e),
@@ -94,43 +94,43 @@ class DQService:
         ]
 
     def list_results(self, dataset_id: str) -> list:
-        if not self.datasets.exists(dataset_id):
+        if not self.datasets_repository.exists(dataset_id):
             raise ValueError("Dataset not found")
-        return self.dq_results.list(dataset_id)
+        return self.dq_results_repository.list(dataset_id)
 
     def get_result(self, dataset_id: str, version: str) -> dict:
-        if not self.datasets.exists(dataset_id):
+        if not self.datasets_repository.exists(dataset_id):
             raise ValueError("Dataset not found")
-        row = self.dq_results.get(dataset_id, version)
+        row = self.dq_results_repository.get(dataset_id, version)
         if not row:
             raise ValueError("No DQ result for this version")
         return row
 
     def list_expectations(self, dataset_id: str) -> list[ExpectationResponse]:
-        if not self.datasets.exists(dataset_id):
+        if not self.datasets_repository.exists(dataset_id):
             raise ValueError("Dataset not found")
         return [ExpectationResponse.from_entity(e)
-                for e in self.expectations.list(dataset_id)]
+                for e in self.expectations_repository.list(dataset_id)]
 
     def add_expectation(self, dataset_id: str, rule_id: str, inputs: dict,
                         params: dict, tolerance: float, position: int) -> ExpectationResponse:
-        if not self.datasets.exists(dataset_id):
+        if not self.datasets_repository.exists(dataset_id):
             raise ValueError("Dataset not found")
-        entity = self.expectations.add(dataset_id, rule_id, inputs, params,
+        entity = self.expectations_repository.add(dataset_id, rule_id, inputs, params,
                                        tolerance, position)
         return ExpectationResponse.from_entity(entity)
 
     def update_expectation(self, dataset_id: str, exp_id: int,
                            **updates) -> ExpectationResponse:
-        if not self.datasets.exists(dataset_id):
+        if not self.datasets_repository.exists(dataset_id):
             raise ValueError("Dataset not found")
-        if not self.expectations.update(dataset_id, exp_id, **updates):
+        if not self.expectations_repository.update(dataset_id, exp_id, **updates):
             raise ValueError("Expectation not found")
-        return ExpectationResponse.from_entity(self.expectations.get(dataset_id, exp_id))
+        return ExpectationResponse.from_entity(self.expectations_repository.get(dataset_id, exp_id))
 
     def delete_expectation(self, dataset_id: str, exp_id: int) -> dict:
-        if not self.datasets.exists(dataset_id):
+        if not self.datasets_repository.exists(dataset_id):
             raise ValueError("Dataset not found")
-        if not self.expectations.delete(dataset_id, exp_id):
+        if not self.expectations_repository.delete(dataset_id, exp_id):
             raise ValueError("Expectation not found")
         return {"deleted": exp_id}

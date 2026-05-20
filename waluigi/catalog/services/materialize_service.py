@@ -17,17 +17,17 @@ logger = logging.getLogger("waluigi")
 class MaterializeService:
 
     def __init__(self,
-                 datasets:  DatasetRepository,
-                 versions:  VersionRepository,
-                 schema:    SchemaRepository,
-                 lineage:   LineageRepository,
-                 metadata:  MetadataRepository,
+                 datasets_repository:  DatasetRepository,
+                 versions_repository:  VersionRepository,
+                 schema_repository:    SchemaRepository,
+                 lineage_repository:   LineageRepository,
+                 metadata_repository:  MetadataRepository,
                  data_path: str):
-        self.datasets  = datasets
-        self.versions  = versions
-        self.schema    = schema
-        self.lineage   = lineage
-        self.metadata  = metadata
+        self.datasets_repository  = datasets_repository
+        self.versions_repository  = versions_repository
+        self.schema_repository    = schema_repository
+        self.lineage_repository   = lineage_repository
+        self.metadata_repository  = metadata_repository
         self.data_path = data_path
 
     @atomic
@@ -40,33 +40,33 @@ class MaterializeService:
         version = _version_id()
         path    = self.local_path(dataset_id, version, "csv")
 
-        self.datasets.create(dataset_id, "csv", description=description)
-        self.versions.reserve(dataset_id, version, path)
+        self.datasets_repository.create(dataset_id, "csv", description=description)
+        self.versions_repository.reserve(dataset_id, version, path)
 
         try:
             rows, schema_cols = await self.fetch_and_write(
                 base_url, endpoint, params, path)
         except httpx.HTTPError:
-            self.versions.fail(dataset_id, version)
+            self.versions_repository.fail(dataset_id, version)
             raise
 
         if rows == 0:
-            self.versions.fail(dataset_id, version)
+            self.versions_repository.fail(dataset_id, version)
             raise ValueError("No records returned from endpoint")
 
-        if not self.versions.commit(dataset_id, version):
-            self.versions.fail(dataset_id, version)
+        if not self.versions_repository.commit(dataset_id, version):
+            self.versions_repository.fail(dataset_id, version)
             raise RuntimeError("Commit failed")
 
-        self.schema.upsert_columns(dataset_id, schema_cols)
-        self.lineage.insert(dataset_id, version, [{
+        self.schema_repository.upsert_columns(dataset_id, schema_cols)
+        self.lineage_repository.insert(dataset_id, version, [{
             "dataset_id": f"__external__/{base_url}{endpoint}",
             "version":    "live",
         }])
         if task_id:
-            self.metadata.set(dataset_id, version, "sys.produced_by_task", task_id)
+            self.metadata_repository.set(dataset_id, version, "sys.produced_by_task", task_id)
         if job_id:
-            self.metadata.set(dataset_id, version, "sys.produced_by_job", job_id)
+            self.metadata_repository.set(dataset_id, version, "sys.produced_by_job", job_id)
 
         logger.info(f"Materialized {dataset_id}@{version} rows={rows}")
         return {
