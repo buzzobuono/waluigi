@@ -2,14 +2,16 @@ import math
 import logging
 import pandas as pd
 
-from waluigi.catalog.db import CatalogDB
+from waluigi.catalog.repositories.dataset_repo import DatasetRepository
+from waluigi.catalog.repositories.version_repo import VersionRepository
+from waluigi.catalog.repositories.source_repo import SourceRepository
+from waluigi.catalog.repositories.chart_repo import ChartRepository
 from waluigi.sdk.connectors import ConnectorFactory
 
 logger = logging.getLogger("waluigi")
 
 
 def _safe(v):
-    """Convert a value to a JSON-serialisable scalar."""
     if v is None:
         return None
     if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
@@ -22,37 +24,29 @@ def _safe(v):
 
 class ChartService:
 
-    def __init__(self, db: CatalogDB):
-        self.db = db
+    def __init__(self, datasets: DatasetRepository, versions: VersionRepository,
+                 sources: SourceRepository, charts: ChartRepository):
+        self.datasets = datasets
+        self.versions = versions
+        self.sources  = sources
+        self.charts   = charts
 
-    # ── Public API ────────────────────────────────────────────────────────────
-
-    def render(self, chart: dict, dataset_id: str,
-               version: str | None) -> dict:
-        """Load data from storage and build an ECharts option dict.
-
-        Raises ValueError for any not-found condition so callers can map it
-        to an appropriate HTTP status without importing HTTP primitives here.
-        """
-        dataset = self.db.get_dataset(dataset_id)
+    def render(self, chart: dict, dataset_id: str, version: str | None) -> dict:
+        dataset = self.datasets.get(dataset_id)
         if not dataset:
             raise ValueError("Dataset not found")
-
-        ver = (self.db.get_version(dataset_id, version)
-               if version else self.db.get_latest_version(dataset_id))
+        ver = (self.versions.get(dataset_id, version)
+               if version else self.versions.get_latest(dataset_id))
         if not ver:
             raise ValueError("No committed version available")
-
-        source = self.db.get_source(dataset.source_id)
+        source = self.sources.get(dataset.source_id)
         if not source:
             raise ValueError(
                 f"Source '{dataset.source_id}' not found "
                 "— run CatalogCreateSource first"
             )
-
         connector = ConnectorFactory.get(source.type, source.config)
         df = connector.read(ver.location, dataset.format)
-
         return {
             "option":    self.build_option(df, chart["spec"]),
             "version":   ver.version,
@@ -60,45 +54,38 @@ class ChartService:
             "is_latest": version is None,
         }
 
-    # ── Chart CRUD ────────────────────────────────────────────────────────────
-
     def list_charts(self, dataset_id: str) -> list:
-        if not self.db.exists_dataset(dataset_id):
+        if not self.datasets.exists(dataset_id):
             raise ValueError("Dataset not found")
-        return self.db.list_charts(dataset_id)
+        return self.charts.list(dataset_id)
 
     def get_chart(self, dataset_id: str, chart_id: int) -> dict | None:
-        return self.db.get_chart(dataset_id, chart_id)
+        return self.charts.get(dataset_id, chart_id)
 
     def get_chart_by_key(self, dataset_id: str, key: str) -> dict | None:
-        return self.db.get_chart_by_key(dataset_id, key)
+        return self.charts.get_by_key(dataset_id, key)
 
     def add_chart(self, dataset_id: str, key: str, title: str,
                   spec: dict, position: int) -> dict:
-        if not self.db.exists_dataset(dataset_id):
+        if not self.datasets.exists(dataset_id):
             raise ValueError("Dataset not found")
-        return self.db.add_chart(dataset_id, key, title, spec, position)
+        return self.charts.add(dataset_id, key, title, spec, position)
 
     def update_chart(self, dataset_id: str, chart_id: int, **updates) -> dict:
-        """Raises ValueError if dataset or chart not found."""
-        if not self.db.exists_dataset(dataset_id):
+        if not self.datasets.exists(dataset_id):
             raise ValueError("Dataset not found")
-        if not self.db.update_chart(dataset_id, chart_id, **updates):
+        if not self.charts.update(dataset_id, chart_id, **updates):
             raise ValueError("Chart not found")
-        return self.db.get_chart(dataset_id, chart_id)
+        return self.charts.get(dataset_id, chart_id)
 
     def delete_chart(self, dataset_id: str, chart_id: int) -> dict:
-        """Raises ValueError if dataset or chart not found."""
-        if not self.db.exists_dataset(dataset_id):
+        if not self.datasets.exists(dataset_id):
             raise ValueError("Dataset not found")
-        if not self.db.delete_chart(dataset_id, chart_id):
+        if not self.charts.delete(dataset_id, chart_id):
             raise ValueError("Chart not found")
         return {"deleted": chart_id}
 
-    # ── Render ────────────────────────────────────────────────────────────────
-
     def build_option(self, df: pd.DataFrame, spec: dict) -> dict:
-        """Build an ECharts option dict from a DataFrame and a chart spec."""
         chart_type  = spec.get("type", "bar")
         x_conf      = spec.get("x", {})
         y_conf      = spec.get("y", {})
@@ -116,7 +103,6 @@ class ChartService:
             "grid":    {"containLabel": True},
         }
 
-        # ── PIE ──────────────────────────────────────────────────────────────
         if chart_type == "pie":
             grouped = (df.groupby(x_field)[y_field].agg(agg)
                        .reset_index().head(limit))
@@ -128,7 +114,6 @@ class ChartService:
                     "series":  [{"type": "pie", "data": data,
                                  "radius": "60%", "label": {"formatter": "{b}\n{d}%"}}]}
 
-        # ── HISTOGRAM ────────────────────────────────────────────────────────
         if chart_type == "histogram":
             col    = df[x_field].dropna()
             bins   = int(spec.get("bins", 20))
@@ -143,7 +128,6 @@ class ChartService:
                     "yAxis":   {"type": "value", "name": "Count"},
                     "series":  [{"type": "bar", "data": vals, "barWidth": "99%"}]}
 
-        # ── SCATTER ──────────────────────────────────────────────────────────
         if chart_type == "scatter":
             data = (df[[x_field, y_field]].dropna().head(limit)
                     .apply(lambda r: [_safe(r[x_field]), _safe(r[y_field])], axis=1)
@@ -154,16 +138,13 @@ class ChartService:
                     "yAxis":   {"type": "value", "name": y_label},
                     "series":  [{"type": "scatter", "data": data, "symbolSize": 8}]}
 
-        # ── RADAR ────────────────────────────────────────────────────────────
         if chart_type == "radar":
             axes     = spec.get("axes", [])
             group_by = spec.get("group_by") or color_field
             if len(axes) < 3:
                 raise ValueError("radar requires at least 3 axes to form a polygon")
-
             ax_fields = [a["field"] for a in axes]
             ax_labels = [a.get("label", a["field"]) for a in axes]
-
             if group_by:
                 grouped   = df.groupby(group_by)[ax_fields].agg(
                     agg if agg != "count" else "sum")
@@ -188,7 +169,6 @@ class ChartService:
                 ]
                 series_data = [{"name": "Total", "value": vals}]
                 legend      = {}
-
             opt = {**base,
                    "tooltip": {"trigger": "item"},
                    "radar":   {"indicator": indicator, "shape": "polygon"},
@@ -198,7 +178,6 @@ class ChartService:
                 opt["legend"] = legend
             return opt
 
-        # ── BAR / LINE ───────────────────────────────────────────────────────
         if color_field:
             if agg == "count":
                 agged   = (df.groupby([x_field, color_field])
