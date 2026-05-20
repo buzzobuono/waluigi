@@ -6,6 +6,6 @@ env/
 .vscode
 waluigi.egg-info
 work/
-db/
+/db/
 data/
 build/
