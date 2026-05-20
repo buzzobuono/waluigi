@@ -1,40 +1,35 @@
 import logging
 
-from waluigi.catalog.db import CatalogDB
+from waluigi.catalog.repositories.version_repo import VersionRepository
+from waluigi.catalog.repositories.metadata_repo import MetadataRepository
 
 logger = logging.getLogger("waluigi")
 
 
 class MetadataService:
 
-    def __init__(self, db: CatalogDB):
-        self.db = db
-
-    # ── Version metadata ──────────────────────────────────────────────────────
+    def __init__(self, versions: VersionRepository, metadata: MetadataRepository):
+        self.versions = versions
+        self.metadata = metadata
 
     def get_version_metadata(self, dataset_id: str, version: str) -> dict:
-        """Raises ValueError if version not found."""
-        if not self.db.get_version(dataset_id, version):
+        if not self.versions.get(dataset_id, version):
             raise ValueError("Version not found")
-        return self.db.get_metadata(dataset_id, version)
+        return self.metadata.get(dataset_id, version)
 
     def set_version_metadata(self, dataset_id: str, version: str,
                              key: str, value: str) -> dict:
-        """Raises ValueError if version not found or key is sys.*."""
-        if not self.db.get_version(dataset_id, version):
+        if not self.versions.get(dataset_id, version):
             raise ValueError("Version not found")
         if key.startswith("sys."):
             raise ValueError("sys.* keys are reserved for the server")
-        self.db.set_metadata(dataset_id, version, key, value)
+        self.metadata.set(dataset_id, version, key, value)
         return {"key": key, "value": value}
 
     def delete_version_metadata(self, dataset_id: str, version: str,
                                 key: str) -> dict:
-        """Raises ValueError if version not found or key not found/protected."""
-        if not self.db.get_version(dataset_id, version):
+        if not self.versions.get(dataset_id, version):
             raise ValueError("Version not found")
-        if not self.db.delete_metadata(dataset_id, version, key):
+        if not self.metadata.delete(dataset_id, version, key):
             raise ValueError("Key not found or protected (sys.*)")
         return {"key": key, "deleted": True}
-
-

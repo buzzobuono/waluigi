@@ -3,7 +3,12 @@ import csv
 import logging
 import httpx
 
-from waluigi.catalog.db import CatalogDB
+from waluigi.catalog.db.base import atomic
+from waluigi.catalog.repositories.dataset_repo import DatasetRepository
+from waluigi.catalog.repositories.version_repo import VersionRepository
+from waluigi.catalog.repositories.schema_repo import SchemaRepository
+from waluigi.catalog.repositories.lineage_repo import LineageRepository
+from waluigi.catalog.repositories.metadata_repo import MetadataRepository
 from waluigi.catalog.utils import _version_id
 
 logger = logging.getLogger("waluigi")
@@ -11,57 +16,57 @@ logger = logging.getLogger("waluigi")
 
 class MaterializeService:
 
-    def __init__(self, db: CatalogDB, data_path: str):
-        self.db        = db
+    def __init__(self,
+                 datasets:  DatasetRepository,
+                 versions:  VersionRepository,
+                 schema:    SchemaRepository,
+                 lineage:   LineageRepository,
+                 metadata:  MetadataRepository,
+                 data_path: str):
+        self.datasets  = datasets
+        self.versions  = versions
+        self.schema    = schema
+        self.lineage   = lineage
+        self.metadata  = metadata
         self.data_path = data_path
 
-    # ── Materialize (REST API → local CSV) ────────────────────────────────────
-
+    @atomic
     async def materialize(self, dataset_id: str,
                           base_url: str, endpoint: str, params: dict,
                           display_name: str | None = None,
                           description: str | None = None,
                           task_id: str | None = None,
                           job_id: str | None = None) -> dict:
-        """Fetch a paginated REST API and persist as a local CSV version.
-
-        Raises ValueError on empty response or commit failure.
-        Re-raises httpx.HTTPError after failing the reserved version (for 502 mapping).
-        """
         version = _version_id()
         path    = self.local_path(dataset_id, version, "csv")
 
-        self.db.create_dataset(dataset_id,
-                               display_name=display_name,
-                               description=description)
-        self.db.reserve_version(dataset_id, version, path)
+        self.datasets.create(dataset_id, "csv", description=description)
+        self.versions.reserve(dataset_id, version, path)
 
         try:
             rows, schema_cols = await self.fetch_and_write(
                 base_url, endpoint, params, path)
         except httpx.HTTPError:
-            self.db.fail_version(dataset_id, version)
+            self.versions.fail(dataset_id, version)
             raise
 
         if rows == 0:
-            self.db.fail_version(dataset_id, version)
+            self.versions.fail(dataset_id, version)
             raise ValueError("No records returned from endpoint")
 
-        if not self.db.commit_version(dataset_id, version):
-            self.db.fail_version(dataset_id, version)
+        if not self.versions.commit(dataset_id, version):
+            self.versions.fail(dataset_id, version)
             raise RuntimeError("Commit failed")
 
-        self.db.upsert_schema_columns(dataset_id, schema_cols)
-        self.db.insert_lineage(dataset_id, version, [{
+        self.schema.upsert_columns(dataset_id, schema_cols)
+        self.lineage.insert(dataset_id, version, [{
             "dataset_id": f"__external__/{base_url}{endpoint}",
             "version":    "live",
         }])
         if task_id:
-            self.db.set_metadata(dataset_id, version,
-                                 "sys.produced_by_task", task_id)
+            self.metadata.set(dataset_id, version, "sys.produced_by_task", task_id)
         if job_id:
-            self.db.set_metadata(dataset_id, version,
-                                 "sys.produced_by_job", job_id)
+            self.metadata.set(dataset_id, version, "sys.produced_by_job", job_id)
 
         logger.info(f"Materialized {dataset_id}@{version} rows={rows}")
         return {
@@ -72,27 +77,16 @@ class MaterializeService:
             "source_url": f"{base_url}{endpoint}",
         }
 
-    # ── Filesystem helper ─────────────────────────────────────────────────────
-
     def local_path(self, dataset_id: str, version: str, fmt: str) -> str:
-        """Return an absolute path for a locally-stored dataset version file."""
         safe_id  = dataset_id.replace("/", os.sep)
         dir_path = os.path.join(self.data_path, safe_id)
         os.makedirs(dir_path, exist_ok=True)
         return os.path.join(dir_path, f"{version}.{fmt}")
 
-    # ── REST API fetch helper ─────────────────────────────────────────────────
-
     async def fetch_and_write(self, base_url: str, endpoint: str,
                               params: dict, output_path: str) -> tuple[int, list[dict]]:
-        """Fetch a paginated REST API and write all records to a CSV file.
-
-        Returns (row_count, schema_cols) where schema_cols is a list of
-        {name, physical_type, logical_type} dicts inferred from the field names.
-        """
         records, page = [], 1
         next_url = f"{base_url}{endpoint}"
-
         async with httpx.AsyncClient(timeout=30) as client:
             while next_url:
                 call_params = {**params, "page": page} if page > 1 else params
@@ -123,8 +117,6 @@ class MaterializeService:
             for k in fieldnames
         ]
         return len(records), schema_cols
-
-    # ── Private parsing helpers ───────────────────────────────────────────────
 
     @staticmethod
     def _extract_items(body) -> list:

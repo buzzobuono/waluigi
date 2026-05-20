@@ -1,20 +1,21 @@
 import logging
 
-from waluigi.catalog.db import CatalogDB
+from waluigi.catalog.repositories.dataset_repo import DatasetRepository
+from waluigi.catalog.repositories.schema_repo import SchemaRepository
 
 logger = logging.getLogger("waluigi")
 
 
 class SchemaService:
 
-    def __init__(self, db: CatalogDB):
-        self.db = db
+    def __init__(self, datasets: DatasetRepository, schema: SchemaRepository):
+        self.datasets = datasets
+        self.schema   = schema
 
     def get_schema(self, dataset_id: str) -> tuple[dict, list]:
-        """Returns (data, warnings). Raises ValueError if dataset not found."""
-        if not self.db.exists_dataset(dataset_id):
+        if not self.datasets.exists(dataset_id):
             raise ValueError("Dataset not found")
-        columns   = self.db.get_schema(dataset_id)
+        columns   = self.schema.get(dataset_id)
         pii_count = sum(1 for c in columns if c.get("pii"))
         inferred  = [c["column_name"] for c in columns
                      if c.get("status") == "inferred"]
@@ -40,11 +41,10 @@ class SchemaService:
 
     def patch_column(self, dataset_id: str, column_name: str,
                      **updates) -> tuple[dict, list]:
-        """Returns (col, warnings). Raises ValueError if dataset not found."""
-        if not self.db.exists_dataset(dataset_id):
+        if not self.datasets.exists(dataset_id):
             raise ValueError("Dataset not found")
-        col = self.db.upsert_schema_column(dataset_id, column_name, **updates)
-        self.db.set_in_review(dataset_id)
+        col = self.schema.upsert_column(dataset_id, column_name, **updates)
+        self.datasets.set_in_review(dataset_id)
         msgs = []
         if col and col.get("pii") and col.get("pii_type") == "none":
             msgs.append("PII flag set but pii_type is 'none' — "
@@ -52,25 +52,22 @@ class SchemaService:
         return col, msgs
 
     def approve_column(self, dataset_id: str, column_name: str) -> dict:
-        """Raises ValueError if dataset not found or column not in schema."""
-        if not self.db.exists_dataset(dataset_id):
+        if not self.datasets.exists(dataset_id):
             raise ValueError("Dataset not found")
-        if not self.db.approve_schema_column(dataset_id, column_name):
+        if not self.schema.approve_column(dataset_id, column_name):
             raise ValueError("Column not found in schema")
-        return next((c for c in self.db.get_schema(dataset_id)
+        return next((c for c in self.schema.get(dataset_id)
                      if c["column_name"] == column_name), None)
 
     def delete_column(self, dataset_id: str, column_name: str) -> dict:
-        """Raises ValueError if dataset not found or column not in schema."""
-        if not self.db.exists_dataset(dataset_id):
+        if not self.datasets.exists(dataset_id):
             raise ValueError("Dataset not found")
-        if not self.db.delete_schema_column(dataset_id, column_name):
+        if not self.schema.delete_column(dataset_id, column_name):
             raise ValueError("Column not found in schema")
         return {"column_name": column_name, "deleted": True}
 
     def publish_schema(self, dataset_id: str, published_by: str) -> dict:
-        """Raises ValueError if dataset not found."""
-        if not self.db.exists_dataset(dataset_id):
+        if not self.datasets.exists(dataset_id):
             raise ValueError("Dataset not found")
-        self.db.publish_schema(dataset_id, published_by)
+        self.schema.publish(dataset_id, published_by)
         return {"dataset_id": dataset_id}

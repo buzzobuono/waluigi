@@ -19,43 +19,75 @@ logger = logging.getLogger("waluigi")
 
 _db: CatalogDB | None = None
 
+
 def init_db(url: str):
     global _db
     _db = CatalogDB(url)
     logger.info(f"Database ready: {url}")
 
+
 def get_db() -> CatalogDB:
     return _db
 
+
 def catalog_browser_service(db=Depends(get_db)) -> CatalogBrowserService:
-    return CatalogBrowserService(db)
+    return CatalogBrowserService(db.folders)
+
 
 def source_service(db=Depends(get_db)) -> SourceService:
-    return SourceService(db)
+    return SourceService(db.sources)
+
 
 def metadata_service(db=Depends(get_db)) -> MetadataService:
-    return MetadataService(db)
+    return MetadataService(db.versions, db.metadata)
+
 
 def dq_manager() -> DQManager:
     return DQManager(args.rules_path)
 
-def dq_service(db=Depends(get_db), dq_manager=Depends(dq_manager)) -> DQService:
-    return DQService(db, dq_manager)
 
-def version_service(db=Depends(get_db), dq_service=Depends(dq_service)) -> VersionService:
-    return VersionService(db, args.data_path, dq_service)
+def dq_service(db=Depends(get_db),
+               mgr=Depends(dq_manager)) -> DQService:
+    return DQService(db.datasets, db.dq_results, db.expectations, mgr)
+
 
 def schema_service(db=Depends(get_db)) -> SchemaService:
-    return SchemaService(db)
+    return SchemaService(db.datasets, db.schema)
+
 
 def chart_service(db=Depends(get_db)) -> ChartService:
-    return ChartService(db)
+    return ChartService(db.datasets, db.versions, db.sources, db.charts)
+
 
 def lineage_service(db=Depends(get_db)) -> LineageService:
-    return LineageService(db)
+    return LineageService(db.versions, db.lineage)
+
 
 def dataset_service(db=Depends(get_db)) -> DatasetService:
-    return DatasetService(db)
+    return DatasetService(db.datasets, db.sources, db.schema)
+
+
+def version_service(db=Depends(get_db),
+                    dq_svc=Depends(dq_service)) -> VersionService:
+    return VersionService(
+        versions=db.versions,
+        datasets=db.datasets,
+        sources=db.sources,
+        metadata=db.metadata,
+        schema=db.schema,
+        lineage=db.lineage,
+        expectations=db.expectations,
+        data_path=args.data_path,
+        dq_service=dq_svc,
+    )
+
 
 def materialize_service(db=Depends(get_db)) -> MaterializeService:
-    return MaterializeService(db, args.data_path)
+    return MaterializeService(
+        datasets=db.datasets,
+        versions=db.versions,
+        schema=db.schema,
+        lineage=db.lineage,
+        metadata=db.metadata,
+        data_path=args.data_path,
+    )
