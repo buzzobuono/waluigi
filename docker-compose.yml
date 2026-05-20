@@ -60,9 +60,7 @@ services:
       - WALUIGI_CONSOLE_BOSS_URL=http://boss:8082
       - WALUIGI_CONSOLE_CATALOG_URL=http://catalog:9000
       - WALUIGI_CONSOLE_DB_PATH=/db/console.db
-      - WALUIGI_CONSOLE_DATA_PATH=/data
     volumes:
       - ./db:/db
-      - ./data:/data
     deploy:
       replicas: 1

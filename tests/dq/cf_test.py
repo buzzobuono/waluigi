@@ -2,12 +2,6 @@ import pandas as pd
 from waluigi.sdk.dataquality import DQManager
 import json
 
-def _model_dump(obj):
-    if hasattr(obj, "model_dump"):
-        return obj.model_dump(exclude_none=True)
-    else:
-        return obj.dict(exclude_none=True)
-
 data = {
     "cf": [
         "MRNRSS85M01H501Z",
@@ -25,8 +19,6 @@ df["nascita"] = pd.to_datetime(df["nascita"])
 datasets = {"utenti": df}
 
 dq = DQManager(rules_path="./rules")
-report = dq.run_suite("./test/cf_test.yaml", datasets)
+report = dq.run_suite("./tests/cf_test.yaml", datasets)
 dq.print_report(report)
 
-
-#print(json.dumps(_model_dump(report), indent=2))
