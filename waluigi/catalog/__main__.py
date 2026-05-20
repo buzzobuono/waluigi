@@ -3,8 +3,8 @@ import yaml
 import uvicorn
 from fastapi import FastAPI
 
-from waluigi.catalog.config import args
-from waluigi.catalog.api.dependencies import init_db
+from waluigi.catalog.config.args import args
+from waluigi.catalog.config.dependencies import init_db
 
 from waluigi.catalog.api.routes.browser_router import browser_router
 from waluigi.catalog.api.routes.source_router import source_router

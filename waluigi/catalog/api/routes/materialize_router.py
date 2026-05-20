@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from waluigi.core.responses import ok, ko
 from waluigi.catalog.api.schemas import MaterializeRequest
 from waluigi.catalog.services.materialize_service import MaterializeService
-from waluigi.catalog.api.dependencies import materialize_service
+from waluigi.catalog.config.dependencies import materialize_service
 
 materialize_router = APIRouter(
     prefix="/datasets",

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from waluigi.core.responses import ok, ko
 from waluigi.catalog.api.schemas import MetadataSetRequest
 from waluigi.catalog.services.lineage_service import LineageService
-from waluigi.catalog.api.dependencies import lineage_service
+from waluigi.catalog.config.dependencies import lineage_service
 
 lineage_router = APIRouter(
     prefix="/datasets",

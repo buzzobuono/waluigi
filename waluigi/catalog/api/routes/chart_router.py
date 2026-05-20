@@ -4,7 +4,7 @@ from waluigi.core.utils import _model_dump
 from waluigi.catalog.api.schemas import ChartCreateRequest, ChartUpdateRequest
 from waluigi.core.responses import ok, warn, ko
 from waluigi.catalog.services.chart_service import ChartService
-from waluigi.catalog.api.dependencies import chart_service
+from waluigi.catalog.config.dependencies import chart_service
 
 chart_router = APIRouter(
     prefix="/datasets",

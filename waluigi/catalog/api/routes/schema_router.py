@@ -4,7 +4,7 @@ from waluigi.core.utils import _model_dump
 from waluigi.catalog.api.schemas import SchemaPublishRequest, SchemaColumnPatch
 from waluigi.core.responses import ok, warn, ko
 from waluigi.catalog.services.schema_service import SchemaService
-from waluigi.catalog.api.dependencies import schema_service
+from waluigi.catalog.config.dependencies import schema_service
 
 schema_router = APIRouter(
     prefix="/datasets",

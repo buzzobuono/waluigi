@@ -8,14 +8,14 @@ logger = logging.getLogger("waluigi")
 
 class SchemaService:
 
-    def __init__(self, datasets: DatasetRepository, schema: SchemaRepository):
-        self.datasets = datasets
-        self.schema   = schema
+    def __init__(self, datasets_repository: DatasetRepository, schema_repository: SchemaRepository):
+        self.datasets_repository = datasets_repository
+        self.schema_repository   = schema_repository
 
     def get_schema(self, dataset_id: str) -> tuple[dict, list]:
-        if not self.datasets.exists(dataset_id):
+        if not self.datasets_repository.exists(dataset_id):
             raise ValueError("Dataset not found")
-        columns   = self.schema.get(dataset_id)
+        columns   = self.schema_repository.get(dataset_id)
         pii_count = sum(1 for c in columns if c.get("pii"))
         inferred  = [c["column_name"] for c in columns
                      if c.get("status") == "inferred"]
@@ -41,10 +41,10 @@ class SchemaService:
 
     def patch_column(self, dataset_id: str, column_name: str,
                      **updates) -> tuple[dict, list]:
-        if not self.datasets.exists(dataset_id):
+        if not self.datasets_repository.exists(dataset_id):
             raise ValueError("Dataset not found")
-        col = self.schema.upsert_column(dataset_id, column_name, **updates)
-        self.datasets.set_in_review(dataset_id)
+        col = self.schema_repository.upsert_column(dataset_id, column_name, **updates)
+        self.datasets_repository.set_in_review(dataset_id)
         msgs = []
         if col and col.get("pii") and col.get("pii_type") == "none":
             msgs.append("PII flag set but pii_type is 'none' — "
@@ -52,22 +52,22 @@ class SchemaService:
         return col, msgs
 
     def approve_column(self, dataset_id: str, column_name: str) -> dict:
-        if not self.datasets.exists(dataset_id):
+        if not self.datasets_repository.exists(dataset_id):
             raise ValueError("Dataset not found")
-        if not self.schema.approve_column(dataset_id, column_name):
+        if not self.schema_repository.approve_column(dataset_id, column_name):
             raise ValueError("Column not found in schema")
-        return next((c for c in self.schema.get(dataset_id)
+        return next((c for c in self.schema_repository.get(dataset_id)
                      if c["column_name"] == column_name), None)
 
     def delete_column(self, dataset_id: str, column_name: str) -> dict:
-        if not self.datasets.exists(dataset_id):
+        if not self.datasets_repository.exists(dataset_id):
             raise ValueError("Dataset not found")
-        if not self.schema.delete_column(dataset_id, column_name):
+        if not self.schema_repository.delete_column(dataset_id, column_name):
             raise ValueError("Column not found in schema")
         return {"column_name": column_name, "deleted": True}
 
     def publish_schema(self, dataset_id: str, published_by: str) -> dict:
-        if not self.datasets.exists(dataset_id):
+        if not self.datasets_repository.exists(dataset_id):
             raise ValueError("Dataset not found")
-        self.schema.publish(dataset_id, published_by)
+        self.schema_repository.publish(dataset_id, published_by)
         return {"dataset_id": dataset_id}
