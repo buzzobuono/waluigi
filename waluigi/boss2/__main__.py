@@ -11,7 +11,6 @@ from waluigi.boss2.engine import BossEngine
 from waluigi.boss2.planner import planner_loop
 from waluigi.boss2.services.job_service import JobService
 
-from waluigi.boss2.api.routes.namespace_router   import router as namespace_router
 from waluigi.boss2.api.routes.task_router     import router as task_router
 from waluigi.boss2.api.routes.job_router      import router as job_router
 from waluigi.boss2.api.routes.worker_router   import router as worker_router
@@ -26,7 +25,6 @@ app = FastAPI(
     version="2.0.0",
 )
 
-app.include_router(namespace_router)
 app.include_router(job_router)
 app.include_router(task_router)
 app.include_router(worker_router)

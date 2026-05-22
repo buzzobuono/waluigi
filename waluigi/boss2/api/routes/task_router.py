@@ -19,7 +19,7 @@ async def list_namespaces(svc=Depends(task_service)):
 
 @router.post("/namespaces/{namespace}/_reset")
 async def reset_namespace(namespace: str, svc=Depends(task_service)):
-qq    target = None if namespace == "None" else namespace
+    target = None if namespace == "None" else namespace
     svc.reset_namespace(target)
     return ok({"namespace": target})
 
