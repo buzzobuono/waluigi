@@ -3,15 +3,17 @@ from fastapi import APIRouter, Depends, Request
 from waluigi.commons.responses import ok, ko
 from waluigi.boss2.config.dependencies import resource_service
 
-router = APIRouter(prefix="/api")
+router = APIRouter(
+    prefix="/resources",
+    tags=["Resources"]
+)
 
-
-@router.get("/resources")
+@router.get("")
 async def list_resources(svc=Depends(resource_service)):
     return ok(svc.list())
 
 
-@router.post("/resources")
+@router.post("")
 async def apply_resources(request: Request, svc=Depends(resource_service)):
     doc = await request.json()
     if not doc or doc.get("kind") != "ClusterResources":

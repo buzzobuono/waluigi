@@ -10,7 +10,6 @@ class WorkerRegisterRequest(BaseModel):
 
 
 class TaskUpdateRequest(BaseModel):
-    id: str
     status: str
     namespace: str | None = None
     params: str | None = None
