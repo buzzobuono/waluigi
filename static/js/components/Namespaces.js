@@ -71,7 +71,7 @@ export default {
 
     return {
       nsStore, loading, error, lastUpdated,
-      taskCounts, jobCounts,
+      tasks, jobs, taskCounts, jobCounts,
       TASK_STATUSES, JOB_STATUSES,
       load,
     };
