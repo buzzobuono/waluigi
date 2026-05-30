@@ -7,17 +7,11 @@ class TaskService:
     def __init__(self, repo: TaskRepository):
         self.repo = repo
 
-    def list_tasks(
-        self,
-        *,
-        job_id: str | None = None,
-        namespace: str | None = None,
-    ) -> list[dict]:
-        return self.repo.list_tasks(job_id=job_id, namespace=namespace)
-        
-    def reset(self, task_id: str) -> None:
-        self.repo.reset(task_id)
-        
-    def delete(self, task_id: str) -> None:
-        self.repo.delete(task_id)
-        
+    def list_tasks(self, *, namespace: str, job_id: str | None = None) -> list[dict]:
+        return self.repo.list_tasks(namespace=namespace, job_id=job_id)
+
+    def reset(self, namespace: str, task_id: str) -> None:
+        self.repo.reset(namespace, task_id)
+
+    def delete(self, namespace: str, task_id: str) -> None:
+        self.repo.delete(namespace, task_id)

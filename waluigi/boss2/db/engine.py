@@ -1,31 +1,34 @@
 from datetime import datetime, timezone
 from sqlalchemy import (
-    create_engine, event, text,
+    create_engine, event,
     MetaData, Table, Column, Index, Text, Integer, Float, DateTime,
-    ForeignKey,
+    PrimaryKeyConstraint,
 )
 
 _meta = MetaData()
 
 _t_tasks = Table("tasks", _meta,
-    Column("id",          Text, primary_key=True),
-    Column("namespace",   Text),
+    Column("namespace",   Text, nullable=False),
+    Column("id",          Text, nullable=False),
     Column("parent_id",   Text),
     Column("params",      Text),
     Column("attributes",  Text),
     Column("status",      Text, nullable=False, default="PENDING"),
     Column("last_update", DateTime),
     Column("job_id",      Text),
+    PrimaryKeyConstraint("namespace", "id"),
 )
 
 _t_jobs = Table("jobs", _meta,
-    Column("job_id",       Text, primary_key=True),
+    Column("namespace",    Text, nullable=False),
+    Column("job_id",       Text, nullable=False),
     Column("metadata",     Text),
     Column("spec",         Text),
     Column("status",       Text, nullable=False, default="PENDING"),
     Column("started_at",   DateTime),
     Column("locked_by",    Text),
     Column("locked_until", DateTime),
+    PrimaryKeyConstraint("namespace", "job_id"),
 )
 
 _t_workers = Table("workers", _meta,
@@ -44,13 +47,14 @@ _t_resources = Table("resources", _meta,
 
 _t_task_logs = Table("task_logs", _meta,
     Column("id",        Integer, primary_key=True, autoincrement=True),
-    Column("task_id",   Text, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False),
+    Column("namespace", Text, nullable=False),
+    Column("task_id",   Text, nullable=False),
     Column("timestamp", DateTime),
     Column("message",   Text),
     Column("boss_id",   Text),
 )
 
-Index("idx_logs_task_id", _t_task_logs.c.task_id)
+Index("idx_logs_ns_task", _t_task_logs.c.namespace, _t_task_logs.c.task_id)
 
 
 def create_boss_engine(url: str):
@@ -68,7 +72,6 @@ def create_boss_engine(url: str):
 
     _meta.create_all(engine)
 
-    # Seed a default resource pool if the table is empty
     from sqlalchemy import select, insert
     with engine.begin() as conn:
         if not conn.execute(select(_t_resources)).fetchone():

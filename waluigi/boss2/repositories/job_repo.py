@@ -9,14 +9,17 @@ from waluigi.boss2.db.engine import _t_jobs, _t_tasks
 
 class JobRepository(BaseRepository):
 
-    def create(self, job_id: str, metadata: dict, spec: dict) -> None:
-        """Insert or update a job. Does NOT update if the job is currently RUNNING or READY."""
+    def create(self, namespace: str, job_id: str, metadata: dict, spec: dict) -> None:
         with self._conn() as conn:
             existing = conn.execute(
-                select(_t_jobs.c.status).where(_t_jobs.c.job_id == job_id)
+                select(_t_jobs.c.status).where(and_(
+                    _t_jobs.c.namespace == namespace,
+                    _t_jobs.c.job_id == job_id,
+                ))
             ).fetchone()
             if existing is None:
                 conn.execute(_t_jobs.insert().values(
+                    namespace=namespace,
                     job_id=job_id,
                     metadata=json.dumps(metadata),
                     spec=json.dumps(spec),
@@ -25,7 +28,7 @@ class JobRepository(BaseRepository):
             elif existing[0] not in ("RUNNING", "READY"):
                 conn.execute(
                     update(_t_jobs)
-                    .where(_t_jobs.c.job_id == job_id)
+                    .where(and_(_t_jobs.c.namespace == namespace, _t_jobs.c.job_id == job_id))
                     .values(
                         metadata=json.dumps(metadata),
                         spec=json.dumps(spec),
@@ -35,27 +38,25 @@ class JobRepository(BaseRepository):
                     )
                 )
 
-    def list_runnable_ids(self) -> list[str]:
+    def list_runnable_ids(self) -> list[tuple[str, str]]:
         now = datetime.now(timezone.utc)
         with self._conn() as conn:
             rows = conn.execute(
-                select(_t_jobs.c.job_id).where(
-                    and_(
-                        _t_jobs.c.status.notin_(["SUCCESS", "FAILED", "CANCELLED", "PAUSED"]),
-                        or_(_t_jobs.c.locked_until == None, _t_jobs.c.locked_until < now),
-                    )
-                )
+                select(_t_jobs.c.namespace, _t_jobs.c.job_id).where(and_(
+                    _t_jobs.c.status.notin_(["SUCCESS", "FAILED", "CANCELLED", "PAUSED"]),
+                    or_(_t_jobs.c.locked_until == None, _t_jobs.c.locked_until < now),
+                ))
             ).fetchall()
-            return [r[0] for r in rows]
+            return [(r[0], r[1]) for r in rows]
 
-    def claim(self, boss_id: str, job_id: str) -> dict | None:
-        """Atomically lock a job for this boss. Returns job data or None if already claimed."""
+    def claim(self, boss_id: str, namespace: str, job_id: str) -> dict | None:
         now = datetime.now(timezone.utc)
         lock_until = now + timedelta(seconds=60)
         with self._conn() as conn:
             result = conn.execute(
                 update(_t_jobs)
                 .where(and_(
+                    _t_jobs.c.namespace == namespace,
                     _t_jobs.c.job_id == job_id,
                     _t_jobs.c.status.notin_(["SUCCESS", "FAILED", "CANCELLED"]),
                     or_(_t_jobs.c.locked_until == None, _t_jobs.c.locked_until < now),
@@ -73,49 +74,57 @@ class JobRepository(BaseRepository):
             if result.rowcount == 0:
                 return None
             row = conn.execute(
-                select(_t_jobs).where(_t_jobs.c.job_id == job_id)
+                select(_t_jobs).where(and_(
+                    _t_jobs.c.namespace == namespace,
+                    _t_jobs.c.job_id == job_id,
+                ))
             ).fetchone()
             return {
-                "job_id":   row.job_id,
-                "metadata": json.loads(row.metadata),
-                "spec":     json.loads(row.spec),
+                "namespace": row.namespace,
+                "job_id":    row.job_id,
+                "metadata":  json.loads(row.metadata),
+                "spec":      json.loads(row.spec),
             }
 
-    def update_status(self, job_id: str, status: str) -> None:
+    def update_status(self, namespace: str, job_id: str, status: str) -> None:
         with self._conn() as conn:
             conn.execute(
                 update(_t_jobs)
-                .where(_t_jobs.c.job_id == job_id)
+                .where(and_(_t_jobs.c.namespace == namespace, _t_jobs.c.job_id == job_id))
                 .values(status=status, locked_by=None, locked_until=None)
             )
 
-    def get_status(self, job_id: str) -> str | None:
+    def get_status(self, namespace: str, job_id: str) -> str | None:
         with self._conn() as conn:
             row = conn.execute(
-                select(_t_jobs.c.status).where(_t_jobs.c.job_id == job_id)
+                select(_t_jobs.c.status).where(and_(
+                    _t_jobs.c.namespace == namespace,
+                    _t_jobs.c.job_id == job_id,
+                ))
             ).fetchone()
             return row[0] if row else None
 
-    def release(self, job_id: str) -> None:
+    def release(self, namespace: str, job_id: str) -> None:
         with self._conn() as conn:
             conn.execute(
                 update(_t_jobs)
-                .where(_t_jobs.c.job_id == job_id)
+                .where(and_(_t_jobs.c.namespace == namespace, _t_jobs.c.job_id == job_id))
                 .values(locked_by=None, locked_until=None)
             )
 
-    def list(self, status: str | None = None) -> list[dict]:
+    def list(self, namespace: str | None = None) -> list[dict]:
         with self._conn() as conn:
             q = select(_t_jobs)
-            if status:
-                q = q.where(_t_jobs.c.status == status)
+            if namespace is not None:
+                q = q.where(_t_jobs.c.namespace == namespace)
             return self._rows(conn.execute(q).fetchall())
 
-    def cancel(self, job_id: str) -> bool:
+    def cancel(self, namespace: str, job_id: str) -> bool:
         with self._conn() as conn:
             result = conn.execute(
                 update(_t_jobs)
                 .where(and_(
+                    _t_jobs.c.namespace == namespace,
                     _t_jobs.c.job_id == job_id,
                     _t_jobs.c.status.notin_(["SUCCESS", "FAILED", "CANCELLED"]),
                 ))
@@ -123,12 +132,12 @@ class JobRepository(BaseRepository):
             )
             return result.rowcount > 0
 
-    def reset(self, job_id: str) -> bool:
-        """Reset a terminal job (FAILED/CANCELLED) to PENDING and reset its FAILED tasks."""
+    def reset(self, namespace: str, job_id: str) -> bool:
         with self._conn() as conn:
             result = conn.execute(
                 update(_t_jobs)
                 .where(and_(
+                    _t_jobs.c.namespace == namespace,
                     _t_jobs.c.job_id == job_id,
                     _t_jobs.c.status.in_(["FAILED", "CANCELLED"]),
                 ))
@@ -138,6 +147,7 @@ class JobRepository(BaseRepository):
                 conn.execute(
                     update(_t_tasks)
                     .where(and_(
+                        _t_tasks.c.namespace == namespace,
                         _t_tasks.c.job_id == job_id,
                         _t_tasks.c.status == "FAILED",
                     ))
@@ -145,12 +155,12 @@ class JobRepository(BaseRepository):
                 )
             return result.rowcount > 0
 
-    def pause(self, job_id: str) -> bool:
-        """Pause an active job (PENDING/RUNNING). The planner will skip it."""
+    def pause(self, namespace: str, job_id: str) -> bool:
         with self._conn() as conn:
             result = conn.execute(
                 update(_t_jobs)
                 .where(and_(
+                    _t_jobs.c.namespace == namespace,
                     _t_jobs.c.job_id == job_id,
                     _t_jobs.c.status.in_(["PENDING", "RUNNING"]),
                 ))
@@ -158,12 +168,12 @@ class JobRepository(BaseRepository):
             )
             return result.rowcount > 0
 
-    def resume(self, job_id: str) -> bool:
-        """Resume a paused job back to PENDING."""
+    def resume(self, namespace: str, job_id: str) -> bool:
         with self._conn() as conn:
             result = conn.execute(
                 update(_t_jobs)
                 .where(and_(
+                    _t_jobs.c.namespace == namespace,
                     _t_jobs.c.job_id == job_id,
                     _t_jobs.c.status == "PAUSED",
                 ))
@@ -171,24 +181,31 @@ class JobRepository(BaseRepository):
             )
             return result.rowcount > 0
 
-    def delete(self, job_id: str) -> bool:
-        """Delete job and its tasks only if the job is in a terminal state."""
+    def delete(self, namespace: str, job_id: str) -> bool:
         with self._conn() as conn:
-            terminal = select(_t_jobs.c.job_id).where(
-                and_(
-                    _t_jobs.c.job_id == job_id,
-                    _t_jobs.c.status.in_(["SUCCESS", "FAILED", "CANCELLED"]),
-                )
-            )
             conn.execute(
-                delete(_t_tasks).where(_t_tasks.c.job_id.in_(terminal))
+                delete(_t_tasks).where(and_(
+                    _t_tasks.c.namespace == namespace,
+                    _t_tasks.c.job_id == job_id,
+                ))
             )
             result = conn.execute(
-                delete(_t_jobs).where(
-                    and_(
-                        _t_jobs.c.job_id == job_id,
-                        _t_jobs.c.status.in_(["SUCCESS", "FAILED", "CANCELLED"]),
-                    )
-                )
+                delete(_t_jobs).where(and_(
+                    _t_jobs.c.namespace == namespace,
+                    _t_jobs.c.job_id == job_id,
+                    _t_jobs.c.status.in_(["SUCCESS", "FAILED", "CANCELLED"]),
+                ))
             )
             return result.rowcount > 0
+
+    def reset_namespace(self, namespace: str) -> None:
+        with self._conn() as conn:
+            conn.execute(
+                update(_t_jobs)
+                .where(_t_jobs.c.namespace == namespace)
+                .values(status="PENDING", locked_by=None, locked_until=None)
+            )
+
+    def delete_namespace(self, namespace: str) -> None:
+        with self._conn() as conn:
+            conn.execute(delete(_t_jobs).where(_t_jobs.c.namespace == namespace))

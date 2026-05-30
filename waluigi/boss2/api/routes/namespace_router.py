@@ -4,23 +4,23 @@ from waluigi.commons.responses import ok
 from waluigi.boss2.config.dependencies import namespace_service
 
 router = APIRouter(
-    prefix="",
+    prefix="/namespaces",
     tags=["Namespaces"]
 )
 
-@router.get("/namespaces")
+
+@router.get("")
 async def list_namespaces(svc=Depends(namespace_service)):
     return ok(svc.list_namespaces())
 
-@router.post("/namespaces/{namespace}/_reset")
-async def reset_namespace(namespace: str, svc=Depends(namespace_service)):
-    target = None if namespace == "None" else namespace
-    svc.reset_namespace(target)
-    return ok({"namespace": target})
 
-@router.delete("/namespaces/{namespace}")
+@router.post("/{namespace}/_reset")
+async def reset_namespace(namespace: str, svc=Depends(namespace_service)):
+    svc.reset_namespace(namespace)
+    return ok({"namespace": namespace})
+
+
+@router.delete("/{namespace}")
 async def delete_namespace(namespace: str, svc=Depends(namespace_service)):
-    target = None if namespace == "None" else namespace
-    svc.delete_namespace(target)
-    return ok({"namespace": target})
-        
+    svc.delete_namespace(namespace)
+    return ok({"namespace": namespace})

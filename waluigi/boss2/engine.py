@@ -21,24 +21,24 @@ class BossEngine:
 
     # ── Registration (called at submit time) ──────────────────────────────────
 
-    def register_job(self, job_id: str, task, parent_id: str | None) -> None:
+    def register_job(self, namespace: str, job_id: str, task, parent_id: str | None) -> None:
         self.tasks.register(
+            namespace=namespace,
             task_id=task.id,
-            namespace=task.namespace,
             parent_id=parent_id,
             params=task.hash(task.params),
             attributes=task.hash(task.attributes),
             job_id=job_id,
         )
         for dep in task.requires():
-            self.register_job(job_id, dep, task.id)
+            self.register_job(namespace, job_id, dep, task.id)
 
     def register_worker(self, url: str, max_slots: int, free_slots: int) -> None:
         self.workers.register(url, max_slots, free_slots)
 
     # ── Planner ───────────────────────────────────────────────────────────────
 
-    def build(self, job_metadata: dict, task, parent_id) -> bool | None | str:
+    def build(self, namespace: str, job_metadata: dict, task, parent_id) -> bool | None | str:
         """
         Recursively plan and dispatch a task and its dependencies.
 
@@ -49,7 +49,7 @@ class BossEngine:
           "PAUSE"     — all workers saturated; stop this planning cycle
         """
         params_hash = task.hash(task.params)
-        status = self.tasks.get_status(task.id, params_hash)
+        status = self.tasks.get_status(namespace, task.id, params_hash)
 
         if status == "FAILED":
             logger.info(f"🛑 {task.id} failed — propagating.")
@@ -61,7 +61,7 @@ class BossEngine:
 
         all_deps_ready = True
         for dep in task.requires():
-            res = self.build(job_metadata=job_metadata, task=dep, parent_id=task.id)
+            res = self.build(namespace=namespace, job_metadata=job_metadata, task=dep, parent_id=task.id)
             if res == "PAUSE":
                 return "PAUSE"
             if res is None:
@@ -70,11 +70,11 @@ class BossEngine:
                 all_deps_ready = False
 
         if not all_deps_ready:
-            self._set_status(task, "PENDING")
+            self._set_status(namespace, task, "PENDING")
             return False
 
         # Re-check: another boss may have moved the task forward in the meantime
-        status = self.tasks.get_status(task.id, params_hash)
+        status = self.tasks.get_status(namespace, task.id, params_hash)
         if status in ("RUNNING", "READY"):
             return False
 
@@ -86,23 +86,23 @@ class BossEngine:
                 return False
 
             # Mark as READY before dispatching
-            self._set_status(task, "READY")
+            self._set_status(namespace, task, "READY")
 
-            dispatch_result = self._dispatch(job_metadata, task)
+            dispatch_result = self._dispatch(namespace, job_metadata, task)
 
             if dispatch_result == "WORKERS_SATURATED":
                 self.resources.release(task_resources)
-                self._set_status(task, "PENDING")
+                self._set_status(namespace, task, "PENDING")
                 return "PAUSE"
 
             if dispatch_result == "FATAL_ERROR":
                 self.resources.release(task_resources)
-                self._set_status(task, "FAILED")
+                self._set_status(namespace, task, "FAILED")
                 return None
 
             if dispatch_result == "RETRY":
                 self.resources.release(task_resources)
-                self._set_status(task, "PENDING")
+                self._set_status(namespace, task, "PENDING")
                 return False
 
             logger.info(f"🚀 {task.id} dispatched")
@@ -110,22 +110,22 @@ class BossEngine:
         except Exception as e:
             self.resources.release(task_resources)
             logger.error(f"❌ {task.id} error: {e}")
-            self._set_status(task, "PENDING")
+            self._set_status(namespace, task, "PENDING")
 
         return False
 
     # ── Internals ─────────────────────────────────────────────────────────────
 
-    def _set_status(self, task, status: str) -> None:
+    def _set_status(self, namespace: str, task, status: str) -> None:
         self.tasks.update(
+            namespace=namespace,
             task_id=task.id,
-            namespace=task.namespace,
             params=task.hash(task.params),
             attributes=task.hash(task.attributes),
             status=status,
         )
 
-    def _dispatch(self, job_metadata: dict, task) -> str:
+    def _dispatch(self, namespace: str, job_metadata: dict, task) -> str:
         payload = {
             "workdir":     job_metadata.get("workdir", "/work"),
             "type":        task.type,
@@ -138,7 +138,7 @@ class BossEngine:
             "attributes":  vars(task.attributes),
             "config":      task.config,
             "resources":   task.resources,
-            "namespace":   task.namespace,
+            "namespace":   namespace,
         }
 
         available = self.workers.get_available()

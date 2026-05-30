@@ -13,7 +13,7 @@ class UpdateService:
         self.resources = resource_repo
         self.workers   = worker_repo
 
-    def handle(self, task_id: str, status: str, namespace: str | None,
+    def handle(self, namespace: str, task_id: str, status: str,
                params: str | None, attributes: str | None,
                resources: dict, worker_url: str | None) -> bool:
         """
@@ -21,7 +21,7 @@ class UpdateService:
         Returns True otherwise.
         """
         if status == "RUNNING":
-            if not self.tasks.try_lock(task_id):
+            if not self.tasks.try_lock(namespace, task_id):
                 return False
 
         if status in ("SUCCESS", "FAILED"):
@@ -30,8 +30,8 @@ class UpdateService:
                 self.workers.release_slot(worker_url)
 
         self.tasks.update(
+            namespace=namespace,
             task_id=task_id,
-            namespace=namespace or "",
             params=params or "",
             attributes=attributes or "",
             status=status,

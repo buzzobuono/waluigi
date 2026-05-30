@@ -19,28 +19,28 @@ def planner_loop(boss_id: str, tick: int, job_service: JobService, engine: BossE
                 time.sleep(tick)
                 continue
 
-            for job_id in runnable:
-                job = job_service.claim(boss_id, job_id)
+            for namespace, job_id in runnable:
+                job = job_service.claim(boss_id, namespace, job_id)
                 if not job:
                     continue  # another Boss claimed it first
 
-                logger.info(f"🧠 Claimed job: {job_id}")
+                logger.info(f"🧠 Claimed job: {namespace}/{job_id}")
                 try:
                     task = DAGTask(job["spec"])
-                    result = engine.build(job_metadata=job["metadata"], task=task, parent_id=None)
+                    result = engine.build(namespace=namespace, job_metadata=job["metadata"], task=task, parent_id=None)
 
                     if result is True:
-                        logger.info(f"🏁 Job completed: {job_id}")
-                        job_service.update_status(job_id, "SUCCESS")
+                        logger.info(f"🏁 Job completed: {namespace}/{job_id}")
+                        job_service.update_status(namespace, job_id, "SUCCESS")
                     elif result is None:
-                        logger.error(f"💀 Job failed: {job_id}")
-                        job_service.update_status(job_id, "FAILED")
+                        logger.error(f"💀 Job failed: {namespace}/{job_id}")
+                        job_service.update_status(namespace, job_id, "FAILED")
                     # result is False or "PAUSE" → leave as RUNNING, release lock below
 
                 except Exception as e:
-                    logger.error(f"❌ Error planning {job_id}: {e}")
+                    logger.error(f"❌ Error planning {namespace}/{job_id}: {e}")
                 finally:
-                    job_service.release(job_id)
+                    job_service.release(namespace, job_id)
 
             time.sleep(tick)
 

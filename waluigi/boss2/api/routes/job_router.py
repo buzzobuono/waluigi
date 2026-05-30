@@ -7,18 +7,19 @@ from waluigi.commons.dag import DAGTask, parse_definition
 
 
 router = APIRouter(
-    prefix="/jobs",
+    prefix="/namespaces/{namespace}/jobs",
     tags=["Jobs"]
 )
 
 
 @router.get("")
-async def list_jobs(svc=Depends(job_service)):
-    return ok(svc.list())
+async def list_jobs(namespace: str, svc=Depends(job_service)):
+    return ok(svc.list(namespace))
 
 
 @router.post("")
 async def submit(
+    namespace: str,
     request: Request,
     job_svc=Depends(job_service),
     engine=Depends(boss_engine),
@@ -28,7 +29,6 @@ async def submit(
     timestamp = None
 
     if kind == "Job":
-        # Each submission creates an independent job run with timestamp-suffixed task IDs
         timestamp = time.time()
         data = dict(data)
         spec_dict = dict(data.get("spec", {}))
@@ -59,49 +59,49 @@ async def submit(
     job_id = f"{base_name}@{timestamp}" if timestamp else base_name
 
     if not timestamp:
-        status = job_svc.get_status(job_id)
+        status = job_svc.get_status(namespace, job_id)
         if status and status not in ("SUCCESS", "FAILED"):
             return ko(f"Job '{job_id}' is already active ({status})", status=409)
 
     try:
         task = DAGTask(spec)
-        job_svc.create(job_id=job_id, metadata=metadata, spec=spec)
-        engine.register_job(job_id, task, None)
+        job_svc.create(namespace=namespace, job_id=job_id, metadata=metadata, spec=spec)
+        engine.register_job(namespace, job_id, task, None)
         return ok({"job_id": job_id, "task_id": task.id}, status=202)
     except Exception as e:
         return ko(str(e), status=500)
-        
+
 
 @router.post("/{job_id}/_reset")
-async def reset_job(job_id: str, svc=Depends(job_service)):
-    if not svc.reset(job_id):
+async def reset_job(namespace: str, job_id: str, svc=Depends(job_service)):
+    if not svc.reset(namespace, job_id):
         return ko(f"Job '{job_id}' not found or not in a terminal state (FAILED/CANCELLED)", status=409)
     return ok({"job_id": job_id, "status": "PENDING"})
 
 
 @router.post("/{job_id}/_pause")
-async def pause_job(job_id: str, svc=Depends(job_service)):
-    if not svc.pause(job_id):
+async def pause_job(namespace: str, job_id: str, svc=Depends(job_service)):
+    if not svc.pause(namespace, job_id):
         return ko(f"Job '{job_id}' not found or not pausable (must be PENDING or RUNNING)", status=409)
     return ok({"job_id": job_id, "status": "PAUSED"})
 
 
 @router.post("/{job_id}/_resume")
-async def resume_job(job_id: str, svc=Depends(job_service)):
-    if not svc.resume(job_id):
+async def resume_job(namespace: str, job_id: str, svc=Depends(job_service)):
+    if not svc.resume(namespace, job_id):
         return ko(f"Job '{job_id}' not found or not paused", status=409)
     return ok({"job_id": job_id, "status": "PENDING"})
 
 
 @router.post("/{job_id}/_cancel")
-async def cancel_job(job_id: str, svc=Depends(job_service)):
-    if not svc.cancel(job_id):
+async def cancel_job(namespace: str, job_id: str, svc=Depends(job_service)):
+    if not svc.cancel(namespace, job_id):
         return ko(f"Job '{job_id}' not found or already terminal", status=409)
     return ok({"job_id": job_id, "status": "CANCELLED"})
 
 
 @router.delete("/{job_id}")
-async def delete_job(job_id: str, svc=Depends(job_service)):
-    if not svc.delete(job_id):
+async def delete_job(namespace: str, job_id: str, svc=Depends(job_service)):
+    if not svc.delete(namespace, job_id):
         return ko(f"Job '{job_id}' not found or not in terminal state", status=409)
     return ok({"job_id": job_id})

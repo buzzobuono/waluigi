@@ -11,7 +11,6 @@ class WorkerRegisterRequest(BaseModel):
 
 class TaskUpdateRequest(BaseModel):
     status: str
-    namespace: str | None = None
     params: str | None = None
     attributes: str | None = None
     resources: dict = {"coin": 1.0}
