@@ -4,7 +4,6 @@ import BasePanel from './BasePanel.js';
 import BaseTable from './BaseTable.js';
 import BaseButton from './BaseButton.js';
 import BaseButtonGroup from './BaseButtonGroup.js';
-import BaseModal from './BaseModal.js';
 import LogModal from './LogModal.js';
 import ConfirmDialog from './ConfirmDialog.js';
 
@@ -13,7 +12,7 @@ const PAGE_SIZE = 10;
 
 export default {
   name: 'Tasks',
-  components: { BasePage, BasePanel, BaseTable, LogModal, BaseButton, BaseButtonGroup, BaseModal, ConfirmDialog },
+  components: { BasePage, BasePanel, BaseTable, LogModal, BaseButton, BaseButtonGroup, ConfirmDialog },
 
   setup() {
     const route        = VueRouter.useRoute();
@@ -22,7 +21,11 @@ export default {
     const error        = ref(null);
     const logModalRef  = ref(null);
     const confirmRef   = ref(null);
-    const pages        = ref({});
+    const currentPage  = ref(1);
+
+    const availableNs  = ref([]);
+    const selectedNs   = ref('');
+    const nsLoading    = ref(false);
 
     const STATUS_COLOR = {
       SUCCESS: '#28a745',
@@ -33,19 +36,41 @@ export default {
     };
 
     const columns = [
-      { key: 'id', label: 'Task ID' },
-      { key: 'params', label: 'Params' },
-      { key: 'status', label: 'Status' },
-      { key: 'update', label: 'Last Update' },
+      { key: 'id',      label: 'Task ID' },
+      { key: 'job_id',  label: 'Job' },
+      { key: 'params',  label: 'Params' },
+      { key: 'status',  label: 'Status' },
+      { key: 'update',  label: 'Last Update' },
       { key: 'actions', label: 'Actions', class: 'text-right pr-3' }
     ];
 
+    async function loadNamespaces() {
+      nsLoading.value = true;
+      try {
+        const data = await api.namespaces();
+        availableNs.value = (Array.isArray(data) ? data : []).map(r => r.namespace);
+        // preselect from route param if navigating from Namespaces page
+        const paramNs = route.params.namespace;
+        const presel  = paramNs ? (Array.isArray(paramNs) ? paramNs.join('/') : paramNs) : null;
+        if (presel && availableNs.value.includes(presel)) {
+          selectedNs.value = presel;
+        } else if (!selectedNs.value && availableNs.value.length) {
+          selectedNs.value = availableNs.value[0];
+        }
+      } catch (e) {
+        error.value = e.message;
+      } finally {
+        nsLoading.value = false;
+      }
+    }
+
     async function load() {
+      if (!selectedNs.value) return;
       loading.value = true;
       error.value   = null;
       try {
-        tasks.value = await api.tasks();
-        pages.value = {};
+        tasks.value = await api.tasks(selectedNs.value);
+        currentPage.value = 1;
       } catch (e) {
         error.value = e.message;
       } finally {
@@ -53,191 +78,189 @@ export default {
       }
     }
 
-    const filterNs = computed(() => {
-      const p = route.params.namespace;
-      return p ? (Array.isArray(p) ? p.join('/') : p) : null;
-    });
+    async function onNsChange() {
+      tasks.value = [];
+      await load();
+    }
 
-    const byNamespace = computed(() => {
-      const map = {};
-      const filtered = filterNs.value
-        ? tasks.value.filter(t => t.namespace === filterNs.value)
-        : tasks.value;
-      filtered.forEach(t => {
-        const ns = t.namespace || '(none)';
-        if (!map[ns]) map[ns] = [];
-        map[ns].push(t);
-      });
-      return map;
+    const totalPages = computed(() => Math.max(1, Math.ceil(tasks.value.length / PAGE_SIZE)));
+    const pagedTasks = computed(() => {
+      const start = (currentPage.value - 1) * PAGE_SIZE;
+      return tasks.value.slice(start, start + PAGE_SIZE);
     });
+    const rangeStart = computed(() => (currentPage.value - 1) * PAGE_SIZE + 1);
+    const rangeEnd   = computed(() => Math.min(currentPage.value * PAGE_SIZE, tasks.value.length));
+
+    function changePage(delta) {
+      const next = currentPage.value + delta;
+      if (next >= 1 && next <= totalPages.value) currentPage.value = next;
+    }
+
+    function openLogs(taskId) {
+      logModalRef.value?.show(selectedNs.value, taskId);
+    }
 
     async function resetTask(id) {
       confirmRef.value.ask(`Reset task "${id}"?`, async (ok) => {
         if (!ok) return;
-        await api.resetTask(id);
-        await load();
+        try { await api.resetTask(selectedNs.value, id); await load(); }
+        catch (e) { error.value = e.message; }
       });
     }
 
     async function deleteTask(id) {
       confirmRef.value.ask(`Delete task "${id}"?`, async (ok) => {
         if (!ok) return;
-        await api.deleteTask(id);
-        await load();
+        try { await api.deleteTask(selectedNs.value, id); await load(); }
+        catch (e) { error.value = e.message; }
       });
     }
 
-    async function resetNs(ns) {
-      confirmRef.value.ask(`Reset all in "${ns}"?`, async (ok) => {
+    async function resetNs() {
+      confirmRef.value.ask(`Reset all tasks in "${selectedNs.value}"?`, async (ok) => {
         if (!ok) return;
-        await api.resetNamespace(ns);
-        await load();
+        try { await api.resetNamespace(selectedNs.value); await load(); }
+        catch (e) { error.value = e.message; }
       });
     }
 
-    async function deleteNs(ns) {
-      confirmRef.value.ask(`Delete all in "${ns}"?`, async (ok) => {
+    async function deleteNs() {
+      confirmRef.value.ask(`Delete entire namespace "${selectedNs.value}"?`, async (ok) => {
         if (!ok) return;
-        await api.deleteNamespace(ns);
-        await load();
+        try {
+          await api.deleteNamespace(selectedNs.value);
+          // namespace is gone — reload the selector
+          await loadNamespaces();
+          await load();
+        } catch (e) { error.value = e.message; }
       });
     }
 
-    function openLogs(id) {
-      if (logModalRef.value) logModalRef.value.show(id);
-    }
-
-    function getNsPage(ns) {
-      return pages.value[ns] || 1;
-    }
-
-    function changeNsPage(ns, delta) {
-      const total = Math.max(1, Math.ceil((byNamespace.value[ns] || []).length / PAGE_SIZE));
-      const next  = getNsPage(ns) + delta;
-      if (next >= 1 && next <= total) pages.value = { ...pages.value, [ns]: next };
-    }
-
-    function totalPagesFor(taskList) {
-      return Math.max(1, Math.ceil(taskList.length / PAGE_SIZE));
-    }
-
-    function pagedTasksFor(ns, taskList) {
-      const start = (getNsPage(ns) - 1) * PAGE_SIZE;
-      return taskList.slice(start, start + PAGE_SIZE);
-    }
-
-    function rangeStartFor(ns) { return (getNsPage(ns) - 1) * PAGE_SIZE + 1; }
-    function rangeEndFor(ns, taskList) { return Math.min(getNsPage(ns) * PAGE_SIZE, taskList.length); }
-
-    onMounted(load);
+    onMounted(async () => {
+      await loadNamespaces();
+      await load();
+    });
 
     return {
-      tasks, loading, error, columns, STATUS_COLOR,
-      filterNs, byNamespace, logModalRef, confirmRef, pages,
-      load, resetTask, deleteTask, resetNs, deleteNs, openLogs,
-      getNsPage, changeNsPage, totalPagesFor, pagedTasksFor, rangeStartFor, rangeEndFor
+      tasks, pagedTasks, loading, error, columns, STATUS_COLOR,
+      currentPage, totalPages, rangeStart, rangeEnd,
+      availableNs, selectedNs, nsLoading,
+      logModalRef, confirmRef,
+      changePage, load, onNsChange,
+      openLogs, resetTask, deleteTask, resetNs, deleteNs,
     };
   },
 
   template: `
     <base-page
-      :title="filterNs ? 'Tasks in ' + filterNs : 'All Tasks'"
-      :subtitle="filterNs ? 'Namespace View' : 'Global View'"
+      title="Tasks"
+      subtitle="Task monitoring and management"
       icon="fas fa-tasks"
       :loading="loading && !tasks.length"
       :error="error">
 
       <template #actions>
-        <base-button
-          v-if="filterNs"
-          label="Back"
-          icon="fas fa-arrow-left"
-          color="outline-secondary"
-          @click="$router.push('/namespaces')"
-        />
-
-        <base-button
-          label="Update"
-          class="ml-auto"
-          icon="fas fa-sync-alt"
-          color="outline-primary"
-          :loading="loading"
-          @click="load"
-        />
+        <div class="d-flex align-items-center w-100">
+          <label class="mr-2 mb-0 text-muted small font-weight-bold text-nowrap">
+            <i class="fas fa-layer-group mr-1"></i>Namespace
+          </label>
+          <select class="form-control form-control-sm mr-3" style="max-width: 220px;"
+                  v-model="selectedNs" @change="onNsChange" :disabled="nsLoading">
+            <option v-if="!availableNs.length" value="">— no namespaces —</option>
+            <option v-for="ns in availableNs" :key="ns" :value="ns">{{ ns }}</option>
+          </select>
+          <base-button
+            label="Reset NS"
+            icon="fas fa-history"
+            color="outline-warning"
+            class="mr-2"
+            :disabled="!selectedNs"
+            @click="resetNs"
+          />
+          <base-button
+            label="Delete NS"
+            icon="fas fa-trash-alt"
+            color="outline-danger"
+            class="mr-2"
+            :disabled="!selectedNs"
+            @click="deleteNs"
+          />
+          <base-button
+            label="Refresh"
+            icon="fas fa-sync-alt"
+            color="outline-primary"
+            class="ml-auto"
+            :loading="loading"
+            @click="load"
+          />
+        </div>
       </template>
 
-      <div v-if="!Object.keys(byNamespace).length" class="text-center py-5 text-muted">
-        <i class="fas fa-filter fa-3x mb-3 opacity-75"></i>
-        <p>No tasks found for this selection.</p>
+      <div v-if="!selectedNs" class="text-center py-5 text-muted">
+        <i class="fas fa-layer-group fa-3x mb-3 opacity-75"></i>
+        <p>No namespaces available.</p>
       </div>
 
-      <base-panel
-        v-for="(taskList, ns) in byNamespace"
-        :key="ns"
-        :no-padding="true">
-
-        <template #title>
-          <i class="fas fa-layer-group mr-2"></i>
-          <span class="font-weight-bold">Namespace: </span>
-          <code class="ml-2">{{ ns }}</code>
-        </template>
+      <base-panel v-else :no-padding="true">
 
         <template #tools>
-          <base-button-group>
-            <base-button
-              label="Reset"
-              icon="fas fa-history"
-              color="outline-warning"
-              @click="resetNs(ns)"
-            />
-            <base-button
-              label="Delete"
-              icon="fas fa-trash-alt"
-              color="outline-danger"
-              @click="deleteNs(ns)"
-            />
-          </base-button-group>
           <base-button-group class="ml-auto">
             <base-button
-              :disabled="loading || getNsPage(ns) <= 1"
+              :disabled="loading || currentPage <= 1"
               icon="fas fa-chevron-left"
               color="outline-primary"
-              @click="changeNsPage(ns, -1)"
+              @click="changePage(-1)"
             />
             <base-button
-              :label="String(getNsPage(ns)) + ' / ' + String(totalPagesFor(taskList))"
+              :label="String(currentPage) + ' / ' + String(totalPages)"
               :disabled="true"
               color="outline-secondary"
             />
             <base-button
-              :disabled="loading || getNsPage(ns) >= totalPagesFor(taskList)"
+              :disabled="loading || currentPage >= totalPages"
               icon="fas fa-chevron-right"
               color="outline-primary"
-              @click="changeNsPage(ns, 1)"
+              @click="changePage(1)"
             />
           </base-button-group>
         </template>
 
-        <base-table :columns="columns" :items="pagedTasksFor(ns, taskList)">
+        <base-table :columns="columns" :items="pagedTasks">
 
           <template #cell(id)="{ item }">
-            <a href="#" @click.prevent="openLogs(item.id)">
-              {{ item.id }}
-            </a>
+            <a href="#" @click.prevent="openLogs(item.id)">{{ item.id }}</a>
+          </template>
+
+          <template #cell(job_id)="{ item }">
+            <router-link v-if="item.job_id"
+              :to="'/jobs/' + encodeURIComponent(selectedNs) + '/' + encodeURIComponent(item.job_id)"
+              class="text-muted small">
+              {{ item.job_id }}
+            </router-link>
+            <span v-else class="text-muted">—</span>
           </template>
 
           <template #cell(status)="{ item }">
-            <span class="badge shadow" :style="{ background: STATUS_COLOR[item.status], color: '#fff', minWidth: '70px' }">
+            <span class="badge shadow"
+              :style="{ background: STATUS_COLOR[item.status] || '#6c757d', color: '#fff', minWidth: '70px' }">
               {{ item.status }}
             </span>
           </template>
 
           <template #cell(update)="{ item }">
-            <i class="far fa-clock mr-1"></i>{{ item.last_update || '—' }}
+            <span class="text-muted small">
+              <i class="far fa-clock mr-1"></i>{{ item.last_update || '—' }}
+            </span>
           </template>
 
           <template #cell(actions)="{ item }">
             <base-button-group>
+              <base-button
+                icon="fas fa-terminal"
+                color="outline-info"
+                title="View Logs"
+                @click="openLogs(item.id)"
+              />
               <base-button
                 icon="fas fa-undo"
                 color="outline-warning"
@@ -257,7 +280,7 @@ export default {
 
         <template #footer>
           <div class="text-muted small">
-            {{ taskList.length ? rangeStartFor(ns) + ' – ' + rangeEndFor(ns, taskList) + ' of ' + taskList.length : 'No tasks' }}
+            {{ tasks.length ? rangeStart + ' – ' + rangeEnd + ' of ' + tasks.length : 'No tasks' }}
           </div>
         </template>
 

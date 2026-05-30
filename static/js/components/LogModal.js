@@ -12,17 +12,16 @@ export default {
     const error = Vue.ref('');
     const logModal = Vue.ref(null);
 
-    const show = async (id) => {
+    const show = async (namespace, id) => {
       taskId.value = id;
       logs.value = [];
       loading.value = true;
       error.value = '';
 
-      // ✅ apertura corretta
       logModal.value.open();
 
       try {
-        const data = await api.logs(id, 200);
+        const data = await api.logs(namespace, id, 200);
         logs.value = data;
       } catch (e) {
         error.value = `Errore nel caricamento dei log: ${e.message}`;

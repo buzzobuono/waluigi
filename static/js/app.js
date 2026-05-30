@@ -20,8 +20,9 @@ const App = {
       const token = getToken();
       if (!token) { user.value = null; return; }
       const payload = decodeToken(token);
+      const isAdmin = payload?.namespaces === "*";
       user.value = payload
-        ? { name: payload.sub, role: payload.is_admin ? 'Administrator' : 'User', isAdmin: !!payload.is_admin }
+        ? { name: payload.sub, role: isAdmin ? 'Administrator' : 'User', isAdmin, namespaces: payload.namespaces }
         : null;
     }
 

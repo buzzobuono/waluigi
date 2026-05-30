@@ -17,19 +17,22 @@ export default {
   },
 
   setup() {
-    const jobs        = ref([]);
-    const loading     = ref(false);
-    const error       = ref(null);
-    const confirmRef  = ref(null);
-    const currentPage = ref(1);
-    const PAGE_SIZE   = 10;
+    const jobs         = ref([]);
+    const loading      = ref(false);
+    const error        = ref(null);
+    const confirmRef   = ref(null);
+    const currentPage  = ref(1);
+    const PAGE_SIZE    = 10;
+
+    const availableNs  = ref([]);
+    const selectedNs   = ref('');
+    const nsLoading    = ref(false);
 
     const columns = [
       { key: 'job_id',     label: 'Job ID' },
       { key: 'status',     label: 'Status' },
       { key: 'started_at', label: 'Started At' },
       { key: 'locked_by',  label: 'Locked By' },
-      { key: 'locked_until', label: 'Locked Until' },
       { key: 'actions',    label: 'Actions', class: 'text-right pr-3' }
     ];
 
@@ -42,17 +45,38 @@ export default {
       PAUSED:    { color: 'info',      icon: 'fas fa-pause' },
     };
 
+    async function loadNamespaces() {
+      nsLoading.value = true;
+      try {
+        const data = await api.namespaces();
+        availableNs.value = (Array.isArray(data) ? data : []).map(r => r.namespace);
+        if (!selectedNs.value && availableNs.value.length) {
+          selectedNs.value = availableNs.value[0];
+        }
+      } catch (e) {
+        error.value = e.message;
+      } finally {
+        nsLoading.value = false;
+      }
+    }
+
     async function load() {
+      if (!selectedNs.value) return;
       loading.value = true;
       error.value   = null;
       try {
-        jobs.value = await api.jobs();
+        jobs.value = await api.jobs(selectedNs.value);
         currentPage.value = 1;
       } catch (e) {
         error.value = e.message;
       } finally {
         loading.value = false;
       }
+    }
+
+    async function onNsChange() {
+      jobs.value = [];
+      await load();
     }
 
     const counts = computed(() => {
@@ -77,43 +101,41 @@ export default {
     }
 
     async function pauseJob(jobId) {
-      await api.pauseJob(jobId);
-      await load();
+      try { await api.pauseJob(selectedNs.value, jobId); await load(); }
+      catch (e) { error.value = e.message; }
     }
 
     async function resumeJob(jobId) {
-      await api.resumeJob(jobId);
-      await load();
+      try { await api.resumeJob(selectedNs.value, jobId); await load(); }
+      catch (e) { error.value = e.message; }
     }
 
     async function cancelJob(jobId) {
-      confirmRef.value.ask(
-        `Cancel job "${jobId}"?`,
-        async (ok) => {
-          if (!ok) return;
-          await api.cancelJob(jobId);
-          await load();
-        }
-      );
+      confirmRef.value.ask(`Cancel job "${jobId}"?`, async (ok) => {
+        if (!ok) return;
+        try { await api.cancelJob(selectedNs.value, jobId); await load(); }
+        catch (e) { error.value = e.message; }
+      });
     }
 
     async function deleteJob(jobId) {
-      confirmRef.value.ask(
-        `Delete job "${jobId}"?`,
-        async (ok) => {
-          if (!ok) return;
-          await api.deleteJob(jobId);
-          await load();
-        }
-      );
+      confirmRef.value.ask(`Delete job "${jobId}"?`, async (ok) => {
+        if (!ok) return;
+        try { await api.deleteJob(selectedNs.value, jobId); await load(); }
+        catch (e) { error.value = e.message; }
+      });
     }
 
-    onMounted(load);
+    onMounted(async () => {
+      await loadNamespaces();
+      await load();
+    });
 
     return {
       jobs, pagedJobs, loading, error, columns, STATUS_MAP,
       counts, confirmRef, currentPage, totalPages, rangeStart, rangeEnd,
-      changePage, load, pauseJob, resumeJob, cancelJob, deleteJob
+      availableNs, selectedNs, nsLoading,
+      changePage, load, onNsChange, pauseJob, resumeJob, cancelJob, deleteJob,
     };
   },
 
@@ -127,7 +149,7 @@ export default {
 
       <template #actions>
         <div class="row w-100 m-0">
-          <div class="col-6 col-md-3 px-1" v-for="(val, key) in counts" :key="key">
+          <div class="col-6 col-md-2 px-1" v-for="(val, key) in counts" :key="key">
             <base-info-box
               :label="key"
               :value="val"
@@ -137,17 +159,32 @@ export default {
           </div>
         </div>
 
-        <base-button
-          label="Update"
-          icon="fas fa-sync-alt"
-          color="outline-primary"
-          class="ml-auto"
-          :loading="loading"
-          @click="load"
-        />
+        <div class="d-flex align-items-center mt-2 w-100">
+          <label class="mr-2 mb-0 text-muted small font-weight-bold text-nowrap">
+            <i class="fas fa-layer-group mr-1"></i>Namespace
+          </label>
+          <select class="form-control form-control-sm mr-3" style="max-width: 220px;"
+                  v-model="selectedNs" @change="onNsChange" :disabled="nsLoading">
+            <option v-if="!availableNs.length" value="">— no namespaces —</option>
+            <option v-for="ns in availableNs" :key="ns" :value="ns">{{ ns }}</option>
+          </select>
+          <base-button
+            label="Refresh"
+            icon="fas fa-sync-alt"
+            color="outline-primary"
+            class="ml-auto"
+            :loading="loading"
+            @click="load"
+          />
+        </div>
       </template>
 
-      <base-panel :no-padding="true">
+      <div v-if="!selectedNs" class="text-center py-5 text-muted">
+        <i class="fas fa-layer-group fa-3x mb-3 opacity-75"></i>
+        <p>No namespaces available. Submit a job first.</p>
+      </div>
+
+      <base-panel v-else :no-padding="true">
 
         <template #tools>
           <base-button-group class="ml-auto">
@@ -178,7 +215,7 @@ export default {
           <template #cell(job_id)="{ item }">
             <div>
               <i class="fas fa-project-diagram mr-2 opacity-75"></i>
-              <router-link :to="'/jobs/' + encodeURIComponent(item.job_id)">
+              <router-link :to="'/jobs/' + encodeURIComponent(selectedNs) + '/' + encodeURIComponent(item.job_id)">
                 {{ item.job_id }}
               </router-link>
             </div>

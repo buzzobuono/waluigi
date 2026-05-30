@@ -42,7 +42,7 @@ const routes = [
   { path: '/dashboard',              component: Dashboard,      meta: { title: 'Dashboard',       requiresAuth: true } },
   { path: '/dq/rules',  component: Expectations, meta: { title: 'DQ Rules', requiresAuth: true } },
   { path: '/lineage',   component: Lineage,   meta: { title: 'Lineage',    requiresAuth: true } },
-  { path: '/jobs/:jobId',   component: JobDag,    meta: { title: 'Job DAG',    requiresAuth: true } },
+  { path: '/jobs/:namespace/:jobId', component: JobDag, meta: { title: 'Job DAG', requiresAuth: true } },
   { path: '/admin/users',   component: AdminUsers, meta: { title: 'Users',      requiresAuth: true } },
 ];
 

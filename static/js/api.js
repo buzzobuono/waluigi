@@ -5,6 +5,13 @@ export function getToken()    { return localStorage.getItem(AUTH_KEY); }
 export function setToken(t)   { localStorage.setItem(AUTH_KEY, t); }
 export function clearToken()  { localStorage.removeItem(AUTH_KEY); }
 
+export function getUserNamespaces() {
+  try {
+    const p = JSON.parse(atob(getToken().split('.')[1]));
+    return p.namespaces;   // "*" or string[]
+  } catch { return []; }
+}
+
 function _authHeaders(extra = {}) {
   const token = getToken();
   return token
@@ -23,6 +30,7 @@ async function _handle(r, url) {
     try {
       const body = await r.json();
       if (body?.diagnostic?.messages?.length) msg = body.diagnostic.messages[0];
+      else if (body?.detail) msg = body.detail;
     } catch {}
     throw new Error(msg);
   }
@@ -67,9 +75,11 @@ function _enc(s)    { return encodeURIComponent(s); }
 function _unwrap(r) { return r?.data !== undefined ? r.data : r; }
 
 export const api = {
-  adminUsers:      ()            => _get('/auth/users'),
-  adminCreateUser: (body)        => _postJson('/auth/users', body),
-  adminDeleteUser: (userid)      => _delete(`/auth/users/${_enc(userid)}`),
+  // ── Auth / Users ──────────────────────────────────────────────────────────
+  adminUsers:      ()              => _get('/auth/users'),
+  adminCreateUser: (body)          => _postJson('/auth/users', body),
+  adminUpdateUser: (userid, body)  => _patchJson(`/auth/users/${_enc(userid)}`, body),
+  adminDeleteUser: (userid)        => _delete(`/auth/users/${_enc(userid)}`),
 
   login: async (username, password) => {
     const r = await fetch('/auth/login', {
@@ -81,27 +91,32 @@ export const api = {
     return r.json();
   },
 
-  jobs:      ()      => _get('/boss/jobs').then(_unwrap),
-  pauseJob:  (jobId) => _post(`/boss/jobs/${_enc(jobId)}/_pause`).then(_unwrap),
-  resumeJob: (jobId) => _post(`/boss/jobs/${_enc(jobId)}/_resume`).then(_unwrap),
-  resetJob:  (jobId) => _post(`/boss/jobs/${_enc(jobId)}/_reset`).then(_unwrap),
-  cancelJob: (jobId) => _postJson(`/boss/jobs/${_enc(jobId)}/_cancel`, {}).then(_unwrap),
-  deleteJob: (jobId) => _delete(`/boss/jobs/${_enc(jobId)}`).then(_unwrap),
-  jobTasks:  (jobId) => _get(`/boss/tasks`, { job_id: jobId }).then(_unwrap),
-  
+  // ── Boss — Namespaces ─────────────────────────────────────────────────────
   namespaces:      ()   => _get('/boss/namespaces').then(_unwrap),
   resetNamespace:  (ns) => _post(`/boss/namespaces/${_enc(ns)}/_reset`).then(_unwrap),
   deleteNamespace: (ns) => _delete(`/boss/namespaces/${_enc(ns)}`).then(_unwrap),
 
-  tasks:     ()  => _get('/boss/tasks').then(_unwrap),
-  resetTask: (id) => _post(`/boss/tasks/${_enc(id)}/_reset`).then(_unwrap),
-  deleteTask: (id) => _detete(`/boss/tasks/${_enc(id)}`).then(_unwrap),
-  logs:      (taskId, limit = 100) => _get(`/boss/tasks/${_enc(taskId)}/logs`, { limit }).then(_unwrap),
+  // ── Boss — Jobs (namespace-scoped) ────────────────────────────────────────
+  jobs:      (ns)        => _get(`/boss/namespaces/${_enc(ns)}/jobs`).then(_unwrap),
+  pauseJob:  (ns, jobId) => _post(`/boss/namespaces/${_enc(ns)}/jobs/${_enc(jobId)}/_pause`).then(_unwrap),
+  resumeJob: (ns, jobId) => _post(`/boss/namespaces/${_enc(ns)}/jobs/${_enc(jobId)}/_resume`).then(_unwrap),
+  resetJob:  (ns, jobId) => _post(`/boss/namespaces/${_enc(ns)}/jobs/${_enc(jobId)}/_reset`).then(_unwrap),
+  cancelJob: (ns, jobId) => _post(`/boss/namespaces/${_enc(ns)}/jobs/${_enc(jobId)}/_cancel`).then(_unwrap),
+  deleteJob: (ns, jobId) => _delete(`/boss/namespaces/${_enc(ns)}/jobs/${_enc(jobId)}`).then(_unwrap),
 
+  // ── Boss — Tasks (namespace-scoped) ───────────────────────────────────────
+  tasks:     (ns)        => _get(`/boss/namespaces/${_enc(ns)}/tasks`).then(_unwrap),
+  jobTasks:  (ns, jobId) => _get(`/boss/namespaces/${_enc(ns)}/tasks`, { job_id: jobId }).then(_unwrap),
+  resetTask: (ns, id)    => _post(`/boss/namespaces/${_enc(ns)}/tasks/${_enc(id)}/_reset`).then(_unwrap),
+  deleteTask: (ns, id)   => _delete(`/boss/namespaces/${_enc(ns)}/tasks/${_enc(id)}`).then(_unwrap),
+  logs:      (ns, taskId, limit = 100) =>
+    _get(`/boss/namespaces/${_enc(ns)}/tasks/${_enc(taskId)}/logs`, { limit }).then(_unwrap),
+
+  // ── Boss — Cluster ────────────────────────────────────────────────────────
   workers:   () => _get('/boss/workers').then(_unwrap),
-
   resources: () => _get('/boss/resources').then(_unwrap),
 
+  // ── Catalog ───────────────────────────────────────────────────────────────
   catalogSources:       ()      => _get('/catalog/sources'),
   catalogCreateSource:  (body)  => _postJson('/catalog/sources', body),
   catalogUpdateSource:  (id, body) => _patchJson(`/catalog/sources/${_enc(id)}`, body),

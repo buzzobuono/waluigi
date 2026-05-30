@@ -17,6 +17,7 @@ function decodeToken(token) {
 const COLUMNS = [
   { key: 'userid',     label: 'User ID' },
   { key: 'username',   label: 'Display Name' },
+  { key: 'namespaces', label: 'Namespaces' },
   { key: 'createdate', label: 'Created' },
   { key: 'actions',    label: '', class: 'text-right pr-3' },
 ];
@@ -27,20 +28,27 @@ export default {
 
   setup() {
     const payload   = decodeToken(getToken());
-    const isAdmin   = payload?.is_admin === true;
+    const isAdmin   = payload?.namespaces === "*";
 
     const users      = ref([]);
     const loading    = ref(false);
     const saving     = ref(false);
     const pageError  = ref(null);
     const formError  = ref(null);
+    const editError  = ref(null);
     const modalRef   = ref(null);
+    const editRef    = ref(null);
     const confirmRef = ref(null);
 
-    const form = ref({ userid: '', username: '', password: '' });
+    const form     = ref({ userid: '', username: '', password: '', namespaces: '' });
+    const editForm = ref({ userid: '', namespaces: '' });
 
     function fmtDate(d) {
       return d ? d.slice(0, 19).replace('T', ' ') : '—';
+    }
+
+    function parseNs(raw) {
+      return raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
     }
 
     async function loadUsers() {
@@ -58,7 +66,7 @@ export default {
     }
 
     function openCreate() {
-      form.value      = { userid: '', username: '', password: '' };
+      form.value      = { userid: '', username: '', password: '', namespaces: '' };
       formError.value = null;
       modalRef.value?.open();
     }
@@ -72,14 +80,38 @@ export default {
       saving.value = true;
       try {
         await api.adminCreateUser({
-          userid:   form.value.userid.trim(),
-          username: form.value.username.trim() || form.value.userid.trim(),
-          password: form.value.password,
+          userid:     form.value.userid.trim(),
+          username:   form.value.username.trim() || form.value.userid.trim(),
+          password:   form.value.password,
+          namespaces: parseNs(form.value.namespaces),
         });
         modalRef.value?.close();
         await loadUsers();
       } catch (e) {
         formError.value = e.message;
+      } finally {
+        saving.value = false;
+      }
+    }
+
+    function openEdit(u) {
+      const ns = Array.isArray(u.namespaces) ? u.namespaces.join('\n') : '';
+      editForm.value  = { userid: u.userid, namespaces: ns };
+      editError.value = null;
+      editRef.value?.open();
+    }
+
+    async function submitEdit() {
+      editError.value = null;
+      saving.value    = true;
+      try {
+        await api.adminUpdateUser(editForm.value.userid, {
+          namespaces: parseNs(editForm.value.namespaces),
+        });
+        editRef.value?.close();
+        await loadUsers();
+      } catch (e) {
+        editError.value = e.message;
       } finally {
         saving.value = false;
       }
@@ -103,9 +135,9 @@ export default {
     onMounted(loadUsers);
 
     return {
-      isAdmin, users, loading, saving, pageError, formError,
-      form, modalRef, confirmRef, columns: COLUMNS,
-      fmtDate, loadUsers, openCreate, submitCreate, deleteUser,
+      isAdmin, users, loading, saving, pageError, formError, editError,
+      form, editForm, modalRef, editRef, confirmRef, columns: COLUMNS,
+      fmtDate, loadUsers, openCreate, submitCreate, openEdit, submitEdit, deleteUser,
     };
   },
 
@@ -133,12 +165,21 @@ export default {
               <code>{{ item.userid }}</code>
             </template>
 
+            <template #cell(namespaces)="{ item }">
+              <span v-if="!item.namespaces || !item.namespaces.length"
+                    class="text-muted small">—</span>
+              <span v-for="ns in item.namespaces" :key="ns"
+                    class="badge badge-info mr-1">{{ ns }}</span>
+            </template>
+
             <template #cell(createdate)="{ item }">
               <span class="text-muted small">{{ fmtDate(item.createdate) }}</span>
             </template>
 
             <template #cell(actions)="{ item }">
               <base-button-group>
+                <base-button icon="fas fa-layer-group" color="outline-info"
+                             title="Edit namespaces" @click="openEdit(item)" />
                 <base-button icon="fas fa-trash" color="outline-danger"
                              title="Delete user" @click="deleteUser(item)" />
               </base-button-group>
@@ -147,6 +188,7 @@ export default {
           </base-table>
         </base-panel>
 
+        <!-- Create user modal -->
         <base-modal ref="modalRef" title="New User" icon="fas fa-user-plus">
           <div class="form-group">
             <label class="small font-weight-bold">User ID <span class="text-danger">*</span></label>
@@ -157,10 +199,17 @@ export default {
             <label class="small font-weight-bold">Display Name</label>
             <base-input v-model="form.username" placeholder="e.g. John Doe (defaults to User ID)" />
           </div>
-          <div class="form-group mb-0">
+          <div class="form-group">
             <label class="small font-weight-bold">Password <span class="text-danger">*</span></label>
             <input v-model="form.password" type="password"
                    class="form-control form-control-sm" placeholder="Password" />
+          </div>
+          <div class="form-group mb-0">
+            <label class="small font-weight-bold">Namespaces</label>
+            <textarea v-model="form.namespaces" rows="3"
+                      class="form-control form-control-sm font-monospace"
+                      placeholder="One namespace per line (e.g. analytics)" />
+            <small class="text-muted">Leave blank for no access. One per line.</small>
           </div>
           <div v-if="formError" class="alert alert-danger mt-3 mb-0 py-2 small">
             <i class="fas fa-exclamation-circle mr-1"></i>{{ formError }}
@@ -169,6 +218,25 @@ export default {
             <base-button label="Cancel" color="outline-secondary" @click="modalRef?.close()" />
             <base-button label="Create" icon="fas fa-check" color="primary"
                          :loading="saving" class="ml-2" @click="submitCreate" />
+          </template>
+        </base-modal>
+
+        <!-- Edit namespaces modal -->
+        <base-modal ref="editRef" title="Edit Namespaces" icon="fas fa-layer-group">
+          <p class="mb-2 text-muted small">
+            Namespaces for <code>{{ editForm.userid }}</code>
+          </p>
+          <textarea v-model="editForm.namespaces" rows="5"
+                    class="form-control form-control-sm font-monospace"
+                    placeholder="One namespace per line" />
+          <small class="text-muted">Leave blank to revoke all namespace access.</small>
+          <div v-if="editError" class="alert alert-danger mt-3 mb-0 py-2 small">
+            <i class="fas fa-exclamation-circle mr-1"></i>{{ editError }}
+          </div>
+          <template #footer>
+            <base-button label="Cancel" color="outline-secondary" @click="editRef?.close()" />
+            <base-button label="Save" icon="fas fa-check" color="primary"
+                         :loading="saving" class="ml-2" @click="submitEdit" />
           </template>
         </base-modal>
 
