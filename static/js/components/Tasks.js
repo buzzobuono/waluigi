@@ -3,6 +3,7 @@ import { nsStore } from '../store.js';
 import BasePage from './BasePage.js';
 import BasePanel from './BasePanel.js';
 import BaseTable from './BaseTable.js';
+import BaseInfoBox from './BaseInfoBox.js';
 import BaseButton from './BaseButton.js';
 import BaseButtonGroup from './BaseButtonGroup.js';
 import LogModal from './LogModal.js';
@@ -13,7 +14,7 @@ const PAGE_SIZE = 10;
 
 export default {
   name: 'Tasks',
-  components: { BasePage, BasePanel, BaseTable, LogModal, BaseButton, BaseButtonGroup, ConfirmDialog },
+  components: { BasePage, BasePanel, BaseTable, BaseInfoBox, LogModal, BaseButton, BaseButtonGroup, ConfirmDialog },
 
   setup() {
     const tasks       = ref([]);
@@ -23,9 +24,13 @@ export default {
     const confirmRef  = ref(null);
     const currentPage = ref(1);
 
-    const STATUS_COLOR = {
-      SUCCESS: '#28a745', FAILED: '#dc3545', RUNNING: '#ffc107',
-      READY: '#17a2b8',   PENDING: '#6c757d',
+    const STATUS_MAP = {
+      PENDING:   { color: 'secondary', icon: 'fas fa-clock' },
+      READY:     { color: 'info',      icon: 'fas fa-check-circle' },
+      RUNNING:   { color: 'warning',   icon: 'fas fa-spinner fa-spin' },
+      SUCCESS:   { color: 'success',   icon: 'fas fa-check' },
+      FAILED:    { color: 'danger',    icon: 'fas fa-times' },
+      CANCELLED: { color: 'dark',      icon: 'fas fa-ban' },
     };
 
     const columns = [
@@ -52,6 +57,12 @@ export default {
     }
 
     watch(() => nsStore.selected, () => load());
+
+    const counts = computed(() => {
+      const c = { PENDING: 0, READY: 0, RUNNING: 0, SUCCESS: 0, FAILED: 0, CANCELLED: 0 };
+      tasks.value.forEach(t => { if (c[t.status] !== undefined) c[t.status]++; });
+      return c;
+    });
 
     const totalPages = computed(() => Math.max(1, Math.ceil(tasks.value.length / PAGE_SIZE)));
     const pagedTasks = computed(() => {
@@ -110,8 +121,8 @@ export default {
     onMounted(load);
 
     return {
-      tasks, pagedTasks, loading, error, columns, STATUS_COLOR, nsStore,
-      currentPage, totalPages, rangeStart, rangeEnd,
+      tasks, pagedTasks, loading, error, columns, STATUS_MAP, nsStore,
+      counts, currentPage, totalPages, rangeStart, rangeEnd,
       logModalRef, confirmRef,
       changePage, load, openLogs, resetTask, deleteTask, resetNs, deleteNs,
     };
@@ -126,7 +137,17 @@ export default {
       :error="error">
 
       <template #actions>
-        <div class="d-flex align-items-center w-100">
+        <div class="row w-100 m-0">
+          <div class="col-6 col-md-2 px-1" v-for="(val, key) in counts" :key="key">
+            <base-info-box
+              :label="key"
+              :value="val"
+              :icon="STATUS_MAP[key].icon"
+              :color="STATUS_MAP[key].color"
+            />
+          </div>
+        </div>
+        <div class="d-flex mt-2">
           <base-button label="Reset NS" icon="fas fa-history" color="outline-warning"
                        class="mr-2" :disabled="!nsStore.selected" @click="resetNs" />
           <base-button label="Delete NS" icon="fas fa-trash-alt" color="outline-danger"
@@ -172,8 +193,7 @@ export default {
           </template>
 
           <template #cell(status)="{ item }">
-            <span class="badge shadow"
-              :style="{ background: STATUS_COLOR[item.status] || '#6c757d', color: '#fff', minWidth: '70px' }">
+            <span :class="['badge shadow', 'badge-' + (STATUS_MAP[item.status]?.color || 'secondary'), item.status === 'RUNNING' ? 'blink' : '']">
               {{ item.status }}
             </span>
           </template>
