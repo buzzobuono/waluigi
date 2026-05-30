@@ -4,6 +4,7 @@ import yaml
 import argparse
 import time
 import os
+import base64
 from pathlib import Path
 from tabulate import tabulate
 
@@ -35,8 +36,11 @@ def _color(status: str) -> str:
 def _ok(r) -> bool:
     if r.status_code >= 400:
         try:
-            msgs = r.json().get("diagnostic", {}).get("messages", [])
-            print(f"Error {r.status_code}: {msgs[0] if msgs else r.text}")
+            body = r.json()
+            msgs = body.get("diagnostic", {}).get("messages", [])
+            detail = body.get("detail")
+            msg = msgs[0] if msgs else (detail or r.text)
+            print(f"Error {r.status_code}: {msg}")
         except Exception:
             print(f"Error {r.status_code}: {r.text}")
         return False
@@ -61,10 +65,10 @@ def _parse_json_field(value):
 
 class WaluigiCLI:
     def __init__(self, base_url):
-        self.base_url  = base_url.rstrip('/')
+        self.base_url   = base_url.rstrip('/')
         self.config_dir = Path.home() / '.waluigi'
         self.token_file = self.config_dir / 'token'
-        self._http = HttpClient(self.base_url)
+        self._http      = HttpClient(self.base_url)
         if not self.config_dir.exists():
             self.config_dir.mkdir(parents=True, exist_ok=True)
 
@@ -82,16 +86,52 @@ class WaluigiCLI:
         token = self._get_token()
         return {'Authorization': f"Bearer {token}"} if token else {}
 
+    def _token_namespaces(self):
+        """Return the namespaces claim from the stored JWT, or None on error."""
+        token = self._get_token()
+        if not token:
+            return None
+        try:
+            payload = json.loads(base64.urlsafe_b64decode(token.split('.')[1] + '=='))
+            return payload.get('namespaces')
+        except Exception:
+            return None
+
+    def _resolve_namespace(self, namespace_arg: str | None) -> str | None:
+        """
+        Resolve the effective namespace:
+          1. Use the explicit argument if provided.
+          2. Auto-detect if the token contains exactly one namespace.
+          3. Print an error and return None if ambiguous or missing.
+        """
+        if namespace_arg:
+            return namespace_arg
+        ns = self._token_namespaces()
+        if ns == '*':
+            print("Error: namespace required for admin users. Use -n/--namespace.")
+            return None
+        if isinstance(ns, list):
+            if len(ns) == 1:
+                return ns[0]
+            if len(ns) > 1:
+                print(f"Error: multiple namespaces {ns}. Use -n/--namespace.")
+                return None
+        print("Error: namespace required. Use -n/--namespace.")
+        return None
+
     # ── Auth ──────────────────────────────────────────────────────────────────
 
     def login(self, username, password):
         try:
             r = self._http.post("/auth/login", json={"username": username, "password": password})
             if r.status_code == 200:
-                token = r.json().get("token")
+                data = r.json()
+                token = data.get("token")
                 if token:
                     self._save_token(token)
-                    print("Login successful. Token saved.")
+                    ns = data.get("namespaces", [])
+                    ns_str = "*" if ns == "*" else ", ".join(ns) if ns else "(none)"
+                    print(f"Login successful. Namespaces: {ns_str}")
                 else:
                     print("Error: No token received from server.")
             else:
@@ -111,13 +151,22 @@ class WaluigiCLI:
 
     # ── Apply ─────────────────────────────────────────────────────────────────
 
-    def apply(self, descriptor_path):
+    def apply(self, descriptor_path, namespace_override=None):
         try:
             with open(descriptor_path, 'r') as f:
                 doc = yaml.safe_load(f)
             kind = doc.get('kind')
+
             if kind in ('StatefulJob', 'Job'):
-                r = self._http.post("/boss/jobs", json=doc, headers=self._headers())
+                ns = namespace_override or doc.get('metadata', {}).get('namespace')
+                if not ns:
+                    ns = self._resolve_namespace(None)
+                if not ns:
+                    return
+                r = self._http.post(
+                    f"/boss/namespaces/{ns}/jobs",
+                    json=doc, headers=self._headers(),
+                )
             elif kind == 'ClusterResources':
                 r = self._http.post("/boss/resources", json=doc, headers=self._headers())
             else:
@@ -143,9 +192,11 @@ class WaluigiCLI:
         except Exception as e:
             print(f"Error: {e}")
 
-    def get_jobs(self, status=None, output=None):
+    def get_jobs(self, namespace=None, status=None, output=None):
+        ns = self._resolve_namespace(namespace)
+        if not ns: return
         try:
-            r = self._http.get("/boss/jobs", headers=self._headers())
+            r = self._http.get(f"/boss/namespaces/{ns}/jobs", headers=self._headers())
             if not _ok(r): return
             data = _data(r)
             if status:
@@ -154,25 +205,21 @@ class WaluigiCLI:
                 print(json.dumps(data, indent=2)); return
             if not data:
                 print("No jobs found."); return
-            table = []
-            for j in data:
-                meta = _parse_json_field(j.get("metadata", {}))
-                table.append([
-                    j.get("job_id"),
-                    _color(j.get("status", "")),
-                    meta.get("namespace", "-"),
-                    j.get("started_at", "-"),
-                ])
-            print(tabulate(table, headers=["JOB_ID", "STATUS", "NAMESPACE", "STARTED"], tablefmt="plain"))
+            table = [
+                [j.get("job_id"), _color(j.get("status", "")), j.get("started_at") or "-"]
+                for j in data
+            ]
+            print(tabulate(table, headers=["JOB_ID", "STATUS", "STARTED"], tablefmt="plain"))
         except Exception as e:
             print(f"Error: {e}")
 
-    def get_tasks(self, job_id=None, namespace=None, output=None):
+    def get_tasks(self, namespace=None, job_id=None, output=None):
+        ns = self._resolve_namespace(namespace)
+        if not ns: return
         try:
             params = {}
-            if job_id:    params["job_id"]    = job_id
-            if namespace: params["namespace"] = namespace
-            r = self._http.get("/boss/tasks", params=params, headers=self._headers())
+            if job_id: params["job_id"] = job_id
+            r = self._http.get(f"/boss/namespaces/{ns}/tasks", params=params, headers=self._headers())
             if not _ok(r): return
             data = _data(r)
             if output == "json":
@@ -181,10 +228,10 @@ class WaluigiCLI:
                 print("No tasks found."); return
             table = [
                 [t.get("id"), t.get("job_id"), t.get("params"),
-                 _color(t.get("status", "")), t.get("last_update"), t.get("namespace")]
+                 _color(t.get("status", "")), t.get("last_update")]
                 for t in data
             ]
-            print(tabulate(table, headers=["ID", "JOB_ID", "PARAMS", "STATUS", "LAST UPDATE", "NAMESPACE"], tablefmt="plain"))
+            print(tabulate(table, headers=["ID", "JOB_ID", "PARAMS", "STATUS", "LAST UPDATE"], tablefmt="plain"))
         except Exception as e:
             print(f"Error: {e}")
 
@@ -228,15 +275,18 @@ class WaluigiCLI:
 
     # ── Describe ──────────────────────────────────────────────────────────────
 
-    def describe_job(self, job_id, output=None):
+    def describe_job(self, namespace=None, job_id=None, output=None):
+        ns = self._resolve_namespace(namespace)
+        if not ns: return
         try:
-            r = self._http.get("/boss/jobs", headers=self._headers())
+            r = self._http.get(f"/boss/namespaces/{ns}/jobs", headers=self._headers())
             if not _ok(r): return
             job = next((j for j in _data(r) if j.get("job_id") == job_id), None)
             if not job:
-                print(f"job '{job_id}' not found."); return
+                print(f"job '{job_id}' not found in namespace '{ns}'."); return
 
-            r2    = self._http.get("/boss/tasks", params={"job_id": job_id}, headers=self._headers())
+            r2    = self._http.get(f"/boss/namespaces/{ns}/tasks",
+                                   params={"job_id": job_id}, headers=self._headers())
             tasks = _data(r2) if _ok(r2) else []
 
             if output == "json":
@@ -245,17 +295,16 @@ class WaluigiCLI:
             meta = _parse_json_field(job.get("metadata", {}))
             spec = _parse_json_field(job.get("spec", {}))
 
-            print(f"\nJob: {job_id}")
+            print(f"\nJob: {job_id}  (namespace: {ns})")
             summary = [
                 ["status",     _color(job.get("status", ""))],
-                ["namespace",  meta.get("namespace", "-")],
-                ["started_at", job.get("started_at", "-")],
-                ["locked_by",  job.get("locked_by") or "-"],
+                ["started_at", job.get("started_at") or "-"],
+                ["locked_by",  job.get("locked_by")  or "-"],
                 ["root_task",  spec.get("id", "-")],
             ]
-            extra_meta = {k: v for k, v in meta.items() if k not in ("namespace", "timestamp")}
-            for k, v in extra_meta.items():
-                summary.append([k, v])
+            for k, v in meta.items():
+                if k not in ("namespace", "timestamp"):
+                    summary.append([k, v])
             print(tabulate(summary, tablefmt="plain"))
 
             if tasks:
@@ -270,20 +319,22 @@ class WaluigiCLI:
         except Exception as e:
             print(f"Error: {e}")
 
-    def describe_task(self, task_id, output=None):
+    def describe_task(self, namespace=None, task_id=None, output=None):
+        ns = self._resolve_namespace(namespace)
+        if not ns: return
         try:
-            r = self._http.get("/boss/tasks", headers=self._headers())
+            r = self._http.get(f"/boss/namespaces/{ns}/tasks", headers=self._headers())
             if not _ok(r): return
             task = next((t for t in _data(r) if t.get("id") == task_id), None)
             if not task:
-                print(f"task '{task_id}' not found."); return
+                print(f"task '{task_id}' not found in namespace '{ns}'."); return
             if output == "json":
                 print(json.dumps(task, indent=2)); return
             rows = [
                 ["id",          task.get("id")],
+                ["namespace",   ns],
                 ["status",      _color(task.get("status", ""))],
                 ["job_id",      task.get("job_id",     "-")],
-                ["namespace",   task.get("namespace",  "-")],
                 ["parent_id",   task.get("parent_id")  or "-"],
                 ["params",      task.get("params",     "-")],
                 ["attributes",  task.get("attributes") or "-"],
@@ -295,64 +346,78 @@ class WaluigiCLI:
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
-    def pause(self, target):
+    def pause(self, namespace=None, job_id=None):
+        ns = self._resolve_namespace(namespace)
+        if not ns: return
         try:
-            r = self._http.post(f"/boss/jobs/{target}/_pause", headers=self._headers())
-            if _ok(r):
-                print(f"job/{target} paused")
+            r = self._http.post(f"/boss/namespaces/{ns}/jobs/{job_id}/_pause", headers=self._headers())
+            if _ok(r): print(f"job/{job_id} paused")
         except Exception as e:
             print(f"Error: {e}")
 
-    def resume(self, target):
+    def resume(self, namespace=None, job_id=None):
+        ns = self._resolve_namespace(namespace)
+        if not ns: return
         try:
-            r = self._http.post(f"/boss/jobs/{target}/_resume", headers=self._headers())
-            if _ok(r):
-                print(f"job/{target} resumed")
+            r = self._http.post(f"/boss/namespaces/{ns}/jobs/{job_id}/_resume", headers=self._headers())
+            if _ok(r): print(f"job/{job_id} resumed")
         except Exception as e:
             print(f"Error: {e}")
 
-    def cancel(self, target):
+    def cancel(self, namespace=None, job_id=None):
+        ns = self._resolve_namespace(namespace)
+        if not ns: return
         try:
-            r = self._http.post(f"/boss/jobs/{target}/_cancel", headers=self._headers())
-            if _ok(r):
-                print(f"job/{target} cancelled")
+            r = self._http.post(f"/boss/namespaces/{ns}/jobs/{job_id}/_cancel", headers=self._headers())
+            if _ok(r): print(f"job/{job_id} cancelled")
         except Exception as e:
             print(f"Error: {e}")
 
-    def reset(self, scope, target):
+    def reset(self, scope, target, namespace=None):
         try:
             if scope == "task":
-                r = self._http.post(f"/boss/tasks/{target}/_reset", headers=self._headers())
+                ns = self._resolve_namespace(namespace)
+                if not ns: return
+                r = self._http.post(f"/boss/namespaces/{ns}/tasks/{target}/_reset", headers=self._headers())
             elif scope == "job":
-                r = self._http.post(f"/boss/jobs/{target}/_reset", headers=self._headers())
+                ns = self._resolve_namespace(namespace)
+                if not ns: return
+                r = self._http.post(f"/boss/namespaces/{ns}/jobs/{target}/_reset", headers=self._headers())
             else:
+                # reset namespace: target IS the namespace
                 r = self._http.post(f"/boss/namespaces/{target}/_reset", headers=self._headers())
-            if _ok(r):
-                print(f"{scope}/{target} reset to PENDING")
+            if _ok(r): print(f"{scope}/{target} reset to PENDING")
         except Exception as e:
             print(f"Error: {e}")
 
-    def delete(self, scope, target):
+    def delete(self, scope, target, namespace=None):
         try:
             if scope == "task":
-                r = self._http.delete(f"/boss/tasks/{target}", headers=self._headers())
+                ns = self._resolve_namespace(namespace)
+                if not ns: return
+                r = self._http.delete(f"/boss/namespaces/{ns}/tasks/{target}", headers=self._headers())
             elif scope == "job":
-                r = self._http.delete(f"/boss/jobs/{target}", headers=self._headers())
+                ns = self._resolve_namespace(namespace)
+                if not ns: return
+                r = self._http.delete(f"/boss/namespaces/{ns}/jobs/{target}", headers=self._headers())
             else:
+                # delete namespace: target IS the namespace
                 r = self._http.delete(f"/boss/namespaces/{target}", headers=self._headers())
-            if _ok(r):
-                print(f"{scope}/{target} deleted")
+            if _ok(r): print(f"{scope}/{target} deleted")
         except Exception as e:
             print(f"Error: {e}")
 
     # ── Logs ──────────────────────────────────────────────────────────────────
 
-    def get_logs(self, task_id, limit=20, follow=False):
+    def get_logs(self, namespace=None, task_id=None, limit=20, follow=False):
+        ns = self._resolve_namespace(namespace)
+        if not ns: return
         last_seen_id = 0
         try:
             while True:
-                params = {'limit': 100, 'after_id': last_seen_id} if (follow and last_seen_id > 0) else {'limit': limit}
-                r = self._http.get(f"/boss/tasks/{task_id}/logs", params=params, headers=self._headers())
+                params = {'limit': 100} if follow else {'limit': limit}
+                r = self._http.get(f"/boss/namespaces/{ns}/tasks/{task_id}/logs",
+                                   params=params, headers=self._headers())
                 if r.status_code != 200:
                     print(f"Error: {r.status_code}"); break
                 logs     = _data(r) or []
@@ -383,50 +448,50 @@ def main():
 
     # apply
     p = sub.add_parser('apply', help='Submit a Job or ClusterResources YAML descriptor')
-    p.add_argument('-f', '--file', required=True, help='Path to YAML file')
+    p.add_argument('-f', '--file',      required=True, help='Path to YAML file')
+    p.add_argument('-n', '--namespace', help='Override namespace from descriptor metadata')
 
     # get
     p = sub.add_parser('get', help='List resources')
     p.add_argument('type', choices=['namespaces', 'jobs', 'tasks', 'resources', 'workers'])
-    p.add_argument('-n', '--namespace', help='Filter tasks by namespace')
+    p.add_argument('-n', '--namespace', help='Namespace (required for jobs/tasks; auto-detected if token has one)')
     p.add_argument('-j', '--job_id',    help='Filter tasks by job ID')
-    p.add_argument('-s', '--status',    help='Filter jobs by status (PENDING|RUNNING|SUCCESS|FAILED|CANCELLED)')
+    p.add_argument('-s', '--status',    help='Filter jobs by status (PENDING|RUNNING|SUCCESS|FAILED|CANCELLED|PAUSED)')
     p.add_argument('-o', '--output',    choices=['json'], help='Output format')
 
     # describe
     p = sub.add_parser('describe', help='Show full details of a job or task')
     p.add_argument('type',   choices=['job', 'task'])
     p.add_argument('target', help='Job ID or task ID')
-    p.add_argument('-o', '--output', choices=['json'], help='Output format')
+    p.add_argument('-n', '--namespace', help='Namespace (auto-detected if token has one)')
+    p.add_argument('-o', '--output',    choices=['json'], help='Output format')
 
-    # cancel
-    p = sub.add_parser('cancel', help='Cancel a running job')
-    p.add_argument('type',   choices=['job'])
-    p.add_argument('target', help='Job ID')
-
-    # pause / resume
-    p = sub.add_parser('pause', help='Pause an active job (PENDING or RUNNING)')
-    p.add_argument('type',   choices=['job'])
-    p.add_argument('target', help='Job ID')
-
-    p = sub.add_parser('resume', help='Resume a paused job')
-    p.add_argument('type',   choices=['job'])
-    p.add_argument('target', help='Job ID')
+    # cancel / pause / resume
+    for cmd in ('cancel', 'pause', 'resume'):
+        p = sub.add_parser(cmd, help=f'{cmd.capitalize()} a job')
+        p.add_argument('type',   choices=['job'])
+        p.add_argument('target', help='Job ID')
+        p.add_argument('-n', '--namespace', help='Namespace (auto-detected if token has one)')
 
     # reset
     p = sub.add_parser('reset', help='Reset a task, job, or namespace to PENDING')
     p.add_argument('type',   choices=['task', 'job', 'namespace'])
-    p.add_argument('target', help='Task ID, job ID, or namespace name')
+    p.add_argument('target', help='Task/job ID, or namespace name')
+    p.add_argument('-n', '--namespace',
+                   help='Namespace for task/job (not needed when resetting a namespace)')
 
     # delete
     p = sub.add_parser('delete', help='Delete a task, job, or namespace')
     p.add_argument('type',   choices=['task', 'job', 'namespace'])
-    p.add_argument('target', help='Resource ID')
+    p.add_argument('target', help='Task/job ID, or namespace name')
+    p.add_argument('-n', '--namespace',
+                   help='Namespace for task/job (not needed when deleting a namespace)')
 
     # logs
     p = sub.add_parser('logs', help='Fetch task logs')
     p.add_argument('task_id')
-    p.add_argument('-n', '--lines',  type=int, default=20, help='Number of lines (default: 20)')
+    p.add_argument('-n', '--namespace', help='Namespace (auto-detected if token has one)')
+    p.add_argument('-l', '--lines',  type=int, default=20, help='Number of lines (default: 20)')
     p.add_argument('-f', '--follow', action='store_true',  help='Stream logs in real time')
 
     args = parser.parse_args()
@@ -435,34 +500,35 @@ def main():
 
     cli = WaluigiCLI(args.url)
     out = getattr(args, 'output', None)
+    ns  = getattr(args, 'namespace', None)
 
     if args.command == 'login':
         cli.login(args.username, args.password)
     elif args.command == 'logout':
         cli.logout()
     elif args.command == 'apply':
-        cli.apply(args.file)
+        cli.apply(args.file, namespace_override=ns)
     elif args.command == 'get':
         if   args.type == 'namespaces': cli.get_namespaces(output=out)
-        elif args.type == 'jobs':       cli.get_jobs(status=args.status, output=out)
-        elif args.type == 'tasks':      cli.get_tasks(job_id=args.job_id, namespace=args.namespace, output=out)
+        elif args.type == 'jobs':       cli.get_jobs(namespace=ns, status=args.status, output=out)
+        elif args.type == 'tasks':      cli.get_tasks(namespace=ns, job_id=args.job_id, output=out)
         elif args.type == 'resources':  cli.get_resources(output=out)
         elif args.type == 'workers':    cli.get_workers(output=out)
     elif args.command == 'describe':
-        if   args.type == 'job':  cli.describe_job(args.target, output=out)
-        elif args.type == 'task': cli.describe_task(args.target, output=out)
+        if   args.type == 'job':  cli.describe_job(namespace=ns, job_id=args.target, output=out)
+        elif args.type == 'task': cli.describe_task(namespace=ns, task_id=args.target, output=out)
     elif args.command == 'cancel':
-        cli.cancel(args.target)
+        cli.cancel(namespace=ns, job_id=args.target)
     elif args.command == 'pause':
-        cli.pause(args.target)
+        cli.pause(namespace=ns, job_id=args.target)
     elif args.command == 'resume':
-        cli.resume(args.target)
+        cli.resume(namespace=ns, job_id=args.target)
     elif args.command == 'reset':
-        cli.reset(args.type, args.target)
+        cli.reset(args.type, args.target, namespace=ns)
     elif args.command == 'delete':
-        cli.delete(args.type, args.target)
+        cli.delete(args.type, args.target, namespace=ns)
     elif args.command == 'logs':
-        cli.get_logs(args.task_id, limit=args.lines, follow=args.follow)
+        cli.get_logs(namespace=ns, task_id=args.task_id, limit=args.lines, follow=args.follow)
 
 
 if __name__ == "__main__":
