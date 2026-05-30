@@ -28,6 +28,15 @@ class JobService:
     def list(self, status: str | None = None) -> list[dict]:
         return self.repo.list(status)
 
+    def reset(self, job_id: str) -> bool:
+        return self.repo.reset(job_id)
+
+    def pause(self, job_id: str) -> bool:
+        return self.repo.pause(job_id)
+
+    def resume(self, job_id: str) -> bool:
+        return self.repo.resume(job_id)
+
     def cancel(self, job_id: str) -> bool:
         return self.repo.cancel(job_id)
 

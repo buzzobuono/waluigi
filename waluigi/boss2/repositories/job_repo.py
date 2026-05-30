@@ -41,7 +41,7 @@ class JobRepository(BaseRepository):
             rows = conn.execute(
                 select(_t_jobs.c.job_id).where(
                     and_(
-                        _t_jobs.c.status.notin_(["SUCCESS", "FAILED", "CANCELLED"]),
+                        _t_jobs.c.status.notin_(["SUCCESS", "FAILED", "CANCELLED", "PAUSED"]),
                         or_(_t_jobs.c.locked_until == None, _t_jobs.c.locked_until < now),
                     )
                 )
@@ -120,6 +120,54 @@ class JobRepository(BaseRepository):
                     _t_jobs.c.status.notin_(["SUCCESS", "FAILED", "CANCELLED"]),
                 ))
                 .values(status="CANCELLED", locked_by=None, locked_until=None)
+            )
+            return result.rowcount > 0
+
+    def reset(self, job_id: str) -> bool:
+        """Reset a terminal job (FAILED/CANCELLED) to PENDING and reset its FAILED tasks."""
+        with self._conn() as conn:
+            result = conn.execute(
+                update(_t_jobs)
+                .where(and_(
+                    _t_jobs.c.job_id == job_id,
+                    _t_jobs.c.status.in_(["FAILED", "CANCELLED"]),
+                ))
+                .values(status="PENDING", locked_by=None, locked_until=None)
+            )
+            if result.rowcount > 0:
+                conn.execute(
+                    update(_t_tasks)
+                    .where(and_(
+                        _t_tasks.c.job_id == job_id,
+                        _t_tasks.c.status == "FAILED",
+                    ))
+                    .values(status="PENDING")
+                )
+            return result.rowcount > 0
+
+    def pause(self, job_id: str) -> bool:
+        """Pause an active job (PENDING/RUNNING). The planner will skip it."""
+        with self._conn() as conn:
+            result = conn.execute(
+                update(_t_jobs)
+                .where(and_(
+                    _t_jobs.c.job_id == job_id,
+                    _t_jobs.c.status.in_(["PENDING", "RUNNING"]),
+                ))
+                .values(status="PAUSED", locked_by=None, locked_until=None)
+            )
+            return result.rowcount > 0
+
+    def resume(self, job_id: str) -> bool:
+        """Resume a paused job back to PENDING."""
+        with self._conn() as conn:
+            result = conn.execute(
+                update(_t_jobs)
+                .where(and_(
+                    _t_jobs.c.job_id == job_id,
+                    _t_jobs.c.status == "PAUSED",
+                ))
+                .values(status="PENDING")
             )
             return result.rowcount > 0
 

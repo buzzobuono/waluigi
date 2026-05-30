@@ -72,6 +72,27 @@ async def submit(
         return ko(str(e), status=500)
         
 
+@router.post("/{job_id}/_reset")
+async def reset_job(job_id: str, svc=Depends(job_service)):
+    if not svc.reset(job_id):
+        return ko(f"Job '{job_id}' not found or not in a terminal state (FAILED/CANCELLED)", status=409)
+    return ok({"job_id": job_id, "status": "PENDING"})
+
+
+@router.post("/{job_id}/_pause")
+async def pause_job(job_id: str, svc=Depends(job_service)):
+    if not svc.pause(job_id):
+        return ko(f"Job '{job_id}' not found or not pausable (must be PENDING or RUNNING)", status=409)
+    return ok({"job_id": job_id, "status": "PAUSED"})
+
+
+@router.post("/{job_id}/_resume")
+async def resume_job(job_id: str, svc=Depends(job_service)):
+    if not svc.resume(job_id):
+        return ko(f"Job '{job_id}' not found or not paused", status=409)
+    return ok({"job_id": job_id, "status": "PENDING"})
+
+
 @router.post("/{job_id}/_cancel")
 async def cancel_job(job_id: str, svc=Depends(job_service)):
     if not svc.cancel(job_id):

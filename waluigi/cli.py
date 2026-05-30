@@ -18,6 +18,7 @@ _COLORS = {
     "SUCCESS":   "\033[32m",
     "FAILED":    "\033[31m",
     "CANCELLED": "\033[35m",
+    "PAUSED":    "\033[34m",
     "ALIVE":     "\033[32m",
 }
 _RESET = "\033[0m"
@@ -294,6 +295,22 @@ class WaluigiCLI:
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
+    def pause(self, target):
+        try:
+            r = self._http.post(f"/boss/jobs/{target}/_pause", headers=self._headers())
+            if _ok(r):
+                print(f"job/{target} paused")
+        except Exception as e:
+            print(f"Error: {e}")
+
+    def resume(self, target):
+        try:
+            r = self._http.post(f"/boss/jobs/{target}/_resume", headers=self._headers())
+            if _ok(r):
+                print(f"job/{target} resumed")
+        except Exception as e:
+            print(f"Error: {e}")
+
     def cancel(self, target):
         try:
             r = self._http.post(f"/boss/jobs/{target}/_cancel", headers=self._headers())
@@ -306,6 +323,8 @@ class WaluigiCLI:
         try:
             if scope == "task":
                 r = self._http.post(f"/boss/tasks/{target}/_reset", headers=self._headers())
+            elif scope == "job":
+                r = self._http.post(f"/boss/jobs/{target}/_reset", headers=self._headers())
             else:
                 r = self._http.post(f"/boss/namespaces/{target}/_reset", headers=self._headers())
             if _ok(r):
@@ -385,10 +404,19 @@ def main():
     p.add_argument('type',   choices=['job'])
     p.add_argument('target', help='Job ID')
 
+    # pause / resume
+    p = sub.add_parser('pause', help='Pause an active job (PENDING or RUNNING)')
+    p.add_argument('type',   choices=['job'])
+    p.add_argument('target', help='Job ID')
+
+    p = sub.add_parser('resume', help='Resume a paused job')
+    p.add_argument('type',   choices=['job'])
+    p.add_argument('target', help='Job ID')
+
     # reset
-    p = sub.add_parser('reset', help='Reset a task or namespace to PENDING')
-    p.add_argument('type',   choices=['task', 'namespace'])
-    p.add_argument('target', help='Task ID or namespace name')
+    p = sub.add_parser('reset', help='Reset a task, job, or namespace to PENDING')
+    p.add_argument('type',   choices=['task', 'job', 'namespace'])
+    p.add_argument('target', help='Task ID, job ID, or namespace name')
 
     # delete
     p = sub.add_parser('delete', help='Delete a task, job, or namespace')
@@ -425,6 +453,10 @@ def main():
         elif args.type == 'task': cli.describe_task(args.target, output=out)
     elif args.command == 'cancel':
         cli.cancel(args.target)
+    elif args.command == 'pause':
+        cli.pause(args.target)
+    elif args.command == 'resume':
+        cli.resume(args.target)
     elif args.command == 'reset':
         cli.reset(args.type, args.target)
     elif args.command == 'delete':
