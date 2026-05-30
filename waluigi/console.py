@@ -4,6 +4,7 @@ import socket
 import configargparse
 import uvicorn
 import logging
+import logging.config
 import httpx
 import yaml
 import hmac
@@ -104,19 +105,31 @@ def _init_db():
     with _get_db() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
-                userid      TEXT PRIMARY KEY,
-                username    TEXT NOT NULL,
+                userid        TEXT PRIMARY KEY,
+                username      TEXT NOT NULL,
                 password_hash TEXT NOT NULL,
-                createdate  TEXT NOT NULL,
-                updatedate  TEXT NOT NULL
+                namespaces    TEXT NOT NULL DEFAULT '[]',
+                createdate    TEXT NOT NULL,
+                updatedate    TEXT NOT NULL
             )
         """)
+        # migrate existing DBs that lack the namespaces column
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN namespaces TEXT NOT NULL DEFAULT '[]'")
+        except sqlite3.OperationalError:
+            pass  # column already exists
 
 def _row(r) -> dict | None:
     return dict(r) if r else None
 
 def _safe_user(r: dict) -> dict:
-    return {k: v for k, v in r.items() if k != 'password_hash'}
+    out = {k: v for k, v in r.items() if k != 'password_hash'}
+    # parse namespaces from JSON string stored in DB
+    try:
+        out['namespaces'] = json.loads(out.get('namespaces', '[]'))
+    except Exception:
+        out['namespaces'] = []
+    return out
 
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
@@ -126,12 +139,19 @@ def _current_user(request: Request) -> dict | None:
 
 def _is_admin(request: Request) -> bool:
     u = _current_user(request)
-    return u is not None and u.get('sub') == args.admin_user
+    return u is not None and u.get('namespaces') == "*"
+
+def _can_access_namespace(request: Request, namespace: str) -> bool:
+    u = _current_user(request)
+    if u is None:
+        return False
+    ns = u.get('namespaces', [])
+    return ns == "*" or namespace in ns
 
 
 # ── Middleware ────────────────────────────────────────────────────────────────
 
-PUBLIC_PATHS    = {"/auth/login"}
+PUBLIC_PATHS       = {"/auth/login"}
 PROTECTED_PREFIXES = ("/boss/", "/catalog/", "/auth/")
 
 @app.middleware("http")
@@ -154,30 +174,38 @@ class LoginRequest(BaseModel):
     password: str
 
 class UserCreateRequest(BaseModel):
-    userid:   str
-    username: str
-    password: str
+    userid:     str
+    username:   str
+    password:   str
+    namespaces: list[str] = []
 
 class UserUpdateRequest(BaseModel):
-    username: Optional[str] = None
-    password: Optional[str] = None
+    username:   Optional[str] = None
+    password:   Optional[str] = None
+    namespaces: Optional[list[str]] = None
 
 
 @app.post("/auth/login")
 async def login(body: LoginRequest):
     is_admin = (body.username == args.admin_user and body.password == args.admin_password)
 
-    if not is_admin:
+    if is_admin:
+        namespaces = "*"
+    else:
         with _get_db() as conn:
             row = _row(conn.execute(
                 "SELECT * FROM users WHERE userid = ?", (body.username,)
             ).fetchone())
         if not row or not verify_password(body.password, row['password_hash']):
             return JSONResponse({"detail": "Invalid credentials"}, status_code=401)
+        try:
+            namespaces = json.loads(row['namespaces'])
+        except Exception:
+            namespaces = []
 
     exp   = int((datetime.now(timezone.utc) + timedelta(hours=args.token_expire_h)).timestamp())
-    token = jwt_encode({"sub": body.username, "exp": exp, "is_admin": is_admin}, SECRET_KEY)
-    return {"token": token, "username": body.username, "is_admin": is_admin}
+    token = jwt_encode({"sub": body.username, "exp": exp, "namespaces": namespaces}, SECRET_KEY)
+    return {"token": token, "username": body.username, "namespaces": namespaces}
 
 
 @app.get("/auth/users")
@@ -203,13 +231,39 @@ async def create_user(request: Request, body: UserCreateRequest):
     try:
         with _get_db() as conn:
             conn.execute(
-                "INSERT INTO users (userid, username, password_hash, createdate, updatedate) VALUES (?,?,?,?,?)",
+                "INSERT INTO users (userid, username, password_hash, namespaces, createdate, updatedate) VALUES (?,?,?,?,?,?)",
                 (body.userid.strip(), body.username.strip() or body.userid.strip(),
-                 hash_password(body.password), now, now)
+                 hash_password(body.password), json.dumps(body.namespaces), now, now)
             )
     except sqlite3.IntegrityError:
         return JSONResponse({"detail": "User already exists"}, status_code=409)
-    return {"data": {"userid": body.userid, "username": body.username, "createdate": now}}
+    return {"data": {"userid": body.userid, "username": body.username,
+                     "namespaces": body.namespaces, "createdate": now}}
+
+
+@app.patch("/auth/users/{userid}")
+async def update_user(request: Request, userid: str, body: UserUpdateRequest):
+    if not _is_admin(request):
+        return JSONResponse({"detail": "Forbidden"}, status_code=403)
+    if userid == args.admin_user:
+        return JSONResponse({"detail": "Cannot modify the admin user"}, status_code=409)
+    updates, params = [], []
+    if body.username is not None:
+        updates.append("username = ?");   params.append(body.username.strip())
+    if body.password is not None:
+        updates.append("password_hash = ?"); params.append(hash_password(body.password))
+    if body.namespaces is not None:
+        updates.append("namespaces = ?"); params.append(json.dumps(body.namespaces))
+    if not updates:
+        return JSONResponse({"detail": "Nothing to update"}, status_code=400)
+    updates.append("updatedate = ?"); params.append(_now())
+    params.append(userid)
+    with _get_db() as conn:
+        cur = conn.execute(f"UPDATE users SET {', '.join(updates)} WHERE userid = ?", params)
+    if cur.rowcount == 0:
+        return JSONResponse({"detail": "User not found"}, status_code=404)
+    return {"data": {"userid": userid, "updated": [f for f in ("username", "password", "namespaces")
+                                                    if getattr(body, f if f != "password" else "password") is not None]}}
 
 
 @app.delete("/auth/users/{userid}")
@@ -236,8 +290,45 @@ def _parse_json(response):
 
 # ── Proxy ─────────────────────────────────────────────────────────────────────
 
+def _check_boss_namespace(request: Request, path: str) -> JSONResponse | None:
+    """
+    Returns a 403 JSONResponse if the requesting user is not allowed to access
+    the namespace embedded in the boss path, or None if access is granted.
+
+    Boss paths that carry a namespace look like:
+        namespaces/{ns}/...
+    Paths without a namespace segment (workers, resources) are always allowed.
+    """
+    parts = path.split("/")
+    if len(parts) >= 2 and parts[0] == "namespaces" and parts[1]:
+        namespace = parts[1]
+        # bare /namespaces list — allowed for all authenticated users (filtered later)
+        if namespace in ("", "_reset"):
+            return None
+        if not _can_access_namespace(request, namespace):
+            return JSONResponse(
+                {"detail": f"Access to namespace '{namespace}' is not allowed"},
+                status_code=403,
+            )
+    return None
+
+
+def _filter_namespaces_response(request: Request, body: dict) -> dict:
+    """For non-admin users listing /namespaces, keep only their own namespaces."""
+    if _is_admin(request):
+        return body
+    user_ns = _current_user(request).get("namespaces", [])
+    data = body.get("data", [])
+    body["data"] = [r for r in data if r.get("namespace") in user_ns]
+    return body
+
+
 @app.api_route("/boss/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_boss(request: Request, path: str):
+    denied = _check_boss_namespace(request, path)
+    if denied:
+        return denied
+
     qs      = request.url.query
     url     = f"{BOSS_URL}/{path}" + (f"?{qs}" if qs else "")
     content = await request.body()
@@ -248,10 +339,14 @@ async def proxy_boss(request: Request, path: str):
             method=request.method, url=url,
             content=content, headers=headers,
         )
-    return JSONResponse(
-        content=_parse_json(response),
-        status_code=response.status_code,
-    )
+
+    body = _parse_json(response)
+
+    # filter namespace list for non-admin users
+    if path == "namespaces" and request.method == "GET" and body:
+        body = _filter_namespaces_response(request, body)
+
+    return JSONResponse(content=body, status_code=response.status_code)
 
 
 @app.api_route("/catalog/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
@@ -283,8 +378,12 @@ async def spa_fallback(full_path: str):
 def main():
     _init_db()
 
-    with open("logging.yaml") as f:
-        logging.config.dictConfig(yaml.safe_load(f))
+    try:
+        with open("logging.yaml") as f:
+            logging.config.dictConfig(yaml.safe_load(f))
+    except Exception:
+        logging.basicConfig(level=logging.INFO)
+        logger.warning("logging.yaml not found — using basicConfig")
 
     logger.info("Waluigi Console")
     logger.info(f"    Binding: {args.bind_address}:{args.port}")
