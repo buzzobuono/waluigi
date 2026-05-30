@@ -55,8 +55,7 @@ export default {
       }
     }
 
-    watch(() => nsStore.selected, () => load());
-    onMounted(load);
+    watch(() => nsStore.selected, () => load(), { immediate: true });
 
     const taskCounts = computed(() => {
       const c = Object.fromEntries(TASK_STATUSES.map(s => [s.key, 0]));
@@ -105,7 +104,7 @@ export default {
         <p>Select a namespace from the header to view its statistics.</p>
       </div>
 
-      <template v-else>
+      <div v-else>
 
         <!-- Task statistics -->
         <base-panel class="mb-4">
@@ -151,7 +150,7 @@ export default {
           </div>
         </base-panel>
 
-      </template>
+      </div>
 
     </base-page>
   `
