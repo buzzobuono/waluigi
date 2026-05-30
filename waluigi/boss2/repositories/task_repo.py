@@ -1,5 +1,6 @@
 from __future__ import annotations
 from datetime import datetime, timezone
+from typing import Literal
 from sqlalchemy import select, update, delete, func, and_
 
 from waluigi.boss2.db.base import BaseRepository

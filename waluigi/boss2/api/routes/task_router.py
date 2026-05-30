@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from waluigi.commons.responses import ok
+from waluigi.commons.responses import ok, ko
 from waluigi.boss2.api.schemas import TaskUpdateRequest
 from waluigi.boss2.config.dependencies import task_service, update_service
 

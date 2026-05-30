@@ -100,11 +100,17 @@ class WaluigiCLI:
             print(f"Connection error: {e}")
             
     def reset(self, scope, target):
-        r = self._http.post(f"/boss/api/reset/{scope}/{target}", headers=self._get_headers())
+        if scope == "task":
+            r = self._http.post(f"/boss/tasks/{target}/_reset", headers=self._get_headers())
+        else:
+            r = self._http.post(f"/boss/namespaces/{target}/_reset", headers=self._get_headers())
         print(f"Result code: {r.status_code}")
 
     def delete(self, scope, target):
-        r = self._http.post(f"/boss/api/delete/{scope}/{target}", headers=self._get_headers())
+        if scope == "task":
+            r = self._http.delete(f"/boss/tasks/{target}", headers=self._get_headers())
+        else:
+            r = self._http.delete(f"/boss/namespaces/{target}", headers=self._get_headers())
         print(f"Result code: {r.status_code}")
         
     def get_namespaces(self):
