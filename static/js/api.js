@@ -84,7 +84,7 @@ export const api = {
   jobs:      ()      => _get('/boss/jobs').then(_unwrap),
   cancelJob: (jobId) => _postJson(`/boss/jobs/${_enc(jobId)}/_cancel`, {}).then(_unwrap),
   deleteJob: (jobId) => _delete(`/boss/jobs/${_enc(jobId)}`).then(_unwrap),
-  jobTasks:  (jobId) => _get(`/boss/tasks`, { job_id: _enc(jobId) }).then(_unwrap),
+  jobTasks:  (jobId) => _get(`/boss/tasks`, { job_id: jobId }).then(_unwrap),
   
   namespaces:      ()   => _get('/boss/namespaces').then(_unwrap),
   resetNamespace:  (ns) => _post(`/boss/namespaces/${_enc(ns)}/_reset`).then(_unwrap),
