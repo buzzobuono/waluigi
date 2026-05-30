@@ -22,16 +22,17 @@ worker_router = APIRouter(
 )
 
 
-@worker_router.post("/execute",
-    summary="Submit an idempotent task execution request",
+@worker_router.post("/namespaces/{namespace}/dispatch",
+    summary="Dispatch a task for async execution in a namespace",
     description=(
-        "Submits a new task for execution. The server guarantees idempotency "
-        "by tracking the unique task 'id' and "
-        "deterministic execution 'params' to prevent duplicate processing."
+        "Submits a new task for async execution. Returns 202 immediately; "
+        "the worker reports status back to the Boss via PATCH callback. "
+        "Returns 429 if no execution slot is available."
     )
 )
-async def execute(
-    body: ExecuteTaskRequest, 
+async def dispatch(
+    namespace: str,
+    body: ExecuteTaskRequest,
     slot_manager: SlotManager = Depends(get_slot_manager),
     worker_service: WorkerService = Depends(get_worker_service)
 ):
@@ -42,7 +43,6 @@ async def execute(
         script     = body.script
         id         = body.id
         job_id     = body.job_id
-        namespace  = body.namespace
         params     = body.params
         attributes = body.attributes
         config     = body.config

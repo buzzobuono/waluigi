@@ -138,7 +138,6 @@ class BossEngine:
             "attributes":  vars(task.attributes),
             "config":      task.config,
             "resources":   task.resources,
-            "namespace":   namespace,
         }
 
         available = self.workers.get_available()
@@ -151,7 +150,7 @@ class BossEngine:
             if not self.workers.acquire_slot(url):
                 continue
             try:
-                r = httpx.post(f"{url}/execute", json=payload, timeout=10)
+                r = httpx.post(f"{url}/namespaces/{namespace}/dispatch", json=payload, timeout=10)
                 if r.status_code == 202:
                     logger.info(f"🚀 Dispatched {task.id} → {url}")
                     return "SUCCESS"
