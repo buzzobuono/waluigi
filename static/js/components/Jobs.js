@@ -38,7 +38,8 @@ export default {
       SUCCESS:   { color: 'success',   icon: 'fas fa-check' },
       FAILED:    { color: 'danger',    icon: 'fas fa-times' },
       PENDING:   { color: 'secondary', icon: 'fas fa-clock' },
-      CANCELLED: { color: 'dark',      icon: 'fas fa-ban' }
+      CANCELLED: { color: 'dark',      icon: 'fas fa-ban' },
+      PAUSED:    { color: 'info',      icon: 'fas fa-pause' },
     };
 
     async function load() {
@@ -55,7 +56,7 @@ export default {
     }
 
     const counts = computed(() => {
-      const c = { RUNNING: 0, SUCCESS: 0, FAILED: 0, PENDING: 0, CANCELLED: 0 };
+      const c = { RUNNING: 0, SUCCESS: 0, FAILED: 0, PENDING: 0, CANCELLED: 0, PAUSED: 0 };
       jobs.value.forEach(j => { if (c[j.status] !== undefined) c[j.status]++; });
       return c;
     });
@@ -73,6 +74,16 @@ export default {
     function changePage(delta) {
       const next = currentPage.value + delta;
       if (next >= 1 && next <= totalPages.value) currentPage.value = next;
+    }
+
+    async function pauseJob(jobId) {
+      await api.pauseJob(jobId);
+      await load();
+    }
+
+    async function resumeJob(jobId) {
+      await api.resumeJob(jobId);
+      await load();
     }
 
     async function cancelJob(jobId) {
@@ -102,7 +113,7 @@ export default {
     return {
       jobs, pagedJobs, loading, error, columns, STATUS_MAP,
       counts, confirmRef, currentPage, totalPages, rangeStart, rangeEnd,
-      changePage, load, cancelJob, deleteJob
+      changePage, load, pauseJob, resumeJob, cancelJob, deleteJob
     };
   },
 
@@ -189,6 +200,20 @@ export default {
             <base-button-group>
               <base-button
                 v-if="item.status === 'RUNNING' || item.status === 'PENDING'"
+                icon="fas fa-pause"
+                color="outline-info"
+                title="Pause Job"
+                @click.stop="pauseJob(item.job_id)"
+              />
+              <base-button
+                v-if="item.status === 'PAUSED'"
+                icon="fas fa-play"
+                color="outline-info"
+                title="Resume Job"
+                @click.stop="resumeJob(item.job_id)"
+              />
+              <base-button
+                v-if="item.status === 'RUNNING' || item.status === 'PENDING' || item.status === 'PAUSED'"
                 icon="fas fa-ban"
                 color="outline-warning"
                 title="Cancel Job"
