@@ -1,29 +1,12 @@
 import { api } from '../api.js';
 import { nsStore } from '../store.js';
+import { TASK_STATUSES, JOB_STATUSES } from '../config.js';
 import BasePage from './BasePage.js';
 import BasePanel from './BasePanel.js';
 import BaseInfoBox from './BaseInfoBox.js';
 import BaseButton from './BaseButton.js';
 
-const { ref, computed, watch, onMounted } = Vue;
-
-const TASK_STATUSES = [
-  { key: 'PENDING',   color: 'secondary', icon: 'fas fa-clock' },
-  { key: 'READY',     color: 'info',      icon: 'fas fa-check-circle' },
-  { key: 'RUNNING',   color: 'warning',   icon: 'fas fa-spinner fa-spin' },
-  { key: 'SUCCESS',   color: 'success',   icon: 'fas fa-check' },
-  { key: 'FAILED',    color: 'danger',    icon: 'fas fa-times' },
-  { key: 'CANCELLED', color: 'dark',      icon: 'fas fa-ban' },
-];
-
-const JOB_STATUSES = [
-  { key: 'PENDING',   color: 'secondary', icon: 'fas fa-clock' },
-  { key: 'RUNNING',   color: 'warning',   icon: 'fas fa-spinner fa-spin' },
-  { key: 'PAUSED',    color: 'info',      icon: 'fas fa-pause' },
-  { key: 'SUCCESS',   color: 'success',   icon: 'fas fa-check' },
-  { key: 'FAILED',    color: 'danger',    icon: 'fas fa-times' },
-  { key: 'CANCELLED', color: 'dark',      icon: 'fas fa-ban' },
-];
+const { ref, computed, watch } = Vue;
 
 export default {
   name: 'Namespaces',

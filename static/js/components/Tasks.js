@@ -1,8 +1,10 @@
 import { api } from '../api.js';
 import { nsStore } from '../store.js';
+import { TASK_STATUS, TASK_STATUSES } from '../config.js';
 import BasePage from './BasePage.js';
 import BasePanel from './BasePanel.js';
 import BaseTable from './BaseTable.js';
+import BaseInfoBox from './BaseInfoBox.js';
 import BaseButton from './BaseButton.js';
 import BaseButtonGroup from './BaseButtonGroup.js';
 import LogModal from './LogModal.js';
@@ -13,7 +15,7 @@ const PAGE_SIZE = 10;
 
 export default {
   name: 'Tasks',
-  components: { BasePage, BasePanel, BaseTable, LogModal, BaseButton, BaseButtonGroup, ConfirmDialog },
+  components: { BasePage, BasePanel, BaseTable, BaseInfoBox, LogModal, BaseButton, BaseButtonGroup, ConfirmDialog },
 
   setup() {
     const tasks       = ref([]);
@@ -22,11 +24,6 @@ export default {
     const logModalRef = ref(null);
     const confirmRef  = ref(null);
     const currentPage = ref(1);
-
-    const STATUS_COLOR = {
-      SUCCESS: '#28a745', FAILED: '#dc3545', RUNNING: '#ffc107',
-      READY: '#17a2b8',   PENDING: '#6c757d',
-    };
 
     const columns = [
       { key: 'id',      label: 'Task ID' },
@@ -52,6 +49,12 @@ export default {
     }
 
     watch(() => nsStore.selected, () => load());
+
+    const counts = computed(() => {
+      const c = Object.fromEntries(TASK_STATUSES.map(s => [s.key, 0]));
+      tasks.value.forEach(t => { if (c[t.status] !== undefined) c[t.status]++; });
+      return c;
+    });
 
     const totalPages = computed(() => Math.max(1, Math.ceil(tasks.value.length / PAGE_SIZE)));
     const pagedTasks = computed(() => {
@@ -110,8 +113,8 @@ export default {
     onMounted(load);
 
     return {
-      tasks, pagedTasks, loading, error, columns, STATUS_COLOR, nsStore,
-      currentPage, totalPages, rangeStart, rangeEnd,
+      tasks, pagedTasks, loading, error, columns, TASK_STATUS, TASK_STATUSES, nsStore,
+      counts, currentPage, totalPages, rangeStart, rangeEnd,
       logModalRef, confirmRef,
       changePage, load, openLogs, resetTask, deleteTask, resetNs, deleteNs,
     };
@@ -126,7 +129,17 @@ export default {
       :error="error">
 
       <template #actions>
-        <div class="d-flex align-items-center w-100">
+        <div class="row w-100 m-0">
+          <div class="col-6 col-md-2 px-1" v-for="s in TASK_STATUSES" :key="s.key">
+            <base-info-box
+              :label="s.key"
+              :value="counts[s.key]"
+              :icon="s.icon"
+              :color="s.color"
+            />
+          </div>
+        </div>
+        <div class="d-flex mt-2">
           <base-button label="Reset NS" icon="fas fa-history" color="outline-warning"
                        class="mr-2" :disabled="!nsStore.selected" @click="resetNs" />
           <base-button label="Delete NS" icon="fas fa-trash-alt" color="outline-danger"
@@ -172,8 +185,7 @@ export default {
           </template>
 
           <template #cell(status)="{ item }">
-            <span class="badge shadow"
-              :style="{ background: STATUS_COLOR[item.status] || '#6c757d', color: '#fff', minWidth: '70px' }">
+            <span :class="['badge shadow', 'badge-' + (TASK_STATUS[item.status]?.color || 'secondary'), item.status === 'RUNNING' ? 'blink' : '']">
               {{ item.status }}
             </span>
           </template>

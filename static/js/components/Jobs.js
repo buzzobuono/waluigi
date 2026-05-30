@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import { nsStore } from '../store.js';
+import { JOB_STATUS, JOB_STATUSES } from '../config.js';
 import BasePage from './BasePage.js';
 import BasePanel from './BasePanel.js';
 import BaseTable from './BaseTable.js';
@@ -33,15 +34,6 @@ export default {
       { key: 'actions',    label: 'Actions', class: 'text-right pr-3' }
     ];
 
-    const STATUS_MAP = {
-      RUNNING:   { color: 'warning',   icon: 'fas fa-spinner fa-spin' },
-      SUCCESS:   { color: 'success',   icon: 'fas fa-check' },
-      FAILED:    { color: 'danger',    icon: 'fas fa-times' },
-      PENDING:   { color: 'secondary', icon: 'fas fa-clock' },
-      CANCELLED: { color: 'dark',      icon: 'fas fa-ban' },
-      PAUSED:    { color: 'info',      icon: 'fas fa-pause' },
-    };
-
     async function load() {
       if (!nsStore.selected) { jobs.value = []; return; }
       loading.value = true;
@@ -59,7 +51,7 @@ export default {
     watch(() => nsStore.selected, () => load());
 
     const counts = computed(() => {
-      const c = { RUNNING: 0, SUCCESS: 0, FAILED: 0, PENDING: 0, CANCELLED: 0, PAUSED: 0 };
+      const c = Object.fromEntries(JOB_STATUSES.map(s => [s.key, 0]));
       jobs.value.forEach(j => { if (c[j.status] !== undefined) c[j.status]++; });
       return c;
     });
@@ -103,7 +95,7 @@ export default {
     onMounted(load);
 
     return {
-      jobs, pagedJobs, loading, error, columns, STATUS_MAP, nsStore,
+      jobs, pagedJobs, loading, error, columns, JOB_STATUS, JOB_STATUSES, nsStore,
       counts, confirmRef, currentPage, totalPages, rangeStart, rangeEnd,
       changePage, load, pauseJob, resumeJob, cancelJob, deleteJob,
     };
@@ -119,12 +111,12 @@ export default {
 
       <template #actions>
         <div class="row w-100 m-0">
-          <div class="col-6 col-md-2 px-1" v-for="(val, key) in counts" :key="key">
+          <div class="col-6 col-md-2 px-1" v-for="s in JOB_STATUSES" :key="s.key">
             <base-info-box
-              :label="key"
-              :value="val"
-              :icon="STATUS_MAP[key].icon"
-              :color="STATUS_MAP[key].color"
+              :label="s.key"
+              :value="counts[s.key]"
+              :icon="s.icon"
+              :color="s.color"
             />
           </div>
         </div>
@@ -170,7 +162,7 @@ export default {
           </template>
 
           <template #cell(status)="{ item }">
-            <span :class="['badge shadow', 'badge-' + STATUS_MAP[item.status]?.color, item.status === 'RUNNING' ? 'blink' : '']">
+            <span :class="['badge shadow', 'badge-' + (JOB_STATUS[item.status]?.color || 'secondary'), item.status === 'RUNNING' ? 'blink' : '']">
               {{ item.status }}
             </span>
           </template>
