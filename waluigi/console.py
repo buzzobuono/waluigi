@@ -238,14 +238,14 @@ def _parse_json(response):
 
 @app.api_route("/boss/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_boss(request: Request, path: str):
-    url     = f"{BOSS_URL}/{path}"
-    params  = dict(request.query_params)
+    qs      = request.url.query
+    url     = f"{BOSS_URL}/{path}" + (f"?{qs}" if qs else "")
     content = await request.body()
     headers = {k: v for k, v in request.headers.items()
                if k.lower() not in ("host", "authorization")}
     async with httpx.AsyncClient() as client:
         response = await client.request(
-            method=request.method, url=url, params=params,
+            method=request.method, url=url,
             content=content, headers=headers,
         )
     return JSONResponse(
@@ -256,14 +256,14 @@ async def proxy_boss(request: Request, path: str):
 
 @app.api_route("/catalog/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_catalog(request: Request, path: str):
-    url     = f"{CATALOG_URL}/{path}"
-    params  = dict(request.query_params)
+    qs      = request.url.query
+    url     = f"{CATALOG_URL}/{path}" + (f"?{qs}" if qs else "")
     content = await request.body()
     headers = {k: v for k, v in request.headers.items()
                if k.lower() not in ("host", "authorization")}
     async with httpx.AsyncClient() as client:
         response = await client.request(
-            method=request.method, url=url, params=params,
+            method=request.method, url=url,
             content=content, headers=headers,
         )
     return JSONResponse(
