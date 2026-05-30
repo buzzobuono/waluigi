@@ -5,34 +5,33 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Waluigi Console</title>
 
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="/vendor/fonts/fontawesome/css/all.min.css">
+  <link rel="stylesheet" href="/vendor/adminlte.min.css">
   <style>
-    /* No footer in this layout — remove the reserved footer gap from content-wrapper */
+    body { font-family: "Source Sans Pro", "Helvetica Neue", Helvetica, Arial, sans-serif; }
     .content-wrapper { min-height: calc(100vh - 57px) !important; }
   </style>
 </head>
 
 <body>
 <div id="app"></div>
-  
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/4.6.2/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+
+<script src="/vendor/jquery.min.js"></script>
+<script src="/vendor/bootstrap.bundle.min.js"></script>
+<script src="/vendor/adminlte.min.js"></script>
 
 <!-- D3.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="/vendor/d3.min.js"></script>
 
 <!-- ECharts -->
-<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<script src="/vendor/echarts.min.js"></script>
 
-<!-- js-yaml (YAML → JS object for chart spec editor) -->
-<script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js.yaml.min.js"></script>
+<!-- js-yaml -->
+<script src="/vendor/js-yaml.min.js"></script>
 
-<!-- Vue 3 + Vue Router from CDN -->
-<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-<script src="https://unpkg.com/vue-router@4/dist/vue-router.global.prod.js"></script>
+<!-- Vue 3 + Vue Router -->
+<script src="/vendor/vue.global.prod.js"></script>
+<script src="/vendor/vue-router.global.prod.js"></script>
 
 <!-- App modules -->
 <script type="module" src="/js/app.js"></script>
