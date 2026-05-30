@@ -76,10 +76,10 @@ class WaluigiCLI:
             kind = doc.get('kind')
             
             if kind in ('StatefulJob', 'Job'):
-                r = self._http.post("/boss/submit", json=doc, headers=self._get_headers())
+                r = self._http.post("/boss/jobs", json=doc, headers=self._get_headers())
                 print(json.dumps(r.json(), indent=2))
             elif kind == 'ClusterResources':
-                r = self._http.post("/boss/api/resources", json=doc, headers=self._get_headers())
+                r = self._http.post("/boss/resources", json=doc, headers=self._get_headers())
                 print(json.dumps(r.json(), indent=2))
             else:
                 print(f"Error: Type '{kind}' not supported")
@@ -109,9 +109,9 @@ class WaluigiCLI:
         
     def get_namespaces(self):
         try:
-            r = self._http.get("/boss/api/namespaces", headers=self._get_headers())
+            r = self._http.get("/boss/namespaces", headers=self._get_headers())
             if r.status_code == 200:
-                data = r.json()
+                data = r.json().get("data")
                 if not data:
                     print("Warning: No namespace found")
                     return
@@ -129,9 +129,9 @@ class WaluigiCLI:
         
     def get_jobs(self):
         try:
-            r = self._http.get("/boss/api/jobs", headers=self._get_headers())
+            r = self._http.get("/boss/jobs", headers=self._get_headers())
             if r.status_code == 200:
-                data = r.json()
+                data = r.json().get("data")
                 if not data:
                     print("Warning: No jobs found")
                     return
@@ -149,9 +149,9 @@ class WaluigiCLI:
     
     def get_tasks(self, job_id=None, namespace=None):
         try:
-            r = self._http.get("/boss/api/tasks", headers=self._get_headers())
+            r = self._http.get("/boss/tasks", headers=self._get_headers())
             if r.status_code == 200:
-                data = r.json()
+                data = r.json().get("data")
                 if job_id:
                     data = [t for t in data if t.get("job_id") == job_id]
                 if namespace:
@@ -179,9 +179,9 @@ class WaluigiCLI:
    
     def get_resources(self):
         try:
-            r = self._http.get("/boss/api/resources", headers=self._get_headers())
+            r = self._http.get("/boss/resources", headers=self._get_headers())
             if r.status_code == 200:
-                data = r.json()
+                data = r.json().get("data")
                 if not data:
                     print("Warning: No resources found")
                     return
@@ -203,9 +203,9 @@ class WaluigiCLI:
    
     def get_workers(self):
         try:
-            r = self._http.get("/boss/api/workers", headers=self._get_headers())
+            r = self._http.get("/boss/workers", headers=self._get_headers())
             if r.status_code == 200:
-                data = r.json()
+                data = r.json().get('data')
                 if not data:
                     print("Warning: No worker found")
                     return
@@ -235,11 +235,11 @@ class WaluigiCLI:
                 else:
                     params = {'limit': limit}
                 
-                r = self._http.get(f"/boss/api/logs/{task_id}", params=params, headers=self._get_headers())
+                r = self._http.get(f"/boss/tasks/{task_id}/logs", params=params, headers=self._get_headers())
                 if r.status_code != 200:
                     print(f"Error: {r.status_code}")
                     break
-                logs = r.json()
+                logs = r.json().get('data')
                 if not logs and not follow:
                     break
                 new_logs = [l for l in logs if l.get('id', 0) > last_seen_id]

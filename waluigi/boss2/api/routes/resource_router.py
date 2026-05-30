@@ -24,4 +24,4 @@ async def apply_resources(request: Request, svc=Depends(resource_service)):
     success, msg = svc.apply(spec)
     if not success:
         return ko(msg, status=409)
-    return ok({"message": msg})
+    return ok(None, msg)

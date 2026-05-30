@@ -11,11 +11,11 @@ def _execute(worker_url, payload):
 
 
 def _wait_for_log(boss_url, task_id, marker, timeout=8):
-    """Poll Boss /api/logs/{task_id} until marker appears in a log line."""
+    """Poll Boss /logs/{task_id} until marker appears in a log line."""
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            r = requests.get(f"{boss_url}/api/logs/{task_id}", timeout=3)
+            r = requests.get(f"{boss_url}/logs/{task_id}", timeout=3)
             if r.ok and any(marker in e.get("message", "") for e in r.json()):
                 return True
         except requests.RequestException:

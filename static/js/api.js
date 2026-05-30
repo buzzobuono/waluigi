@@ -81,23 +81,23 @@ export const api = {
     return r.json();
   },
 
-  jobs:      ()      => _get('/boss/api/jobs').then(_unwrap),
-  cancelJob: (jobId) => _postJson(`/boss/api/jobs/${_enc(jobId)}/cancel`, {}).then(_unwrap),
-  deleteJob: (jobId) => _delete(`/boss/api/jobs/${_enc(jobId)}`).then(_unwrap),
-  jobTasks:  (jobId) => _get(`/boss/api/jobs/${_enc(jobId)}/tasks`).then(_unwrap),
+  jobs:      ()      => _get('/boss/jobs').then(_unwrap),
+  cancelJob: (jobId) => _postJson(`/boss/jobs/${_enc(jobId)}/_cancel`, {}).then(_unwrap),
+  deleteJob: (jobId) => _delete(`/boss/jobs/${_enc(jobId)}`).then(_unwrap),
+  jobTasks:  (jobId) => _get(`/boss/tasks`, { job_id: _enc(jobId) }).then(_unwrap),
+  
+  namespaces:      ()   => _get('/boss/namespaces').then(_unwrap),
+  resetNamespace:  (ns) => _post(`/boss/namespaces/${_enc(ns)}/_reset`).then(_unwrap),
+  deleteNamespace: (ns) => _delete(`/boss/namespaces/${_enc(ns)}`).then(_unwrap),
 
-  namespaces:      ()   => _get('/boss/api/namespaces').then(_unwrap),
-  resetNamespace:  (ns) => _post(`/boss/api/reset/namespace/${_enc(ns)}`).then(_unwrap),
-  deleteNamespace: (ns) => _post(`/boss/api/delete/namespace/${_enc(ns)}`).then(_unwrap),
+  tasks:     ()  => _get('/boss/tasks').then(_unwrap),
+  resetTask: (id) => _post(`/boss/tasks/${_enc(id)}/_reset`).then(_unwrap),
+  deleteTask: (id) => _detete(`/boss/tasks/${_enc(id)}`).then(_unwrap),
+  logs:      (taskId, limit = 100) => _get(`/boss/tasks/${_enc(taskId)}/logs`, { limit }).then(_unwrap),
 
-  tasks:     ()  => _get('/boss/api/tasks').then(_unwrap),
-  resetTask: (id) => _post(`/boss/api/reset/task/${_enc(id)}`).then(_unwrap),
-  deleteTask: (id) => _post(`/boss/api/delete/task/${_enc(id)}`).then(_unwrap),
-  logs:      (taskId, limit = 100) => _get(`/boss/api/logs/${_enc(taskId)}`, { limit }).then(_unwrap),
+  workers:   () => _get('/boss/workers').then(_unwrap),
 
-  workers:   () => _get('/boss/api/workers').then(_unwrap),
-
-  resources: () => _get('/boss/api/resources').then(_unwrap),
+  resources: () => _get('/boss/resources').then(_unwrap),
 
   catalogSources:       ()      => _get('/catalog/sources'),
   catalogCreateSource:  (body)  => _postJson('/catalog/sources', body),

@@ -1,9 +1,9 @@
 from types import SimpleNamespace
 
 
-def parse_definition(pipeline_data):
-    metadata = pipeline_data.get("metadata", {})
-    spec = pipeline_data.get("spec", {})
+def parse_definition(definition):
+    metadata = definition.get("metadata", {})
+    spec = definition.get("spec", {})
     task_list = spec.get("tasks", [])
     pipeline_params = spec.get("params", {})
     pipeline_attributes = spec.get("attributes", {})

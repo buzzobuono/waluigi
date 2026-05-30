@@ -83,9 +83,15 @@ class WorkerService:
             raise RuntimeError(f"[bossd] Server error {r.status_code} on {endpoint}")
         return r
 
+    async def _patch(self, endpoint, **kwargs):
+        r = await self._boss.patch(endpoint, **kwargs)
+        if 500 <= r.status_code < 600:
+            raise RuntimeError(f"[bossd] Server error {r.status_code} on {endpoint}")
+        return r
+        
     async def _send_logs(self, task_id, lines):
         try:
-            await self._post(f"/api/logs/{task_id}", json={
+            await self._post(f"/tasks/{task_id}/logs", json={
                 "worker_id": args.id,
                 "logs": lines
             })
@@ -93,9 +99,8 @@ class WorkerService:
             logger.error(f"Error in sending log for {task_id}: {e}")
 
     async def _update_boss(self, id, namespace, params, attributes, resources, status):
-        return await self._post("/update", json={
+        return await self._patch(f"/tasks/{id}", json={
             "worker_url": f"http://{args.host}:{args.port}",
-            "id": id,
             "namespace": namespace,
             "params": _hash(params),
             "attributes": _hash(attributes),

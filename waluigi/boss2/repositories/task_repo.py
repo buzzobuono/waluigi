@@ -62,21 +62,32 @@ class TaskRepository(BaseRepository):
                 )
             )
 
-    def list_all(self) -> list[dict]:
+    def list_tasks(
+        self,
+        *,
+        job_id: str | None = None,
+        namespace: str | None = None,
+        order: Literal["asc", "desc"] = "desc",
+    ) -> list[dict]:
+        q = select(_t_tasks)
+        if job_id is not None:
+            q = q.where(_t_tasks.c.job_id == job_id)
+        if namespace is not None:
+            q = q.where(_t_tasks.c.namespace == namespace)
+        sort = _t_tasks.c.last_update.asc() if order == "asc" else _t_tasks.c.last_update.desc()
+        q = q.order_by(sort)
         with self._conn() as conn:
-            return self._rows(
-                conn.execute(select(_t_tasks).order_by(_t_tasks.c.last_update.desc())).fetchall()
-            )
+            return self._rows(conn.execute(q).fetchall())
+                
+    def reset(self, task_id: str) -> None:
+        with self._conn() as conn:
+            conn.execute(update(_t_tasks).where(_t_tasks.c.id == task_id).values(status="PENDING"))
+            
+    def delete(self, task_id: str) -> None:
+        with self._conn() as conn:
+            conn.execute(delete(_t_tasks).where(_t_tasks.c.id == task_id))
 
-    def list_by_job(self, job_id: str) -> list[dict]:
-        with self._conn() as conn:
-            return self._rows(
-                conn.execute(
-                    select(_t_tasks)
-                    .where(_t_tasks.c.job_id == job_id)
-                    .order_by(_t_tasks.c.last_update.asc())
-                ).fetchall()
-            )
+
 
     def list_namespaces(self) -> list[dict]:
         with self._conn() as conn:
@@ -86,21 +97,14 @@ class TaskRepository(BaseRepository):
                     .group_by(_t_tasks.c.namespace)
                 ).fetchall()
             )
-
-    def reset(self, task_id: str) -> None:
+    
+    def delete_namespace(self, namespace: str) -> None:
         with self._conn() as conn:
-            conn.execute(update(_t_tasks).where(_t_tasks.c.id == task_id).values(status="PENDING"))
+            conn.execute(delete(_t_tasks).where(_t_tasks.c.namespace == namespace))
 
     def reset_namespace(self, namespace: str) -> None:
         with self._conn() as conn:
             conn.execute(
                 update(_t_tasks).where(_t_tasks.c.namespace == namespace).values(status="PENDING")
             )
-
-    def delete(self, task_id: str) -> None:
-        with self._conn() as conn:
-            conn.execute(delete(_t_tasks).where(_t_tasks.c.id == task_id))
-
-    def delete_namespace(self, namespace: str) -> None:
-        with self._conn() as conn:
-            conn.execute(delete(_t_tasks).where(_t_tasks.c.namespace == namespace))
+    

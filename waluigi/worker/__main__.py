@@ -24,7 +24,7 @@ async def heartbeat():
     async with AsyncHttpClient(args.boss_url, timeout=5) as client:
         while True:
             try:
-                await client.post("/worker/register", json={
+                await client.post("/workers", json={
                     "url": f"http://{args.host}:{args.port}",
                     "status": "ALIVE",
                     "max_slots": args.slots,

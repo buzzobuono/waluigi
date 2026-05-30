@@ -43,6 +43,11 @@ def task_service(db=Depends(get_db)):
     from waluigi.boss2.services.task_service import TaskService
     return TaskService(db.tasks)
 
+def namespace_service(db=Depends(get_db)):
+    from waluigi.boss2.services.namespace_service import NamespaceService
+    return NamespaceService(db.tasks)
+
+
 def job_service(db=Depends(get_db)):
     from waluigi.boss2.services.job_service import JobService
     return JobService(db.jobs)
