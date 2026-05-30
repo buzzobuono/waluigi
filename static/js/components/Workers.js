@@ -1,4 +1,4 @@
-import { api } from '../api.js';
+import { api, getToken } from '../api.js';
 import BasePage from './BasePage.js';
 import BasePanel from './BasePanel.js';
 import BaseTable from './BaseTable.js';
@@ -7,11 +7,17 @@ import BaseButton from './BaseButton.js';
 
 const { ref, computed, onMounted } = Vue;
 
+function _isAdmin() {
+  try { return JSON.parse(atob(getToken().split('.')[1])).namespaces === '*'; }
+  catch { return false; }
+}
+
 export default {
   name: 'Workers',
   components: { BasePage, BasePanel, BaseTable, BaseInfoBox, BaseButton },
 
   setup() {
+    const isAdmin = _isAdmin();
     const workers = ref([]);
     const loading = ref(false);
     const error   = ref(null);
@@ -39,14 +45,15 @@ export default {
     const freeSlots  = computed(() => workers.value.reduce((s, w) => s + (w.free_slots || 0), 0));
     const busySlots  = computed(() => totalSlots.value - freeSlots.value);
 
-    onMounted(load);
+    onMounted(() => { if (isAdmin) load(); });
 
-    return { workers, loading, error, columns, totalSlots, freeSlots, busySlots, load };
+    return { isAdmin, workers, loading, error, columns, totalSlots, freeSlots, busySlots, load };
   },
 
   template: `
     <base-page
       title="Workers"
+      v-if="isAdmin"
       subtitle="Worker status and slot availability"
       icon="fas fa-server"
       :loading="loading && !workers.length"
@@ -100,6 +107,12 @@ export default {
         </base-table>
       </base-panel>
 
+    </base-page>
+
+    <base-page v-else title="Workers" icon="fas fa-server">
+      <div class="alert alert-warning">
+        <i class="fas fa-lock mr-2"></i>Access restricted to administrators.
+      </div>
     </base-page>
   `
 };

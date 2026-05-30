@@ -1,9 +1,10 @@
 import { router }  from './router.js';
-import { clearToken, getToken } from './api.js';
+import { clearToken, getToken, api } from './api.js';
+import { nsStore } from './store.js';
 import SideBar     from './components/SideBar.js';
 import NavBar      from './components/NavBar.js';
 
-const { createApp, ref, computed, onMounted } = Vue;
+const { createApp, ref, computed, watch, onMounted } = Vue;
 
 function decodeToken(token) {
   try { return JSON.parse(atob(token.split('.')[1])); } catch { return null; }
@@ -26,11 +27,36 @@ const App = {
         : null;
     }
 
+    async function loadNamespaces() {
+      if (!getToken()) {
+        nsStore.available = [];
+        nsStore.selected  = '';
+        return;
+      }
+      try {
+        const data = await api.namespaces();
+        const list = (Array.isArray(data) ? data : []).map(r => r.namespace);
+        nsStore.available = list;
+        // keep current selection if still valid, else pick first
+        if (!nsStore.selected || !list.includes(nsStore.selected)) {
+          nsStore.selected = list[0] || '';
+        }
+      } catch { /* not logged in yet or boss unreachable */ }
+    }
+
     function logout() {
       clearToken();
       user.value = null;
+      nsStore.available = [];
+      nsStore.selected  = '';
       router.push('/login');
     }
+
+    // reload namespaces when user logs in/out
+    watch(user, (u) => {
+      if (u) loadNamespaces();
+      else { nsStore.available = []; nsStore.selected = ''; }
+    });
 
     const navItems = [
       { path: '/dashboard',  label: 'Dashboard',  icon: 'fa-th-large' },
@@ -43,7 +69,7 @@ const App = {
         ]
       },
       {
-        label: 'Cluster', icon: 'fa-microchip',
+        label: 'Cluster', icon: 'fa-microchip', adminOnly: true,
         children: [
           { path: '/workers',   label: 'Workers',   icon: 'fa-server' },
           { path: '/resources', label: 'Resources', icon: 'fa-chart-bar' }
@@ -73,13 +99,13 @@ const App = {
 
     const isLogin = computed(() => router.currentRoute.value.path === '/login');
 
-    onMounted(() => loadUser());
+    onMounted(() => { loadUser(); loadNamespaces(); });
     router.afterEach(() => loadUser());
 
     return {
       navItems, isGroupActive,
       currentTitle: computed(() => router.currentRoute.value.meta?.title || 'Console'),
-      user, logout, isLogin,
+      user, logout, isLogin, nsStore,
     };
   },
 
@@ -92,6 +118,7 @@ const App = {
         <NavBar
           :title="currentTitle"
           :user="user"
+          :ns-store="nsStore"
           @logout="logout"
         />
         <SideBar

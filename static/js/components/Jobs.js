@@ -1,4 +1,5 @@
 import { api } from '../api.js';
+import { nsStore } from '../store.js';
 import BasePage from './BasePage.js';
 import BasePanel from './BasePanel.js';
 import BaseTable from './BaseTable.js';
@@ -7,7 +8,7 @@ import BaseButton from './BaseButton.js';
 import BaseButtonGroup from './BaseButtonGroup.js';
 import ConfirmDialog from './ConfirmDialog.js';
 
-const { ref, computed, onMounted } = Vue;
+const { ref, computed, watch, onMounted } = Vue;
 
 export default {
   name: 'Jobs',
@@ -17,16 +18,12 @@ export default {
   },
 
   setup() {
-    const jobs         = ref([]);
-    const loading      = ref(false);
-    const error        = ref(null);
-    const confirmRef   = ref(null);
-    const currentPage  = ref(1);
-    const PAGE_SIZE    = 10;
-
-    const availableNs  = ref([]);
-    const selectedNs   = ref('');
-    const nsLoading    = ref(false);
+    const jobs        = ref([]);
+    const loading     = ref(false);
+    const error       = ref(null);
+    const confirmRef  = ref(null);
+    const currentPage = ref(1);
+    const PAGE_SIZE   = 10;
 
     const columns = [
       { key: 'job_id',     label: 'Job ID' },
@@ -45,27 +42,12 @@ export default {
       PAUSED:    { color: 'info',      icon: 'fas fa-pause' },
     };
 
-    async function loadNamespaces() {
-      nsLoading.value = true;
-      try {
-        const data = await api.namespaces();
-        availableNs.value = (Array.isArray(data) ? data : []).map(r => r.namespace);
-        if (!selectedNs.value && availableNs.value.length) {
-          selectedNs.value = availableNs.value[0];
-        }
-      } catch (e) {
-        error.value = e.message;
-      } finally {
-        nsLoading.value = false;
-      }
-    }
-
     async function load() {
-      if (!selectedNs.value) return;
+      if (!nsStore.selected) { jobs.value = []; return; }
       loading.value = true;
       error.value   = null;
       try {
-        jobs.value = await api.jobs(selectedNs.value);
+        jobs.value = await api.jobs(nsStore.selected);
         currentPage.value = 1;
       } catch (e) {
         error.value = e.message;
@@ -74,10 +56,7 @@ export default {
       }
     }
 
-    async function onNsChange() {
-      jobs.value = [];
-      await load();
-    }
+    watch(() => nsStore.selected, () => load());
 
     const counts = computed(() => {
       const c = { RUNNING: 0, SUCCESS: 0, FAILED: 0, PENDING: 0, CANCELLED: 0, PAUSED: 0 };
@@ -86,12 +65,10 @@ export default {
     });
 
     const totalPages = computed(() => Math.max(1, Math.ceil(jobs.value.length / PAGE_SIZE)));
-
-    const pagedJobs = computed(() => {
+    const pagedJobs  = computed(() => {
       const start = (currentPage.value - 1) * PAGE_SIZE;
       return jobs.value.slice(start, start + PAGE_SIZE);
     });
-
     const rangeStart = computed(() => (currentPage.value - 1) * PAGE_SIZE + 1);
     const rangeEnd   = computed(() => Math.min(currentPage.value * PAGE_SIZE, jobs.value.length));
 
@@ -101,48 +78,41 @@ export default {
     }
 
     async function pauseJob(jobId) {
-      try { await api.pauseJob(selectedNs.value, jobId); await load(); }
+      try { await api.pauseJob(nsStore.selected, jobId); await load(); }
       catch (e) { error.value = e.message; }
     }
-
     async function resumeJob(jobId) {
-      try { await api.resumeJob(selectedNs.value, jobId); await load(); }
+      try { await api.resumeJob(nsStore.selected, jobId); await load(); }
       catch (e) { error.value = e.message; }
     }
-
     async function cancelJob(jobId) {
       confirmRef.value.ask(`Cancel job "${jobId}"?`, async (ok) => {
         if (!ok) return;
-        try { await api.cancelJob(selectedNs.value, jobId); await load(); }
+        try { await api.cancelJob(nsStore.selected, jobId); await load(); }
         catch (e) { error.value = e.message; }
       });
     }
-
     async function deleteJob(jobId) {
       confirmRef.value.ask(`Delete job "${jobId}"?`, async (ok) => {
         if (!ok) return;
-        try { await api.deleteJob(selectedNs.value, jobId); await load(); }
+        try { await api.deleteJob(nsStore.selected, jobId); await load(); }
         catch (e) { error.value = e.message; }
       });
     }
 
-    onMounted(async () => {
-      await loadNamespaces();
-      await load();
-    });
+    onMounted(load);
 
     return {
-      jobs, pagedJobs, loading, error, columns, STATUS_MAP,
+      jobs, pagedJobs, loading, error, columns, STATUS_MAP, nsStore,
       counts, confirmRef, currentPage, totalPages, rangeStart, rangeEnd,
-      availableNs, selectedNs, nsLoading,
-      changePage, load, onNsChange, pauseJob, resumeJob, cancelJob, deleteJob,
+      changePage, load, pauseJob, resumeJob, cancelJob, deleteJob,
     };
   },
 
   template: `
     <base-page
       title="Jobs"
-      subtitle="Job monitoring and management"
+      :subtitle="nsStore.selected ? 'Namespace: ' + nsStore.selected : 'Select a namespace'"
       icon="fas fa-briefcase"
       :loading="loading && !jobs.length"
       :error="error">
@@ -158,71 +128,49 @@ export default {
             />
           </div>
         </div>
-
-        <div class="d-flex align-items-center mt-2 w-100">
-          <label class="mr-2 mb-0 text-muted small font-weight-bold text-nowrap">
-            <i class="fas fa-layer-group mr-1"></i>Namespace
-          </label>
-          <select class="form-control form-control-sm mr-3" style="max-width: 220px;"
-                  v-model="selectedNs" @change="onNsChange" :disabled="nsLoading">
-            <option v-if="!availableNs.length" value="">— no namespaces —</option>
-            <option v-for="ns in availableNs" :key="ns" :value="ns">{{ ns }}</option>
-          </select>
-          <base-button
-            label="Refresh"
-            icon="fas fa-sync-alt"
-            color="outline-primary"
-            class="ml-auto"
-            :loading="loading"
-            @click="load"
-          />
-        </div>
+        <base-button
+          label="Refresh"
+          icon="fas fa-sync-alt"
+          color="outline-primary"
+          class="ml-auto mt-2"
+          :loading="loading"
+          @click="load"
+        />
       </template>
 
-      <div v-if="!selectedNs" class="text-center py-5 text-muted">
+      <div v-if="!nsStore.selected" class="text-center py-5 text-muted">
         <i class="fas fa-layer-group fa-3x mb-3 opacity-75"></i>
-        <p>No namespaces available. Submit a job first.</p>
+        <p>Select a namespace from the header to view jobs.</p>
       </div>
 
       <base-panel v-else :no-padding="true">
 
         <template #tools>
           <base-button-group class="ml-auto">
-            <base-button
-              :disabled="loading || currentPage <= 1"
-              icon="fas fa-chevron-left"
-              color="outline-primary"
-              @click="changePage(-1)"
-            />
-            <base-button
-              :label="String(currentPage) + ' / ' + String(totalPages)"
-              :disabled="true"
-              color="outline-secondary"
-            />
-            <base-button
-              :disabled="loading || currentPage >= totalPages"
-              icon="fas fa-chevron-right"
-              color="outline-primary"
-              @click="changePage(1)"
-            />
+            <base-button :disabled="loading || currentPage <= 1"
+                         icon="fas fa-chevron-left" color="outline-primary"
+                         @click="changePage(-1)" />
+            <base-button :label="currentPage + ' / ' + totalPages"
+                         :disabled="true" color="outline-secondary" />
+            <base-button :disabled="loading || currentPage >= totalPages"
+                         icon="fas fa-chevron-right" color="outline-primary"
+                         @click="changePage(1)" />
           </base-button-group>
         </template>
 
-        <base-table
-          :columns="columns"
-          :items="pagedJobs">
+        <base-table :columns="columns" :items="pagedJobs">
 
           <template #cell(job_id)="{ item }">
             <div>
               <i class="fas fa-project-diagram mr-2 opacity-75"></i>
-              <router-link :to="'/jobs/' + encodeURIComponent(selectedNs) + '/' + encodeURIComponent(item.job_id)">
+              <router-link :to="'/jobs/' + encodeURIComponent(nsStore.selected) + '/' + encodeURIComponent(item.job_id)">
                 {{ item.job_id }}
               </router-link>
             </div>
           </template>
 
           <template #cell(status)="{ item }">
-            <span :class="['badge shadow', 'badge-' + STATUS_MAP[item.status].color, item.status === 'RUNNING' ? 'blink' : '']">
+            <span :class="['badge shadow', 'badge-' + STATUS_MAP[item.status]?.color, item.status === 'RUNNING' ? 'blink' : '']">
               {{ item.status }}
             </span>
           </template>
@@ -235,33 +183,17 @@ export default {
 
           <template #cell(actions)="{ item }">
             <base-button-group>
-              <base-button
-                v-if="item.status === 'RUNNING' || item.status === 'PENDING'"
-                icon="fas fa-pause"
-                color="outline-info"
-                title="Pause Job"
-                @click.stop="pauseJob(item.job_id)"
-              />
-              <base-button
-                v-if="item.status === 'PAUSED'"
-                icon="fas fa-play"
-                color="outline-info"
-                title="Resume Job"
-                @click.stop="resumeJob(item.job_id)"
-              />
-              <base-button
-                v-if="item.status === 'RUNNING' || item.status === 'PENDING' || item.status === 'PAUSED'"
-                icon="fas fa-ban"
-                color="outline-warning"
-                title="Cancel Job"
-                @click.stop="cancelJob(item.job_id)"
-              />
-              <base-button
-                icon="fas fa-trash"
-                color="outline-danger"
-                title="Delete Job"
-                @click.stop="deleteJob(item.job_id)"
-              />
+              <base-button v-if="item.status === 'RUNNING' || item.status === 'PENDING'"
+                           icon="fas fa-pause" color="outline-info" title="Pause"
+                           @click.stop="pauseJob(item.job_id)" />
+              <base-button v-if="item.status === 'PAUSED'"
+                           icon="fas fa-play" color="outline-info" title="Resume"
+                           @click.stop="resumeJob(item.job_id)" />
+              <base-button v-if="['RUNNING','PENDING','PAUSED'].includes(item.status)"
+                           icon="fas fa-ban" color="outline-warning" title="Cancel"
+                           @click.stop="cancelJob(item.job_id)" />
+              <base-button icon="fas fa-trash" color="outline-danger" title="Delete"
+                           @click.stop="deleteJob(item.job_id)" />
             </base-button-group>
           </template>
 
@@ -276,7 +208,6 @@ export default {
       </base-panel>
 
       <confirm-dialog title="Confirm" ref="confirmRef" />
-
     </base-page>
   `
 };

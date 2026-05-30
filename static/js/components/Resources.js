@@ -1,15 +1,21 @@
-import { api } from '../api.js';
+import { api, getToken } from '../api.js';
 import BasePage from './BasePage.js';
 import BasePanel from './BasePanel.js';
 import BaseButton from './BaseButton.js';
 
 const { ref, onMounted } = Vue;
 
+function _isAdmin() {
+  try { return JSON.parse(atob(getToken().split('.')[1])).namespaces === '*'; }
+  catch { return false; }
+}
+
 export default {
   name: 'Resources',
   components: { BasePage, BasePanel, BaseButton },
 
   setup() {
+    const isAdmin   = _isAdmin();
     const resources = ref([]);
     const loading   = ref(false);
     const error     = ref(null);
@@ -32,13 +38,19 @@ export default {
       return p > 80 ? 'danger' : p > 50 ? 'warning' : 'success';
     }
 
-    onMounted(load);
+    onMounted(() => { if (isAdmin) load(); });
 
-    return { resources, loading, error, load, pct, color };
+    return { isAdmin, resources, loading, error, load, pct, color };
   },
 
   template: `
-    <base-page
+    <base-page v-if="!isAdmin" title="Resources" icon="fas fa-microchip">
+      <div class="alert alert-warning">
+        <i class="fas fa-lock mr-2"></i>Access restricted to administrators.
+      </div>
+    </base-page>
+
+    <base-page v-else
       title="Resources"
       subtitle="Cluster resources consumption"
       icon="fas fa-microchip"

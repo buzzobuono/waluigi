@@ -290,6 +290,16 @@ def _parse_json(response):
 
 # ── Proxy ─────────────────────────────────────────────────────────────────────
 
+_ADMIN_ONLY_BOSS = {"workers", "resources"}
+
+def _check_admin_paths(request: Request, path: str) -> JSONResponse | None:
+    """Block non-admin access to cluster-level paths (workers, resources)."""
+    top = path.split("/")[0]
+    if top in _ADMIN_ONLY_BOSS and not _is_admin(request):
+        return JSONResponse({"detail": "Admin access required"}, status_code=403)
+    return None
+
+
 def _check_boss_namespace(request: Request, path: str) -> JSONResponse | None:
     """
     Returns a 403 JSONResponse if the requesting user is not allowed to access
@@ -325,6 +335,9 @@ def _filter_namespaces_response(request: Request, body: dict) -> dict:
 
 @app.api_route("/boss/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_boss(request: Request, path: str):
+    denied = _check_admin_paths(request, path)
+    if denied:
+        return denied
     denied = _check_boss_namespace(request, path)
     if denied:
         return denied
