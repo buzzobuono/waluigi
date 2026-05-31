@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 from waluigi.boss2.repositories.job_repo import JobRepository
 
 
@@ -26,7 +27,12 @@ class JobService:
         self.repo.release(namespace, job_id)
 
     def list(self, namespace: str | None = None) -> list[dict]:
-        return self.repo.list(namespace)
+        rows = self.repo.list(namespace)
+        for row in rows:
+            raw = row.get("metadata")
+            meta = json.loads(raw) if isinstance(raw, str) else (raw or {})
+            row["kind"] = meta.get("kind", "Job")
+        return rows
 
     def cancel(self, namespace: str, job_id: str) -> bool:
         return self.repo.cancel(namespace, job_id)

@@ -205,11 +205,17 @@ class WaluigiCLI:
                 print(json.dumps(data, indent=2)); return
             if not data:
                 print("No jobs found."); return
-            table = [
-                [j.get("job_id"), _color(j.get("status", "")), j.get("started_at") or "-"]
-                for j in data
-            ]
-            print(tabulate(table, headers=["JOB_ID", "STATUS", "STARTED"], tablefmt="plain"))
+            table = []
+            for j in data:
+                meta = _parse_json_field(j.get("metadata", {}))
+                table.append([
+                    j.get("job_id"),
+                    j.get("kind") or meta.get("kind", "Job"),
+                    _color(j.get("status", "")),
+                    meta.get("namespace", "-"),
+                    j.get("started_at", "-"),
+                ])
+            print(tabulate(table, headers=["JOB_ID", "KIND", "STATUS", "NAMESPACE", "STARTED"], tablefmt="plain"))
         except Exception as e:
             print(f"Error: {e}")
 

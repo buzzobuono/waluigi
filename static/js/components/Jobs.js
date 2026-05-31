@@ -28,6 +28,7 @@ export default {
 
     const columns = [
       { key: 'job_id',     label: 'Job ID' },
+      { key: 'kind',       label: 'Type' },
       { key: 'status',     label: 'Status' },
       { key: 'started_at', label: 'Started At' },
       { key: 'locked_by',  label: 'Locked By' },
@@ -159,6 +160,12 @@ export default {
                 {{ item.job_id }}
               </router-link>
             </div>
+          </template>
+
+          <template #cell(kind)="{ item }">
+            <span :class="['badge', item.kind === 'StatefulJob' ? 'badge-primary' : 'badge-light border']">
+              {{ item.kind || 'Job' }}
+            </span>
           </template>
 
           <template #cell(status)="{ item }">

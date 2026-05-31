@@ -55,6 +55,7 @@ async def submit(
 
     metadata = dict(data.get("metadata", {}))
     metadata["timestamp"] = timestamp
+    metadata["kind"] = kind
     base_name = metadata.get("name", "unnamed")
     job_id = f"{base_name}@{timestamp}" if timestamp else base_name
 
