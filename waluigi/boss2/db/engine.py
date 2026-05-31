@@ -22,6 +22,7 @@ _t_tasks = Table("tasks", _meta,
 _t_jobs = Table("jobs", _meta,
     Column("namespace",    Text, nullable=False),
     Column("job_id",       Text, nullable=False),
+    Column("kind",         Text, nullable=False, default="Job"),
     Column("metadata",     Text),
     Column("spec",         Text),
     Column("status",       Text, nullable=False, default="PENDING"),
@@ -71,6 +72,17 @@ def create_boss_engine(url: str):
             dbapi_conn.execute("PRAGMA foreign_keys=ON")
 
     _meta.create_all(engine)
+
+    # Add kind column to existing DBs that predate this field
+    if engine.dialect.name == "sqlite":
+        with engine.begin() as conn:
+            cols = [r[1] for r in conn.execute(
+                __import__("sqlalchemy").text("PRAGMA table_info(jobs)")
+            ).fetchall()]
+            if "kind" not in cols:
+                conn.execute(__import__("sqlalchemy").text(
+                    "ALTER TABLE jobs ADD COLUMN kind TEXT NOT NULL DEFAULT 'Job'"
+                ))
 
     from sqlalchemy import select, insert
     with engine.begin() as conn:

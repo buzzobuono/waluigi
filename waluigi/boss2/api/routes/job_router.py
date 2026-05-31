@@ -55,7 +55,6 @@ async def submit(
 
     metadata = dict(data.get("metadata", {}))
     metadata["timestamp"] = timestamp
-    metadata["kind"] = kind
     base_name = metadata.get("name", "unnamed")
     job_id = f"{base_name}@{timestamp}" if timestamp else base_name
 
@@ -66,7 +65,7 @@ async def submit(
 
     try:
         task = DAGTask(spec)
-        job_svc.create(namespace=namespace, job_id=job_id, metadata=metadata, spec=spec)
+        job_svc.create(namespace=namespace, job_id=job_id, kind=kind, metadata=metadata, spec=spec)
         engine.register_job(namespace, job_id, task, None)
         return ok({"job_id": job_id, "task_id": task.id}, status=202)
     except Exception as e:

@@ -1,5 +1,4 @@
 from __future__ import annotations
-import json
 from waluigi.boss2.repositories.job_repo import JobRepository
 
 
@@ -8,8 +7,8 @@ class JobService:
     def __init__(self, repo: JobRepository):
         self.repo = repo
 
-    def create(self, namespace: str, job_id: str, metadata: dict, spec: dict) -> None:
-        self.repo.create(namespace, job_id, metadata, spec)
+    def create(self, namespace: str, job_id: str, kind: str, metadata: dict, spec: dict) -> None:
+        self.repo.create(namespace, job_id, kind, metadata, spec)
 
     def list_runnable_ids(self) -> list[tuple[str, str]]:
         return self.repo.list_runnable_ids()
@@ -27,12 +26,7 @@ class JobService:
         self.repo.release(namespace, job_id)
 
     def list(self, namespace: str | None = None) -> list[dict]:
-        rows = self.repo.list(namespace)
-        for row in rows:
-            raw = row.get("metadata")
-            meta = json.loads(raw) if isinstance(raw, str) else (raw or {})
-            row["kind"] = meta.get("kind", "Job")
-        return rows
+        return self.repo.list(namespace)
 
     def cancel(self, namespace: str, job_id: str) -> bool:
         return self.repo.cancel(namespace, job_id)
