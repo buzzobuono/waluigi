@@ -31,54 +31,60 @@ class MaterializeService:
         self.data_path = data_path
 
     @atomic
-    async def materialize(self, dataset_id: str,
+    async def materialize(self, namespace: str, dataset_id: str,
+                          source_id: str,
                           base_url: str, endpoint: str, params: dict,
                           display_name: str | None = None,
                           description: str | None = None,
                           task_id: str | None = None,
                           job_id: str | None = None) -> dict:
+        browse_path = f"{namespace}/{dataset_id}"
         version = _version_id()
-        path    = self.local_path(dataset_id, version, "csv")
+        path    = self.local_path(browse_path, version, "csv")
 
-        self.datasets_repository.create(dataset_id, "csv", description=description)
-        self.versions_repository.reserve(dataset_id, version, path)
+        self.datasets_repository.create(namespace, dataset_id, "csv",
+                                        description=description,
+                                        source_id=source_id)
+        self.versions_repository.reserve(browse_path, version, path)
 
         try:
             rows, schema_cols = await self.fetch_and_write(
                 base_url, endpoint, params, path)
         except httpx.HTTPError:
-            self.versions_repository.fail(dataset_id, version)
+            self.versions_repository.fail(browse_path, version)
             raise
 
         if rows == 0:
-            self.versions_repository.fail(dataset_id, version)
+            self.versions_repository.fail(browse_path, version)
             raise ValueError("No records returned from endpoint")
 
-        if not self.versions_repository.commit(dataset_id, version):
-            self.versions_repository.fail(dataset_id, version)
+        if not self.versions_repository.commit(browse_path, version):
+            self.versions_repository.fail(browse_path, version)
             raise RuntimeError("Commit failed")
 
-        self.schema_repository.upsert_columns(dataset_id, schema_cols)
-        self.lineage_repository.insert(dataset_id, version, [{
+        self.schema_repository.upsert_columns(browse_path, schema_cols)
+        self.lineage_repository.insert(browse_path, version, [{
             "dataset_id": f"__external__/{base_url}{endpoint}",
             "version":    "live",
         }])
         if task_id:
-            self.metadata_repository.set(dataset_id, version, "sys.produced_by_task", task_id)
+            self.metadata_repository.set(browse_path, version,
+                                         "sys.produced_by_task", task_id)
         if job_id:
-            self.metadata_repository.set(dataset_id, version, "sys.produced_by_job", job_id)
+            self.metadata_repository.set(browse_path, version,
+                                         "sys.produced_by_job", job_id)
 
-        logger.info(f"Materialized {dataset_id}@{version} rows={rows}")
+        logger.info(f"Materialized {browse_path}@{version} rows={rows}")
         return {
-            "dataset_id": dataset_id,
+            "dataset_id": browse_path,
             "version":    version,
             "path":       path,
             "rows":       rows,
             "source_url": f"{base_url}{endpoint}",
         }
 
-    def local_path(self, dataset_id: str, version: str, fmt: str) -> str:
-        safe_id  = dataset_id.replace("/", os.sep)
+    def local_path(self, browse_path: str, version: str, fmt: str) -> str:
+        safe_id  = browse_path.replace("/", os.sep)
         dir_path = os.path.join(self.data_path, safe_id)
         os.makedirs(dir_path, exist_ok=True)
         return os.path.join(dir_path, f"{version}.{fmt}")

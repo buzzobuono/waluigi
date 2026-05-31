@@ -23,7 +23,7 @@ def run():
 
     existing = catalog.list_expectations(dataset_id)
     for exp in existing:
-        catalog._delete(f"/datasets/{dataset_id}/expectations/{exp['id']}")
+        catalog._delete(catalog._ns_url(f"/datasets/{dataset_id}/expectations/{exp['id']}"))
 
     for i, rule in enumerate(rules):
         catalog.add_expectation(

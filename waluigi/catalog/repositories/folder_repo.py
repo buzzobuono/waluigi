@@ -7,13 +7,14 @@ from waluigi.catalog.entities import Dataset
 
 class FolderRepository(BaseRepository):
 
-    def list_folders(self, prefix: str) -> dict:
+    def list_folders(self, namespace: str, prefix: str) -> dict:
         prefix = prefix.rstrip("/") + "/"
         prefix = prefix.lstrip("/")
         with self._conn() as conn:
             rows = conn.execute(
-                text("SELECT * FROM datasets WHERE id LIKE :pat ORDER BY id"),
-                {"pat": f"{prefix}%"},
+                text("SELECT * FROM datasets"
+                     " WHERE namespace = :ns AND id LIKE :pat ORDER BY id"),
+                {"ns": namespace, "pat": f"{prefix}%"},
             ).fetchall()
 
         datasets, sub_prefixes = [], set()

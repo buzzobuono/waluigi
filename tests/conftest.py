@@ -27,10 +27,12 @@ def boss_url():
 def worker_url():
     return WORKER_URL
 
+TEST_NAMESPACE = "test"
+
 @pytest.fixture(scope="module")
 def catalog(catalog_url):
     print(catalog_url)
-    return CatalogClient(url=catalog_url)
+    return CatalogClient(url=catalog_url, namespace=TEST_NAMESPACE)
 
 def _wait_ready(url, proc, name, timeout=10):
     deadline = time.time() + timeout
@@ -79,8 +81,8 @@ def boss_server():
     db_path  = os.path.join(test_dir, "test_boss.db")
 
     env = os.environ.copy()
-    env["WALUIGI_BOSS_PORT"]    = str(BOSS_PORT)
-    env["WALUIGI_BOSS_DB_PATH"] = db_path
+    env["WALUIGI_BOSS_PORT"]   = str(BOSS_PORT)
+    env["WALUIGI_BOSS_DB_URL"] = f"sqlite:///{db_path}"
 
     proc = subprocess.Popen(
         ["wlboss"], env=env,

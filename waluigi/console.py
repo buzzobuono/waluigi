@@ -364,6 +364,10 @@ async def proxy_boss(request: Request, path: str):
 
 @app.api_route("/catalog/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_catalog(request: Request, path: str):
+    denied = _check_boss_namespace(request, path)
+    if denied:
+        return denied
+
     qs      = request.url.query
     url     = f"{CATALOG_URL}/{path}" + (f"?{qs}" if qs else "")
     content = await request.body()

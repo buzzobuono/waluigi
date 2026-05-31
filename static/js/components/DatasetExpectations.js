@@ -1,4 +1,5 @@
 import { api } from '../api.js';
+import { nsStore } from '../store.js';
 import BasePage        from './BasePage.js';
 import BasePanel       from './BasePanel.js';
 import BaseButton      from './BaseButton.js';
@@ -73,7 +74,7 @@ export default {
       pageError.value = null;
       try {
         const [expRes, rulesRes] = await Promise.all([
-          api.datasetExpectations(datasetId.value),
+          api.datasetExpectations(nsStore.selected, datasetId.value),
           api.dqRules(),
         ]);
         expectations.value   = expRes.data   || [];
@@ -112,9 +113,9 @@ export default {
         };
         let res;
         if (expEditId.value !== null) {
-          res = await api.updateExpectation(datasetId.value, expEditId.value, body);
+          res = await api.updateExpectation(nsStore.selected, datasetId.value, expEditId.value, body);
         } else {
-          res = await api.addExpectation(datasetId.value, body);
+          res = await api.addExpectation(nsStore.selected, datasetId.value, body);
         }
         if (res.diagnostic?.result === 'KO') {
           expError.value = res.diagnostic?.messages?.[0] || 'Error saving expectation';
@@ -132,7 +133,7 @@ export default {
     function askDeleteExpectation(exp) {
       confirmExpDeleteRef.value?.ask(
         `Delete expectation "${exp.rule_id}"?`,
-        async (ok) => { if (ok) { await api.deleteExpectation(datasetId.value, exp.id); await load(); } }
+        async (ok) => { if (ok) { await api.deleteExpectation(nsStore.selected, datasetId.value, exp.id); await load(); } }
       );
     }
 

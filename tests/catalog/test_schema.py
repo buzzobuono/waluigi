@@ -20,9 +20,9 @@ def ensure_source(catalog):
 @pytest.fixture
 def dataset_id(catalog):
     uid = str(uuid.uuid4())[:8]
-    id_ = f"test/unit/schema_{uid}"
+    id_ = f"unit/schema_{uid}"
     yield id_
-    try: catalog._delete(f"/datasets/{id_}")
+    try: catalog._delete(catalog._ns_url(f"/datasets/{id_}"))
     except Exception: pass
 
 @pytest.fixture
@@ -40,9 +40,9 @@ def test_schema_inference_on_write(catalog, dataset_id, sample_data):
     with handle.create_version(force=True) as ctx:
         ctx.write(sample_data)
     
-    schema_resp = catalog._get(f"/datasets/{dataset_id}/schema")
-    
-    assert schema_resp["dataset_id"] == dataset_id
+    schema_resp = catalog._get(catalog._ns_url(f"/datasets/{dataset_id}/schema"))
+
+    assert schema_resp["dataset_id"].endswith(dataset_id)
     columns = schema_resp["columns"]
     assert any(c["column_name"] == "email" for c in columns)
     # Lo stato iniziale deve essere 'inferred'
@@ -54,8 +54,8 @@ def test_patch_column_pii_with_warning(catalog, dataset_id, sample_data, caplog)
     with handle.create_version(force=True) as ctx:
         ctx.write(sample_data)
     
-    path = f"/datasets/{dataset_id}/schema/email"
-    
+    path = catalog._ns_url(f"/datasets/{dataset_id}/schema/email")
+
     with caplog.at_level(logging.WARNING):
         resp = catalog._patch(path, json={
             "pii": True,
@@ -77,9 +77,9 @@ def test_approve_column_logic(catalog, dataset_id, sample_data):
         ctx.write(sample_data)
     
     # Approvazione singola
-    catalog._post(f"/datasets/{dataset_id}/schema/id/approve")
-    
-    schema = catalog._get(f"/datasets/{dataset_id}/schema")
+    catalog._post(catalog._ns_url(f"/datasets/{dataset_id}/schema/id/approve"))
+
+    schema = catalog._get(catalog._ns_url(f"/datasets/{dataset_id}/schema"))
     col_id = next(c for c in schema["columns"] if c["column_name"] == "id")
     assert col_id["status"] == "published"
     assert schema["summary"]["published"] == 1
@@ -90,11 +90,11 @@ def test_publish_full_schema(catalog, dataset_id, sample_data):
     with handle.create_version(force=True) as ctx:
         ctx.write(sample_data)
     
-    catalog._post(f"/datasets/{dataset_id}/schema/publish", json={
+    catalog._post(catalog._ns_url(f"/datasets/{dataset_id}/schema/publish"), json={
         "published_by": "tester_bot"
     })
-    
-    schema = catalog._get(f"/datasets/{dataset_id}/schema")
+
+    schema = catalog._get(catalog._ns_url(f"/datasets/{dataset_id}/schema"))
     assert all(c["status"] == "published" for c in schema["columns"])
     assert schema["summary"]["inferred"] == 0
 
@@ -104,15 +104,15 @@ def test_delete_column_from_schema(catalog, dataset_id, sample_data):
     with handle.create_version(force=True) as ctx:
         ctx.write(sample_data)
     
-    catalog._delete(f"/datasets/{dataset_id}/schema/age")
-    
-    schema = catalog._get(f"/datasets/{dataset_id}/schema")
+    catalog._delete(catalog._ns_url(f"/datasets/{dataset_id}/schema/age"))
+
+    schema = catalog._get(catalog._ns_url(f"/datasets/{dataset_id}/schema"))
     assert not any(c["column_name"] == "age" for c in schema["columns"])
 
 
 def test_schema_not_found_errors(catalog):
     with pytest.raises(CatalogError) as exc:
-        catalog._get("/datasets/invalid/path/schema")
+        catalog._get(catalog._ns_url("/datasets/invalid/path/schema"))
     assert "404" in str(exc.value)
 
 
@@ -120,14 +120,14 @@ def test_patch_upsert_logic(catalog, dataset_id):
     """Verifica che il patch crei la colonna se non esiste (upsert)."""
     catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     
-    resp = catalog._patch(f"/datasets/{dataset_id}/schema/new_col", json={
+    resp = catalog._patch(catalog._ns_url(f"/datasets/{dataset_id}/schema/new_col"), json={
         "physical_type": "string",
         "pii": False
     })
-    
+
     assert resp["column_name"] == "new_col"
-    
-    schema = catalog._get(f"/datasets/{dataset_id}/schema")
+
+    schema = catalog._get(catalog._ns_url(f"/datasets/{dataset_id}/schema"))
     assert any(c["column_name"] == "new_col" for c in schema["columns"])
 
 # ── Extended Schema Tests ─────────────────────────────────────────────────────
@@ -139,11 +139,11 @@ def test_schema_summary_counters(catalog, dataset_id, sample_data):
         ctx.write(sample_data) # 3 colonne inferred: id, email, age
 
     # 1. Patch su email: passa da 'inferred' a 'draft' (o simile)
-    catalog._patch(f"/datasets/{dataset_id}/schema/email", json={"pii": True, "pii_type": "direct"})
+    catalog._patch(catalog._ns_url(f"/datasets/{dataset_id}/schema/email"), json={"pii": True, "pii_type": "direct"})
     # 2. Approve su id: passa da 'inferred' a 'published'
-    catalog._post(f"/datasets/{dataset_id}/schema/id/approve")
+    catalog._post(catalog._ns_url(f"/datasets/{dataset_id}/schema/id/approve"))
 
-    schema = catalog._get(f"/datasets/{dataset_id}/schema")
+    schema = catalog._get(catalog._ns_url(f"/datasets/{dataset_id}/schema"))
     summary = schema["summary"]
 
     assert summary["total"] == 3
@@ -168,9 +168,9 @@ def test_patch_multiple_fields(catalog, dataset_id, sample_data):
         "pii_notes": "GDPR level 4"
     }
     
-    catalog._patch(f"/datasets/{dataset_id}/schema/email", json=updates)
-    
-    schema = catalog._get(f"/datasets/{dataset_id}/schema")
+    catalog._patch(catalog._ns_url(f"/datasets/{dataset_id}/schema/email"), json=updates)
+
+    schema = catalog._get(catalog._ns_url(f"/datasets/{dataset_id}/schema"))
     col = next(c for c in schema["columns"] if c["column_name"] == "email")
     
     for key, value in updates.items():
@@ -184,16 +184,16 @@ def test_set_in_review_logic(catalog, dataset_id, sample_data):
         ctx.write(sample_data)
 
     # Stato iniziale: tutto pubblicato
-    catalog._post(f"/datasets/{dataset_id}/schema/publish", json={"published_by": "admin"})
+    catalog._post(catalog._ns_url(f"/datasets/{dataset_id}/schema/publish"), json={"published_by": "admin"})
 
     # Facciamo una modifica. Il service chiama db.set_in_review(dataset_id)
-    catalog._patch(f"/datasets/{dataset_id}/schema/age", json={"description": "Nuova descrizione"})
+    catalog._patch(catalog._ns_url(f"/datasets/{dataset_id}/schema/age"), json={"description": "Nuova descrizione"})
 
-    # Se la colonna resta 'published', verifichiamo il comportamento del dataset 
+    # Se la colonna resta 'published', verifichiamo il comportamento del dataset
     # o la presenza di warning che indicano la necessità di revisione.
-    # Dato che il service non cambia lo stato della colonna in 'draft', 
+    # Dato che il service non cambia lo stato della colonna in 'draft',
     # controlliamo che la colonna sia stata aggiornata correttamente.
-    schema = catalog._get(f"/datasets/{dataset_id}/schema")
+    schema = catalog._get(catalog._ns_url(f"/datasets/{dataset_id}/schema"))
     col_age = next(c for c in schema["columns"] if c["column_name"] == "age")
     
     assert col_age["description"] == "Nuova descrizione"
@@ -208,14 +208,14 @@ def test_delete_and_re_infer_column(catalog, dataset_id, sample_data):
         ctx.write(sample_data)
 
     # Eliminiamo 'age' dallo schema
-    catalog._delete(f"/datasets/{dataset_id}/schema/age")
-    
+    catalog._delete(catalog._ns_url(f"/datasets/{dataset_id}/schema/age"))
+
     # Riscriviamo i dati (nuova versione)
     with handle.create_version(force=True) as ctx:
         ctx.write(sample_data)
-        
+
     # La colonna dovrebbe essere stata re-inferita
-    schema = catalog._get(f"/datasets/{dataset_id}/schema")
+    schema = catalog._get(catalog._ns_url(f"/datasets/{dataset_id}/schema"))
     assert any(c["column_name"] == "age" for c in schema["columns"])
 
 
@@ -224,8 +224,8 @@ def test_approve_nonexistent_column_fails(catalog, dataset_id, sample_data):
     catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     
     with pytest.raises(CatalogError) as exc:
-        catalog._post(f"/datasets/{dataset_id}/schema/non_existent/approve")
-    
+        catalog._post(catalog._ns_url(f"/datasets/{dataset_id}/schema/non_existent/approve"))
+
     assert "404" in str(exc.value)
     assert "Column not found" in str(exc.value)
 
@@ -236,9 +236,9 @@ def test_schema_integrity_after_publish(catalog, dataset_id, sample_data):
     with handle.create_version(force=True) as ctx:
         ctx.write(sample_data)
         
-    catalog._post(f"/datasets/{dataset_id}/schema/publish", json={"published_by": "boss"})
-    
-    schema = catalog._get(f"/datasets/{dataset_id}/schema")
+    catalog._post(catalog._ns_url(f"/datasets/{dataset_id}/schema/publish"), json={"published_by": "boss"})
+
+    schema = catalog._get(catalog._ns_url(f"/datasets/{dataset_id}/schema"))
     # Ogni colonna deve avere uno username e una data di aggiornamento
     for col in schema["columns"]:
         assert col["status"] == "published"

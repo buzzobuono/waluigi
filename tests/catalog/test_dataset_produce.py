@@ -22,12 +22,12 @@ def sample_rows():
 # ── Local (parquet) ───────────────────────────────────────────────────────────
 
 SOURCE_LOCAL   = "produce_local"
-DATASET_LOCAL  = "test/produce/sales_local"
+DATASET_LOCAL  = "produce/sales_local"
 
 @pytest.fixture(autouse=True)
 def cleanup_local(catalog):
     def _clean():
-        try: catalog._delete(f"/datasets/{DATASET_LOCAL}")
+        try: catalog._delete(catalog._ns_url(f"/datasets/{DATASET_LOCAL}"))
         except Exception: pass
         try: catalog.delete_source(SOURCE_LOCAL)
         except Exception: pass
@@ -130,7 +130,7 @@ def test_produce_local_version_metadata_stored(catalog, sample_rows):
 # ── SQLite (sql format) ───────────────────────────────────────────────────────
 
 SOURCE_SQL    = "produce_sqlite"
-DATASET_SQL   = "test/produce/sales_sqlite"
+DATASET_SQL   = "produce/sales_sqlite"
 
 @pytest.fixture
 def sqlite_url():
@@ -142,7 +142,7 @@ def sqlite_url():
 @pytest.fixture(autouse=True)
 def cleanup_sql(catalog):
     def _clean():
-        try: catalog._delete(f"/datasets/{DATASET_SQL}")
+        try: catalog._delete(catalog._ns_url(f"/datasets/{DATASET_SQL}"))
         except Exception: pass
         try: catalog.delete_source(SOURCE_SQL)
         except Exception: pass
@@ -176,4 +176,4 @@ def test_produce_sql_version_committed(catalog, sqlite_url, sample_rows):
     versions = catalog.list_versions(DATASET_SQL)
     assert len(versions) == 1
     assert versions[0]["status"] == "committed"
-    assert versions[0]["dataset_id"] == DATASET_SQL
+    assert versions[0]["dataset_id"].endswith(DATASET_SQL)

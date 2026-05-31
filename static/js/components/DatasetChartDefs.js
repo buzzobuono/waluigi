@@ -1,4 +1,5 @@
 import { api } from '../api.js';
+import { nsStore } from '../store.js';
 import BasePage        from './BasePage.js';
 import BasePanel       from './BasePanel.js';
 import BaseButton      from './BaseButton.js';
@@ -53,7 +54,7 @@ export default {
       loading.value   = true;
       pageError.value = null;
       try {
-        const res = await api.datasetCharts(datasetId.value);
+        const res = await api.datasetCharts(nsStore.selected, datasetId.value);
         charts.value = res.data || [];
       } catch (e) {
         pageError.value = e.message;
@@ -92,9 +93,9 @@ export default {
         const body = { title: chartForm.value.title, spec };
         let res;
         if (chartEditId.value !== null) {
-          res = await api.updateChart(datasetId.value, chartEditId.value, body);
+          res = await api.updateChart(nsStore.selected, datasetId.value, chartEditId.value, body);
         } else {
-          res = await api.addChart(datasetId.value, body);
+          res = await api.addChart(nsStore.selected, datasetId.value, body);
         }
         if (res.diagnostic?.result === 'KO') {
           chartError.value = res.diagnostic?.messages?.[0] || 'Error';
@@ -112,7 +113,7 @@ export default {
     function askDeleteChart(chart) {
       confirmChartDel.value?.ask(
         `Delete chart "${chart.title}"?`,
-        async (ok) => { if (ok) { await api.deleteChart(datasetId.value, chart.id); await load(); } }
+        async (ok) => { if (ok) { await api.deleteChart(nsStore.selected, datasetId.value, chart.id); await load(); } }
       );
     }
 

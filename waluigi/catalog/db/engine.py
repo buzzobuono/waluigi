@@ -1,9 +1,9 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    create_engine, event, text,
-    MetaData, Table, Column, Text, Integer, Float,
-    PrimaryKeyConstraint, UniqueConstraint, ForeignKey,
+    create_engine, event,
+    MetaData, Table, Column, Text, Integer, Float, DateTime,
+    PrimaryKeyConstraint, UniqueConstraint, ForeignKeyConstraint,
 )
 
 
@@ -18,29 +18,38 @@ def _user() -> str:
 _meta = MetaData()
 
 _t_sources = Table("sources", _meta,
-    Column("id",          Text, primary_key=True),
+    Column("namespace",   Text, nullable=False),
+    Column("id",          Text, nullable=False),
     Column("description", Text),
     Column("type",        Text, nullable=False),
     Column("config",      Text, nullable=False, default="{}"),
     Column("username",    Text, nullable=False),
     Column("createdate",  Text, nullable=False),
     Column("updatedate",  Text, nullable=False),
+    PrimaryKeyConstraint("namespace", "id"),
 )
 
 _t_datasets = Table("datasets", _meta,
-    Column("id",          Text, primary_key=True),
+    Column("namespace",   Text, nullable=False),
+    Column("id",          Text, nullable=False),
     Column("format",      Text, nullable=False),
     Column("description", Text),
     Column("status",      Text, nullable=False, default="draft"),
-    Column("source_id",   Text, ForeignKey("sources.id")),
+    Column("source_id",   Text, nullable=False),
     Column("dq_suite",    Text),
     Column("username",    Text, nullable=False),
     Column("createdate",  Text, nullable=False),
     Column("updatedate",  Text, nullable=False),
     Column("approved_by", Text),
     Column("approved_at", Text),
+    ForeignKeyConstraint(
+        ["namespace", "source_id"],
+        ["sources.namespace", "sources.id"],
+    ),
+    PrimaryKeyConstraint("namespace", "id"),
 )
 
+# Sub-tables use dataset_id = browse_path = namespace/id (assembled by service)
 _t_versions = Table("versions", _meta,
     Column("dataset_id",  Text, nullable=False),
     Column("version",     Text, nullable=False),
@@ -147,14 +156,4 @@ def create_catalog_engine(url: str):
             dbapi_conn.execute("PRAGMA foreign_keys=ON")
 
     _meta.create_all(engine)
-    for ddl in (
-        "ALTER TABLE datasets ADD COLUMN approved_by TEXT",
-        "ALTER TABLE datasets ADD COLUMN approved_at TEXT",
-    ):
-        try:
-            with engine.begin() as conn:
-                conn.execute(text(ddl))
-        except Exception:
-            pass
-
     return engine

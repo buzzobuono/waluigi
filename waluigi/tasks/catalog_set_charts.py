@@ -27,9 +27,9 @@ def run():
         spec  = chart.get("spec", {})
         body  = {"key": key, "title": title, "spec": spec, "position": i}
         if key in existing:
-            catalog._patch(f"/datasets/{dataset_id}/charts/{existing[key]['id']}", json=body)
+            catalog._patch(catalog._ns_url(f"/datasets/{dataset_id}/charts/{existing[key]['id']}"), json=body)
         else:
-            catalog._post(f"/datasets/{dataset_id}/charts", json=body)
+            catalog._post(catalog._ns_url(f"/datasets/{dataset_id}/charts"), json=body)
 
     print(f"Dataset '{dataset_id}': {len(charts)} chart(s) set")
 

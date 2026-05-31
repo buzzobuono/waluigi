@@ -1,4 +1,5 @@
 import { api }      from '../api.js';
+import { nsStore } from '../store.js';
 import BasePage     from './BasePage.js';
 import BaseButton   from './BaseButton.js';
 import BasePanel    from './BasePanel.js';
@@ -32,7 +33,7 @@ export default {
       charts.value  = [];
       renders.value = {};
       try {
-        const res = await api.datasetCharts(datasetId.value);
+        const res = await api.datasetCharts(nsStore.selected, datasetId.value);
         charts.value = res.data || [];
         await Promise.all(charts.value.map(chart => renderOne(chart)));
       } catch (e) {
@@ -45,7 +46,7 @@ export default {
     async function renderOne(chart) {
       renders.value[chart.key] = { option: null, loading: true, error: null };
       try {
-        const res = await api.renderChartByKey(datasetId.value, chart.key, version.value || undefined);
+        const res = await api.renderChartByKey(nsStore.selected, datasetId.value, chart.key, version.value || undefined);
         renders.value[chart.key] = { option: res.data?.option ?? null, loading: false, error: null };
       } catch (e) {
         renders.value[chart.key] = { option: null, loading: false, error: e.message };

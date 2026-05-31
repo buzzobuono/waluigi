@@ -40,52 +40,62 @@ class CatalogClient:
 
     Typical usage::
 
-        catalog = CatalogClient()
+        catalog = CatalogClient()   # reads WALUIGI_CATALOG_URL and WALUIGI_CATALOG_NAMESPACE
 
-        # Create/upsert a dataset, then configure and write a new version
         handle = catalog.create_dataset("sales/raw", format="parquet", source_id="local")
-        handle.set_expectations([{"rule_id": "expect_column_values_to_not_be_null", "inputs": {"x": "this.col"}}])
-        handle.set_chart("revenue_by_date", "Revenue by date", spec={...})
-
         with handle.create_version(metadata={"date": "2026-01-01"}) as writer:
             writer.write(df)
 
-        # Read a dataset (latest committed version)
         reader = catalog.read_dataset("sales/raw")
         df = reader.read()
     """
 
-    def __init__(self, url: str = None):
+    def __init__(self, url: str = None, namespace: str = None):
         self.url = (
             url
             or os.environ.get("WALUIGI_CATALOG_URL", "http://localhost:9000")
         ).rstrip("/")
+        self._namespace = (
+            namespace
+            or os.environ.get("WALUIGI_CATALOG_NAMESPACE", "")
+        )
         self._task_id = os.environ.get("WALUIGI_TASK_ID", "unknown")
         self._job_id  = os.environ.get("WALUIGI_JOB_ID",  "unknown")
         self._http    = HttpClient(self.url)
+
+    def _ns(self) -> str:
+        if not self._namespace:
+            raise CatalogError(
+                "WALUIGI_CATALOG_NAMESPACE is not set — "
+                "pass namespace= to CatalogClient() or set the env var"
+            )
+        return self._namespace
+
+    def _ns_url(self, suffix: str = "") -> str:
+        return f"/namespaces/{self._ns()}{suffix}"
 
     # ── BROWSE ────────────────────────────────────────────────────────────────
 
     def list_folders(self, prefix: str = "") -> dict:
         """List datasets and virtual sub-prefixes under a path prefix."""
-        return self._get(f"/folders/{prefix}/")
+        return self._get(self._ns_url(f"/folders/{prefix}/"))
 
     # ── SOURCES ───────────────────────────────────────────────────────────────
 
     def list_sources(self) -> List[dict]:
-        return self._get("/sources")
+        return self._get(self._ns_url("/sources"))
 
     def get_source(self, id: str) -> dict:
-        return self._get(f"/sources/{id}")
+        return self._get(self._ns_url(f"/sources/{id}"))
 
     def create_source(self, request: SourceCreateRequest) -> dict:
-        return self._post("/sources", json=_model_dump(request))
+        return self._post(self._ns_url("/sources"), json=_model_dump(request))
 
     def update_source(self, id: str, updates) -> dict:
-        return self._patch(f"/sources/{id}", json=_model_dump(updates))
+        return self._patch(self._ns_url(f"/sources/{id}"), json=_model_dump(updates))
 
     def delete_source(self, id: str) -> dict:
-        return self._delete(f"/sources/{id}")
+        return self._delete(self._ns_url(f"/sources/{id}"))
 
     # ── DATASETS ──────────────────────────────────────────────────────────────
 
@@ -96,25 +106,16 @@ class CatalogClient:
             params["status"] = status.value if isinstance(status, DatasetStatus) else status
         if description:
             params["description"] = description
-        return self._get("/datasets", params=params or None)
+        return self._get(self._ns_url("/datasets"), params=params or None)
 
     def get_dataset(self, id: str) -> dict:
-        return self._get(f"/datasets/{id}")
+        return self._get(self._ns_url(f"/datasets/{id}"))
 
     def create_dataset(self, id: str, format: Union[str, DatasetFormat] = "parquet",
                        source_id: str = "", description: str = "") -> "DatasetHandle":
-        """Create or upsert a dataset and return a handle for further operations.
-
-        Call ``.set_expectations()`` and ``.set_chart()`` on the handle to
-        configure the dataset, then ``.create_version()`` to write data::
-
-            handle = catalog.create_dataset("my/dataset", format="parquet", source_id="local")
-            handle.set_expectations([...])
-            with handle.create_version(metadata={"date": "2026-01-01"}) as writer:
-                writer.write(df)
-        """
+        """Create or upsert a dataset and return a handle for further operations."""
         fmt = DatasetFormat[format.upper()] if isinstance(format, str) else format
-        self._post("/datasets", json=_model_dump(DatasetCreateRequest(
+        self._post(self._ns_url("/datasets"), json=_model_dump(DatasetCreateRequest(
             id=id,
             format=fmt,
             source_id=source_id,
@@ -125,25 +126,26 @@ class CatalogClient:
     # ── VERSIONS ──────────────────────────────────────────────────────────────
 
     def list_versions(self, dataset_id: str) -> List[dict]:
-        return self._get(f"/datasets/{dataset_id}/versions")
+        return self._get(self._ns_url(f"/datasets/{dataset_id}/versions"))
 
     def get_version_metadata(self, dataset_id: str, version: str) -> dict:
-        return self._get(f"/datasets/{dataset_id}/versions/{version}/metadata")
+        return self._get(
+            self._ns_url(f"/datasets/{dataset_id}/versions/{version}/metadata"))
 
     # ── LINEAGE ───────────────────────────────────────────────────────────────
 
     def get_lineage(self, dataset_id: str, version: str) -> dict:
-        return self._get(f"/datasets/{dataset_id}/lineage/{version}")
+        return self._get(self._ns_url(f"/datasets/{dataset_id}/lineage/{version}"))
 
     # ── EXPECTATIONS (DQ config) ───────────────────────────────────────────────
 
     def list_expectations(self, dataset_id: str) -> List[dict]:
-        return self._get(f"/datasets/{dataset_id}/expectations")
+        return self._get(self._ns_url(f"/datasets/{dataset_id}/expectations"))
 
     def add_expectation(self, dataset_id: str, rule_id: str,
                         inputs: dict = None, params: dict = None,
                         tolerance: float = 1.0, position: int = 0) -> dict:
-        return self._post(f"/datasets/{dataset_id}/expectations", json={
+        return self._post(self._ns_url(f"/datasets/{dataset_id}/expectations"), json={
             "rule_id":   rule_id,
             "inputs":    inputs or {},
             "params":    params or {},
@@ -154,7 +156,7 @@ class CatalogClient:
     # ── CHARTS ────────────────────────────────────────────────────────────────
 
     def list_charts(self, dataset_id: str) -> List[dict]:
-        return self._get(f"/datasets/{dataset_id}/charts")
+        return self._get(self._ns_url(f"/datasets/{dataset_id}/charts"))
 
     # ── DATA OPS ──────────────────────────────────────────────────────────────
 
@@ -233,15 +235,10 @@ class DatasetHandle:
         self.source_id = source_id
 
     def set_expectations(self, rules: List[dict]) -> List[dict]:
-        """Replace all DQ expectations for this dataset.
-
-        Expectations are evaluated automatically when a new version is committed.
-        Call this before ``create_version()`` so DQ runs at commit time.
-
-        Each rule: {"rule_id": str, "inputs": dict, "params": dict, "tolerance": float}
-        """
+        """Replace all DQ expectations for this dataset."""
         for exp in self._client.list_expectations(self.id):
-            self._client._delete(f"/datasets/{self.id}/expectations/{exp['id']}")
+            self._client._delete(
+                self._client._ns_url(f"/datasets/{self.id}/expectations/{exp['id']}"))
         return [
             self._client.add_expectation(
                 self.id,
@@ -257,29 +254,26 @@ class DatasetHandle:
     def set_chart(self, key: str, title: str, spec: dict,
                   position: int = 0) -> dict:
         """Create or update a chart definition for this dataset (upsert by key)."""
-        existing = {c["key"]: c for c in self._client._get(f"/datasets/{self.id}/charts")}
+        existing = {c["key"]: c for c in self._client._get(
+            self._client._ns_url(f"/datasets/{self.id}/charts"))}
         body = {"key": key, "title": title, "spec": spec, "position": position}
         if key in existing:
             return self._client._patch(
-                f"/datasets/{self.id}/charts/{existing[key]['id']}", json=body
+                self._client._ns_url(
+                    f"/datasets/{self.id}/charts/{existing[key]['id']}"),
+                json=body,
             )
-        return self._client._post(f"/datasets/{self.id}/charts", json=body)
+        return self._client._post(
+            self._client._ns_url(f"/datasets/{self.id}/charts"), json=body)
 
     def create_version(self, metadata: Dict[str, Any] = None,
                        inputs: List[dict] = None,
                        force: bool = False) -> "DatasetWriter":
-        """Open a DatasetWriter to write a new dataset version (reserve → write → commit).
-
-        DQ expectations defined via ``.set_expectations()`` are evaluated
-        automatically at commit time. Use as a context manager::
-
-            with handle.create_version(metadata={"date": "2026-01-01"}) as writer:
-                writer.write(df)
-        """
+        """Open a DatasetWriter to write a new dataset version."""
         metadata = {k: str(v) for k, v in (metadata or {}).items()}
         inputs   = inputs or []
         result   = self._client._post(
-            f"/datasets/{self.id}/_reserve",
+            self._client._ns_url(f"/datasets/{self.id}/_reserve"),
             json={"metadata": metadata, "force": force},
         )
         source    = self._client.get_source(result["source_id"])
@@ -345,7 +339,8 @@ class DatasetWriter:
 
     def _commit(self):
         self._client._post(
-            f"/datasets/{self.dataset_id}/_commit/{self.version}",
+            self._client._ns_url(
+                f"/datasets/{self.dataset_id}/_commit/{self.version}"),
             json={
                 "inputs":   self.inputs,
                 "metadata": self.metadata,
@@ -357,7 +352,8 @@ class DatasetWriter:
     def _fail(self):
         try:
             self._client._post(
-                f"/datasets/{self.dataset_id}/_fail/{self.version}",
+                self._client._ns_url(
+                    f"/datasets/{self.dataset_id}/_fail/{self.version}"),
                 json={},
             )
         except Exception:

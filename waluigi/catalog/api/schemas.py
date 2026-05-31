@@ -8,12 +8,12 @@ class SourceType(str, Enum):
     SQL = "sql"
     SFTP = "sftp"
     API = "api"
-    
+
 class SourceCreateRequest(BaseModel):
     id:          str            = Field(...,  example="pg-dwh")
     type:        SourceType     = Field(...,  example=SourceType.SQL)
     config:      Dict[str, Any] = Field(default_factory=dict)
-    description: Optional[str] =  Field(...,  example="PostgreSQL DWH Catalog")
+    description: Optional[str] = Field(None, example="PostgreSQL DWH Catalog")
 
 class SourceUpdateRequest(BaseModel):
     type:        Optional[SourceType]     = None
@@ -26,44 +26,44 @@ class DatasetFormat(str, Enum):
     TSV     = "tsv"
     JSON    = "json"
     SQL     = "sql"
-    
+
 class DatasetStatus(str, Enum):
     DRAFT = "draft"
     IN_REVIEW = "in_review"
     APPROVED = "approved"
     DEPRECATED = "deprecated"
-    
+
 class DatasetCreateRequest(BaseModel):
-    id:           str            = Field(...,  example="sales/raw/sales_raw")
+    id:           str            = Field(...,  example="test/ex/dataset_raw")
     format:       DatasetFormat  = Field(...,  example=DatasetFormat.CSV)
-    description:  str            = Field(...,  example="Dataset description")
+    description:  str            = Field("",   example="Dataset description")
     status:       DatasetStatus  = Field(DatasetStatus.DRAFT, example=DatasetStatus.DRAFT)
-    source_id:    Optional[str]  = Field(None,  example="pg-dwh")
-    dq_suite:     Optional[str]  = Field(None,  example="/rules/suites/sales_suite.yaml")
+    source_id:    str            = Field(...,  example="pg-dwh")
+    dq_suite:     Optional[str]  = Field(None, example="/rules/suites/sales_suite.yaml")
 
 class DatasetUpdateRequest(BaseModel):
-    description:  Optional[str]         = None
+    description:  Optional[str]           = None
     status:       Optional[DatasetStatus] = None
-    dq_suite:     Optional[str]         = None
-        
+    dq_suite:     Optional[str]           = None
+
 class ReserveRequest(BaseModel):
     metadata: Dict[str, str] = Field(default_factory=dict)
     force:    bool           = Field(False, description="Skip metadata-based dedup and always create a new version")
-        
+
 class LineageRef(BaseModel):
-    dataset_id: str = Field(..., example="finance/erp/fatture")
+    dataset_id: str = Field(..., example="analytics/finance/erp/fatture")
     version:    str = Field(..., example="2026-04-11T10:00:00+00:00")
-        
+
 class CommitRequest(BaseModel):
-    metadata: Dict[str, str]  = Field(default_factory=dict)
+    metadata: Dict[str, str]   = Field(default_factory=dict)
     inputs:   List[LineageRef] = Field(default_factory=list)
     task_id:  Optional[str]   = None
     job_id:   Optional[str]   = None
-        
+
 class MetadataSetRequest(BaseModel):
     key:   str = Field(..., example="source")
     value: str = Field(..., example="SAP_EXTRACT")
-    
+
 class SchemaColumnPatch(BaseModel):
     logical_type: Optional[str]       = None
     nullable:     Optional[bool]      = None
@@ -72,8 +72,6 @@ class SchemaColumnPatch(BaseModel):
     pii_notes:    Optional[str]       = None
     description:  Optional[str]       = None
     tags:         Optional[List[str]] = None
-
-#----------
 
 
 class VirtualRegisterRequest(BaseModel):
@@ -88,16 +86,14 @@ class VirtualRegisterRequest(BaseModel):
     tags:         Optional[List[str]] = None
 
 
-
-
 class SchemaPublishRequest(BaseModel):
     published_by: str = Field("anonymous", example="mario.rossi")
 
 
 class ChartCreateRequest(BaseModel):
-    key:      str                = Field(...,  example="revenue_by_category")
-    title:    str                = Field(...,  example="Revenue by Category")
-    spec:     Dict[str, Any]     = Field(...,  example={"type": "bar", "x": {"field": "category"}, "y": {"field": "revenue", "agg": "sum"}})
+    key:      str                = Field(..., example="revenue_by_category")
+    title:    str                = Field(..., example="Revenue by Category")
+    spec:     Dict[str, Any]     = Field(..., example={"type": "bar", "x": {"field": "category"}, "y": {"field": "revenue", "agg": "sum"}})
     position: int                = Field(0)
 
 class ChartUpdateRequest(BaseModel):
@@ -122,13 +118,12 @@ class ExpectationUpdateRequest(BaseModel):
 
 
 class ApproveRequest(BaseModel):
-    approved_by: str  = Field(...,  example="mario.rossi")
-    notes:       str  = Field("",   example="PII verified, schema confirmed")
-
-
+    approved_by: str = Field(...,  example="mario.rossi")
+    notes:       str = Field("",   example="PII verified, schema confirmed")
 
 
 class MaterializeRequest(BaseModel):
+    source_id:    str            = Field("local", example="local")
     base_url:     str            = Field(..., example="https://api.example.com")
     endpoint:     str            = Field(..., example="/v1/orders")
     params:       Dict[str, Any] = Field(default_factory=dict)
@@ -141,13 +136,15 @@ class MaterializeRequest(BaseModel):
 class ScanRequest(BaseModel):
     data_path: Optional[str] = None
     prefix:    Optional[str] = None
+    source_id: str           = Field("local")
 
 
 # ---------------------------------------------------------------------------
-# Response models — define the public API contract independently of DB schema
+# Response models
 # ---------------------------------------------------------------------------
 
 class SourceResponse(BaseModel):
+    namespace:   str
     id:          str
     type:        str
     config:      Dict[str, Any]
@@ -158,18 +155,19 @@ class SourceResponse(BaseModel):
     @classmethod
     def from_entity(cls, e) -> "SourceResponse":
         return cls(
-            id=e.id, type=e.type, config=e.config,
+            namespace=e.namespace, id=e.id, type=e.type, config=e.config,
             description=e.description,
             createdate=e.createdate, updatedate=e.updatedate,
         )
 
 
 class DatasetResponse(BaseModel):
+    namespace:   str
     id:          str
     format:      str
     description: Optional[str]
     status:      str
-    source_id:   Optional[str]
+    source_id:   str
     dq_suite:    Optional[str]
     createdate:  str
     updatedate:  str
@@ -177,8 +175,9 @@ class DatasetResponse(BaseModel):
     @classmethod
     def from_entity(cls, e) -> "DatasetResponse":
         return cls(
-            id=e.id, format=e.format, description=e.description,
-            status=e.status, source_id=e.source_id, dq_suite=e.dq_suite,
+            namespace=e.namespace, id=e.id, format=e.format,
+            description=e.description, status=e.status,
+            source_id=e.source_id, dq_suite=e.dq_suite,
             createdate=e.createdate, updatedate=e.updatedate,
         )
 
@@ -219,4 +218,3 @@ class ExpectationResponse(BaseModel):
             tolerance=e.tolerance, position=e.position,
             createdate=e.createdate, updatedate=e.updatedate,
         )
-

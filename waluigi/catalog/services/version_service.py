@@ -44,37 +44,44 @@ class VersionService:
         self.data_path               = data_path
         self.dq_service              = dq_service
 
-    def list_versions(self, dataset_id: str) -> list[VersionResponse]:
-        if not self.datasets_repository.exists(dataset_id):
+    def list_versions(self, namespace: str,
+                      dataset_id: str) -> list[VersionResponse]:
+        if not self.datasets_repository.exists(namespace, dataset_id):
             raise ValueError("Dataset not found")
-        return [VersionResponse.from_entity(v) for v in self.versions_repository.list(dataset_id)]
+        browse_path = f"{namespace}/{dataset_id}"
+        return [VersionResponse.from_entity(v)
+                for v in self.versions_repository.list(browse_path)]
 
-    def deprecate(self, dataset_id: str, version: str) -> dict:
-        if not self.versions_repository.deprecate(dataset_id, version):
+    def deprecate(self, namespace: str, dataset_id: str, version: str) -> dict:
+        browse_path = f"{namespace}/{dataset_id}"
+        if not self.versions_repository.deprecate(browse_path, version):
             raise ValueError("Version not found")
-        logger.info(f"Deprecated {dataset_id}@{version}")
-        return {"dataset_id": dataset_id, "version": version, "status": "deprecated"}
+        logger.info(f"Deprecated {browse_path}@{version}")
+        return {"dataset_id": browse_path, "version": version,
+                "status": "deprecated"}
 
-    def reserve(self, dataset_id: str, metadata: dict | None = None,
+    def reserve(self, namespace: str, dataset_id: str,
+                metadata: dict | None = None,
                 force: bool = False) -> tuple[dict, bool]:
-        dataset = self.datasets_repository.get(dataset_id)
+        dataset = self.datasets_repository.get(namespace, dataset_id)
         if not dataset:
             raise ValueError("Dataset not found")
-        source = self.sources_repository.get(dataset.source_id)
+        browse_path = f"{namespace}/{dataset_id}"
+        source = self.sources_repository.get(namespace, dataset.source_id)
         if not source:
             raise ValueError(f"Source '{dataset.source_id}' not found")
 
         if not force and metadata:
             existing = self.versions_repository.find_by_metadata(
-                dataset_id, metadata,
+                browse_path, metadata,
                 lambda did, ver: self.metadata_repository.get(did, ver),
             )
             if existing:
-                msg = (f"Skipped {dataset_id} new version creation because of "
+                msg = (f"Skipped {browse_path} new version creation because of "
                        f"identical metadata to {existing.version} version")
                 logger.info(msg)
                 return {
-                    "dataset_id": dataset_id,
+                    "dataset_id": browse_path,
                     "version":    existing.version,
                     "source_id":  source.id,
                     "location":   existing.location,
@@ -85,12 +92,12 @@ class VersionService:
         connector = ConnectorFactory.get(source.type, source.config)
         version   = _version_id()
         location  = connector.resolve_location(
-            dataset_id, version, dataset.format, self.data_path)
-        if not self.versions_repository.reserve(dataset_id, version, location):
+            browse_path, version, dataset.format, self.data_path)
+        if not self.versions_repository.reserve(browse_path, version, location):
             raise ValueError("Version already exists")
-        logger.info(f"Reserved {dataset_id}@{version}")
+        logger.info(f"Reserved {browse_path}@{version}")
         return {
-            "dataset_id": dataset_id,
+            "dataset_id": browse_path,
             "version":    version,
             "source_id":  source.id,
             "location":   location,
@@ -98,19 +105,20 @@ class VersionService:
         }, False
 
     @atomic
-    def commit(self, dataset_id: str, version: str,
+    def commit(self, namespace: str, dataset_id: str, version: str,
                metadata: dict | None = None,
                task_id: str | None = None,
                job_id: str | None = None,
                inputs: list | None = None) -> tuple[dict, list]:
-        dataset = self.datasets_repository.get(dataset_id)
+        dataset = self.datasets_repository.get(namespace, dataset_id)
         if not dataset:
             raise ValueError("Dataset not found")
+        browse_path = f"{namespace}/{dataset_id}"
 
-        source    = self.sources_repository.get(dataset.source_id)
+        source    = self.sources_repository.get(namespace, dataset.source_id)
         connector = ConnectorFactory.get(source.type, source.config)
 
-        record = self.versions_repository.get(dataset_id, version)
+        record = self.versions_repository.get(browse_path, version)
         if not record:
             raise ValueError("Version not found")
         if record.status != "reserved":
@@ -121,85 +129,90 @@ class VersionService:
             raise ValueError(f"Dataset Version not found at: {location}")
 
         try:
-            if not self.versions_repository.commit(dataset_id, version):
+            if not self.versions_repository.commit(browse_path, version):
                 raise RuntimeError("commit returned False")
 
             for k, v in (metadata or {}).items():
-                self.metadata_repository.set(dataset_id, version, k, v)
+                self.metadata_repository.set(browse_path, version, k, v)
             if task_id:
-                self.metadata_repository.set(dataset_id, version, "sys.produced_by_task", task_id)
+                self.metadata_repository.set(browse_path, version,
+                                             "sys.produced_by_task", task_id)
             if job_id:
-                self.metadata_repository.set(dataset_id, version, "sys.produced_by_job", job_id)
+                self.metadata_repository.set(browse_path, version,
+                                             "sys.produced_by_job", job_id)
 
             inferred = connector.infer_schema(location)
-            self.schema_repository.upsert_columns(dataset_id, inferred)
-            diff = self.schema_repository.diff_against_inferred(dataset_id, inferred)
+            self.schema_repository.upsert_columns(browse_path, inferred)
+            diff = self.schema_repository.diff_against_inferred(browse_path, inferred)
 
             if inputs:
-                self.lineage_repository.insert(dataset_id, version, inputs)
+                prefixed = [
+                    {"dataset_id": f"{namespace}/{i['dataset_id']}", "version": i["version"]}
+                    for i in inputs
+                ]
+                self.lineage_repository.insert(browse_path, version, prefixed)
 
             dq_result    = None
-            expectations = self.expectations_repository.list(dataset_id)
+            expectations = self.expectations_repository.list(browse_path)
             if expectations and self.dq_service:
                 dq_result = self.dq_service.run_on_commit(
-                    dataset_id, version, connector, location,
+                    browse_path, version, connector, location,
                     dataset.format, expectations,
                 )
 
-            logger.info(f"Committed {dataset_id}@{version}")
+            logger.info(f"Committed {browse_path}@{version}")
 
-            data     = {"dataset_id": dataset_id, "version": version,
+            data     = {"dataset_id": browse_path, "version": version,
                         "location": location, "dq": dq_result}
             warnings = diff["breaking"] + diff["warnings"]
             if diff["breaking"]:
-                msg = f"Schema breaking changes detected on {dataset_id}@{version}"
+                msg = f"Schema breaking changes detected on {browse_path}@{version}"
                 logger.warning(msg)
                 warnings = [msg] + warnings
             return data, warnings
 
         except Exception as e:
-            msg = f"Failed to commit {dataset_id}@{version}: {e}"
+            msg = f"Failed to commit {browse_path}@{version}: {e}"
             logger.error(msg)
             try:
-                self.versions_repository.delete(dataset_id, version)
+                self.versions_repository.delete(browse_path, version)
                 connector.delete(location)
                 logger.info(f"Cleanup: deleted orphaned location {location}")
             except Exception as cleanup_err:
                 logger.warning(f"Failed to cleanup {location}: {cleanup_err}")
             raise RuntimeError(msg) from e
 
-    def fail(self, dataset_id: str, version: str) -> dict:
-        dataset = self.datasets_repository.get(dataset_id)
+    def fail(self, namespace: str, dataset_id: str, version: str) -> dict:
+        dataset = self.datasets_repository.get(namespace, dataset_id)
         if not dataset:
             raise ValueError("Dataset not found")
-        source    = self.sources_repository.get(dataset.source_id)
+        browse_path = f"{namespace}/{dataset_id}"
+        source    = self.sources_repository.get(namespace, dataset.source_id)
         connector = ConnectorFactory.get(source.type, source.config)
-        record    = self.versions_repository.get(dataset_id, version)
+        record    = self.versions_repository.get(browse_path, version)
         if not record:
             raise ValueError("Version not found")
         location = record.location
-        self.versions_repository.fail(dataset_id, version)
+        self.versions_repository.fail(browse_path, version)
         try:
             connector.delete(location)
-            self.versions_repository.delete(dataset_id, version)
+            self.versions_repository.delete(browse_path, version)
             logger.info(f"Cleanup: deleted orphaned location {location}")
         except Exception as cleanup_err:
             logger.warning(f"Failed to cleanup {location}: {cleanup_err}")
-        return {"dataset_id": dataset_id, "version": version, "status": "failed"}
+        return {"dataset_id": browse_path, "version": version, "status": "failed"}
 
-    def preview(self, dataset_id: str, version: str,
+    def preview(self, namespace: str, dataset_id: str, version: str,
                 limit: int = 10, offset: int = 0) -> dict:
-        dataset = self.datasets_repository.get(dataset_id)
+        dataset = self.datasets_repository.get(namespace, dataset_id)
         if not dataset:
             raise ValueError("Dataset not found")
+        browse_path = f"{namespace}/{dataset_id}"
         fmt       = (dataset.format or "").lower()
-        source_id = dataset.source_id
-        if not source_id:
-            raise ValueError("Dataset has no source")
-        source = self.sources_repository.get(source_id)
+        source = self.sources_repository.get(namespace, dataset.source_id)
         if not source:
-            raise ValueError(f"Source '{source_id}' not found")
-        record = self.versions_repository.get(dataset_id, version)
+            raise ValueError(f"Source '{dataset.source_id}' not found")
+        record = self.versions_repository.get(browse_path, version)
         if not record:
             raise ValueError("Version not found")
         connector = ConnectorFactory.get(source.type, source.config or {})
@@ -213,7 +226,7 @@ class VersionService:
         clean = [{k: _safe_json_value(v) for k, v in row.items()}
                  for row in df.to_dict(orient="records")]
         return {
-            "dataset_id": dataset_id,
+            "dataset_id": browse_path,
             "version":    record.version,
             "columns":    df.columns.tolist(),
             "rows":       clean,
@@ -221,31 +234,36 @@ class VersionService:
         }
 
     @atomic
-    def register_virtual(self, dataset_id: str, source_id: str,
-                         location: str, fmt: str,
+    def register_virtual(self, namespace: str, dataset_id: str,
+                         source_id: str, location: str, fmt: str,
                          display_name: str | None = None,
                          description: str | None = None,
                          owner: str | None = None,
                          tags=None,
                          task_id: str | None = None,
                          job_id: str | None = None) -> dict:
-        src = self.sources_repository.get(source_id)
+        src = self.sources_repository.get(namespace, source_id)
         if not src:
             raise ValueError(
                 f"Source '{source_id}' not found. "
-                "Register it first via POST /sources."
+                "Register it first via POST /namespaces/{namespace}/sources."
             )
+        browse_path = f"{namespace}/{dataset_id}"
         version = _version_id()
-        self.datasets_repository.create(dataset_id, fmt, description=description,
-                             source_id=source_id)
-        self.datasets_repository.commit_virtual(dataset_id, version, location)
+        self.datasets_repository.create(namespace, dataset_id, fmt,
+                                        description=description,
+                                        source_id=source_id)
+        self.datasets_repository.commit_virtual(namespace, dataset_id,
+                                                version, location)
         if task_id:
-            self.metadata_repository.set(dataset_id, version, "sys.produced_by_task", task_id)
+            self.metadata_repository.set(browse_path, version,
+                                         "sys.produced_by_task", task_id)
         if job_id:
-            self.metadata_repository.set(dataset_id, version, "sys.produced_by_job", job_id)
-        logger.info(f"Virtual {dataset_id}@{version} [{src.type}]")
+            self.metadata_repository.set(browse_path, version,
+                                         "sys.produced_by_job", job_id)
+        logger.info(f"Virtual {browse_path}@{version} [{src.type}]")
         return {
-            "dataset_id":  dataset_id,
+            "dataset_id":  browse_path,
             "version":     version,
             "source_id":   source_id,
             "source_type": src.type,
@@ -253,8 +271,10 @@ class VersionService:
             "format":      fmt,
         }
 
-    def scan(self, data_path: str, prefix: str | None = None) -> int:
-        logger.info(f"🔍 Scanning {data_path} ...")
+    def scan(self, namespace: str, data_path: str,
+             source_id: str = "local",
+             prefix: str | None = None) -> int:
+        logger.info(f"Scanning {data_path} ...")
         count = 0
         for root, dirs, files in os.walk(data_path):
             dirs.sort()
@@ -268,19 +288,21 @@ class VersionService:
                 name     = os.path.splitext(filename)[0]
                 version  = name.replace("-", ":", 2)
                 if prefix:
-                    dataset_id = f"{prefix.strip('/')}/{rel_dir}/{name}".replace("//", "/")
+                    local_id = f"{prefix.strip('/')}/{rel_dir}/{name}".replace("//", "/")
                 else:
-                    dataset_id = f"{rel_dir}/{name}".replace("//", "/")
+                    local_id = f"{rel_dir}/{name}".replace("//", "/")
+                browse_path = f"{namespace}/{local_id}"
                 try:
                     schema = _infer_schema(filepath, fmt)
-                    self.datasets_repository.create(dataset_id, fmt)
-                    self.versions_repository.reserve(dataset_id, version, filepath)
-                    committed = self.versions_repository.commit(dataset_id, version)
+                    self.datasets_repository.create(namespace, local_id, fmt,
+                                                    source_id=source_id)
+                    self.versions_repository.reserve(browse_path, version, filepath)
+                    committed = self.versions_repository.commit(browse_path, version)
                     if committed:
-                        self.schema_repository.upsert_columns(dataset_id, schema)
+                        self.schema_repository.upsert_columns(browse_path, schema)
                     count += 1
-                    logger.info(f"  ✅ {dataset_id}@{version[:19]} [{fmt}]")
+                    logger.info(f"  {browse_path}@{version[:19]} [{fmt}]")
                 except Exception as e:
-                    logger.error(f"  ⚠️  Skipped {filepath}: {e}")
-        logger.info(f"🏁 Scan complete — {count} dataset(s) registered.")
+                    logger.error(f"  Skipped {filepath}: {e}")
+        logger.info(f"Scan complete — {count} dataset(s) registered.")
         return count

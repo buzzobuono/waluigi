@@ -1,4 +1,5 @@
 import { api } from '../api.js';
+import { nsStore } from '../store.js';
 import BasePage from './BasePage.js';
 import BasePanel from './BasePanel.js';
 import BaseButton from './BaseButton.js';
@@ -53,7 +54,7 @@ export default {
       const prefix = currentFolder.value ? currentFolder.value + '/' : '';
       newDatasetForm.value = { id: prefix, format: 'parquet', description: '', source_id: '' };
       newDatasetError.value = null;
-      api.catalogSources().then(r => { newDatasetSources.value = r.data || []; }).catch(() => {});
+      api.catalogSources(nsStore.selected).then(r => { newDatasetSources.value = r.data || []; }).catch(() => {});
       newDatasetModalRef.value?.open();
     }
 
@@ -71,7 +72,7 @@ export default {
           newDatasetError.value = 'ID and description are required.';
           return;
         }
-        const res = await api.catalogCreateDataset(body);
+        const res = await api.catalogCreateDataset(nsStore.selected, body);
         if (res.diagnostic?.result === 'KO') {
           newDatasetError.value = res.diagnostic?.messages?.[0] || 'Error creating dataset';
           return;
@@ -116,7 +117,7 @@ export default {
           path = "/";
         }
         
-        const res = await api.catalogFolders(path);
+        const res = await api.catalogFolders(nsStore.selected, path);
         const prefix = res.data.prefix;
         
         const prefixItems = [];
@@ -165,7 +166,7 @@ export default {
       metadata.value        = {};
 
       try {
-        const res = await api.catalogDatasetVersions(dataset);
+        const res = await api.catalogDatasetVersions(nsStore.selected, dataset);
         history.value = Array.isArray(res.data) ? res.data : [];
       } catch(e) {
         console.error('Dataset detail error', e);
@@ -176,7 +177,7 @@ export default {
       selectedVersion.value = ver.version;
       metadata.value = {};
       try {
-        const metaRes = await api.catalogDatasetMetadata(selDataset.value, ver.version);
+        const metaRes = await api.catalogDatasetMetadata(nsStore.selected, selDataset.value, ver.version);
         metadata.value = metaRes?.data || {};
       } catch(e) {
         console.error('Version detail load error', e);

@@ -2,7 +2,7 @@ import pytest
 from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 
 SOURCE_ID = "folders_local"
-PREFIX    = "test/folders"
+PREFIX    = "folders"
 
 # datasets planted for folder tests
 DATASETS = [
@@ -33,7 +33,7 @@ def setup_folder_datasets(catalog):
     yield
 
     for ds_id in DATASETS:
-        try: catalog._delete(f"/datasets/{ds_id}")
+        try: catalog._delete(catalog._ns_url(f"/datasets/{ds_id}"))
         except Exception: pass
     try: catalog.delete_source(SOURCE_ID)
     except Exception: pass
@@ -59,15 +59,15 @@ def test_prefix_field_has_trailing_slash(catalog):
 def test_direct_datasets_listed(catalog):
     result = catalog.list_folders(PREFIX)
     ids = [d["id"] for d in result["datasets"]]
-    assert f"{PREFIX}/alpha" in ids
-    assert f"{PREFIX}/beta"  in ids
+    assert any(id_.endswith(f"{PREFIX}/alpha") for id_ in ids)
+    assert any(id_.endswith(f"{PREFIX}/beta")  for id_ in ids)
 
 
 def test_deep_datasets_not_in_direct_list(catalog):
     result = catalog.list_folders(PREFIX)
     ids = [d["id"] for d in result["datasets"]]
-    assert f"{PREFIX}/sub/gamma"         not in ids
-    assert f"{PREFIX}/sub/deep/epsilon"  not in ids
+    assert not any(id_.endswith(f"{PREFIX}/sub/gamma")        for id_ in ids)
+    assert not any(id_.endswith(f"{PREFIX}/sub/deep/epsilon") for id_ in ids)
 
 
 # ── Sub-prefixes ──────────────────────────────────────────────────────────────
@@ -86,8 +86,8 @@ def test_sub_prefix_not_in_datasets(catalog):
 def test_drill_into_sub_prefix(catalog):
     result = catalog.list_folders(f"{PREFIX}/sub")
     ids = [d["id"] for d in result["datasets"]]
-    assert f"{PREFIX}/sub/gamma" in ids
-    assert f"{PREFIX}/sub/delta" in ids
+    assert any(id_.endswith(f"{PREFIX}/sub/gamma") for id_ in ids)
+    assert any(id_.endswith(f"{PREFIX}/sub/delta") for id_ in ids)
 
 
 def test_drill_into_sub_prefix_shows_deeper_prefix(catalog):
@@ -97,7 +97,8 @@ def test_drill_into_sub_prefix_shows_deeper_prefix(catalog):
 
 def test_deepest_level_has_no_further_prefixes(catalog):
     result = catalog.list_folders(f"{PREFIX}/sub/deep")
-    assert f"{PREFIX}/sub/deep/epsilon" in [d["id"] for d in result["datasets"]]
+    ids = [d["id"] for d in result["datasets"]]
+    assert any(id_.endswith(f"{PREFIX}/sub/deep/epsilon") for id_ in ids)
     assert result["prefixes"] == []
 
 

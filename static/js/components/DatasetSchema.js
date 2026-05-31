@@ -1,4 +1,5 @@
 import { api } from '../api.js';
+import { nsStore } from '../store.js';
 import BasePage        from './BasePage.js';
 import BasePanel       from './BasePanel.js';
 import BaseButton      from './BaseButton.js';
@@ -71,7 +72,7 @@ export default {
       loading.value   = true;
       pageError.value = null;
       try {
-        const res = await api.catalogDatasetSchema(datasetId.value);
+        const res = await api.catalogDatasetSchema(nsStore.selected, datasetId.value);
         schemaData.value = res.data || null;
       } catch (e) {
         pageError.value = e.message;
@@ -106,7 +107,7 @@ export default {
           pii_type:     form.value.pii_type  || null,
           pii_notes:    form.value.pii_notes || null,
         };
-        const res = await api.catalogSchemaUpdateColumn(datasetId.value, editCol.value, body);
+        const res = await api.catalogSchemaUpdateColumn(nsStore.selected, datasetId.value, editCol.value, body);
         if (res.diagnostic?.result === 'KO') {
           formError.value = res.diagnostic?.messages?.[0] || 'Error saving column';
           return;
@@ -130,7 +131,7 @@ export default {
     async function approveColumn(columnName) {
       saving.value = true;
       try {
-        const res = await api.catalogSchemaApproveColumn(datasetId.value, columnName);
+        const res = await api.catalogSchemaApproveColumn(nsStore.selected, datasetId.value, columnName);
         if (res.diagnostic?.result === 'KO') {
           pageError.value = res.diagnostic?.messages?.[0] || 'Error approving column';
           return;
@@ -153,7 +154,7 @@ export default {
     async function deleteColumn(columnName) {
       saving.value = true;
       try {
-        const res = await api.catalogSchemaDeleteColumn(datasetId.value, columnName);
+        const res = await api.catalogSchemaDeleteColumn(nsStore.selected, datasetId.value, columnName);
         if (res.diagnostic?.result === 'KO') {
           pageError.value = res.diagnostic?.messages?.[0] || 'Error deleting column';
           return;
@@ -176,7 +177,7 @@ export default {
     async function publishAll() {
       saving.value = true;
       try {
-        await api.catalogSchemaPublish(datasetId.value, { published_by: 'admin' });
+        await api.catalogSchemaPublish(nsStore.selected, datasetId.value, { published_by: 'admin' });
         await load();
       } catch (e) {
         pageError.value = e.message;

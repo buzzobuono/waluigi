@@ -11,28 +11,29 @@ class SourceService:
     def __init__(self, source_repository: SourceRepository):
         self.source_repository = source_repository
 
-    def list(self) -> list[SourceResponse]:
-        return [SourceResponse.from_entity(s) for s in self.source_repository.list()]
+    def list(self, namespace: str) -> list[SourceResponse]:
+        return [SourceResponse.from_entity(s)
+                for s in self.source_repository.list(namespace)]
 
-    def get(self, id: str) -> SourceResponse | None:
-        source = self.source_repository.get(id)
+    def get(self, namespace: str, id: str) -> SourceResponse | None:
+        source = self.source_repository.get(namespace, id)
         return SourceResponse.from_entity(source) if source else None
 
-    def upsert(self, id: str, source_type: str, config: dict,
-               description: str | None) -> SourceResponse:
-        existing = self.source_repository.get(id)
+    def upsert(self, namespace: str, id: str, source_type: str,
+               config: dict, description: str | None) -> SourceResponse:
+        existing = self.source_repository.get(namespace, id)
         if existing and existing.type != source_type:
             raise ValueError(
                 f"Cannot change source type from '{existing.type}' "
                 f"to '{source_type}' — create a new source instead"
             )
-        self.source_repository.upsert(id, source_type, config, description)
-        return SourceResponse.from_entity(self.source_repository.get(id))
+        self.source_repository.upsert(namespace, id, source_type, config, description)
+        return SourceResponse.from_entity(self.source_repository.get(namespace, id))
 
-    def update(self, id: str, **kwargs) -> SourceResponse | None:
-        if not self.source_repository.update(id, **kwargs):
+    def update(self, namespace: str, id: str, **kwargs) -> SourceResponse | None:
+        if not self.source_repository.update(namespace, id, **kwargs):
             return None
-        return SourceResponse.from_entity(self.source_repository.get(id))
+        return SourceResponse.from_entity(self.source_repository.get(namespace, id))
 
-    def delete(self, id: str) -> bool:
-        return self.source_repository.delete(id)
+    def delete(self, namespace: str, id: str) -> bool:
+        return self.source_repository.delete(namespace, id)

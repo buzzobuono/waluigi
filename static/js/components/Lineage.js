@@ -1,4 +1,5 @@
 import { api } from '../api.js';
+import { nsStore } from '../store.js';
 import BasePage from './BasePage.js';
 import BasePanel from './BasePanel.js';
 import BaseInput from './BaseInput.js';
@@ -37,7 +38,7 @@ export default {
 
       try {
         let ver = verInput.value.trim();
-        const versionsRes = await api.catalogDatasetVersions(id);
+        const versionsRes = await api.catalogDatasetVersions(nsStore.selected, id);
         const versions    = versionsRes?.data || [];
 
         if (!versions.length) {
@@ -52,7 +53,7 @@ export default {
 
         current.value = versions.find(v => v.version === ver) || { dataset_id: id, version: ver };
 
-        const lineage    = await api.catalogDatasetLineage(id, ver);
+        const lineage    = await api.catalogDatasetLineage(nsStore.selected, id, ver);
         upstream.value   = lineage.data.upstream   || [];
         downstream.value = lineage.data.downstream || [];
 

@@ -22,10 +22,10 @@ def ensure_source(catalog):
 @pytest.fixture
 def dataset_id(catalog):
     uid = str(uuid.uuid4())[:8]
-    id_ = f"test/unit/meta_{uid}"
+    id_ = f"unit/meta_{uid}"
     yield id_
     try:
-        catalog._delete(f"/datasets/{id_}")
+        catalog._delete(catalog._ns_url(f"/datasets/{id_}"))
     except Exception:
         pass
 
@@ -52,7 +52,7 @@ def test_metadata_crud_flow(catalog, dataset_id, sample_data):
         ctx.write(sample_data)
     
     v_str = get_latest_version_str(catalog, dataset_id)
-    base_url = f"/datasets/{dataset_id}/versions/{v_str}/metadata"
+    base_url = catalog._ns_url(f"/datasets/{dataset_id}/versions/{v_str}/metadata")
 
     # POST
     catalog._post(base_url, json={"key": "team", "value": "data-engineers"})
@@ -65,7 +65,7 @@ def test_metadata_crud_flow(catalog, dataset_id, sample_data):
 
     # DELETE
     catalog._delete(f"{base_url}/team")
-    
+
     # Verify deletion
     metadata_after = catalog._get(base_url)
     assert "team" not in metadata_after
@@ -74,7 +74,7 @@ def test_metadata_crud_flow(catalog, dataset_id, sample_data):
 def test_metadata_version_not_found(catalog, dataset_id):
     catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     with pytest.raises(CatalogError) as exc:
-        catalog._get(f"/datasets/{dataset_id}/versions/fake-version-2026/metadata")
+        catalog._get(catalog._ns_url(f"/datasets/{dataset_id}/versions/fake-version-2026/metadata"))
     assert "404" in str(exc.value)
 
 
@@ -84,10 +84,10 @@ def test_set_metadata_reserved_sys_key(catalog, dataset_id, sample_data):
         ctx.write(sample_data)
 
     v_str = get_latest_version_str(catalog, dataset_id)
-    
+
     # Tentativo di usare sys.* (riservato)
     with pytest.raises(CatalogError) as exc:
-        catalog._post(f"/datasets/{dataset_id}/versions/{v_str}/metadata", 
+        catalog._post(catalog._ns_url(f"/datasets/{dataset_id}/versions/{v_str}/metadata"),
                      json={"key": "sys.internal", "value": "illegal"})
     
     assert "reserved" in str(exc.value).lower()
@@ -99,11 +99,11 @@ def test_delete_protected_sys_metadata(catalog, dataset_id, sample_data):
         ctx.write(sample_data)
 
     v_str = get_latest_version_str(catalog, dataset_id)
-    
+
     # Non si possono cancellare chiavi di sistema tramite questo servizio
     with pytest.raises(CatalogError):
         # Cerchiamo di cancellare la chiave sys che contiene il ref
-        catalog._delete(f"/datasets/{dataset_id}/versions/{v_str}/metadata/sys.ref")
+        catalog._delete(catalog._ns_url(f"/datasets/{dataset_id}/versions/{v_str}/metadata/sys.ref"))
 
 
 def test_metadata_isolation_between_versions(catalog, dataset_id, sample_data):
@@ -121,8 +121,8 @@ def test_metadata_isolation_between_versions(catalog, dataset_id, sample_data):
     
     assert v_alpha != v_beta
 
-    meta_a = catalog._get(f"/datasets/{dataset_id}/versions/{v_alpha}/metadata")
-    meta_b = catalog._get(f"/datasets/{dataset_id}/versions/{v_beta}/metadata")
+    meta_a = catalog._get(catalog._ns_url(f"/datasets/{dataset_id}/versions/{v_alpha}/metadata"))
+    meta_b = catalog._get(catalog._ns_url(f"/datasets/{dataset_id}/versions/{v_beta}/metadata"))
     
     # Verifichiamo l'isolamento dei metadati di sistema creati al commit
     assert any("tag" in k and v == "alpha" for k, v in meta_a.items())
@@ -137,7 +137,7 @@ def test_metadata_update_existing_key(catalog, dataset_id, sample_data):
         ctx.write(sample_data)
     
     v_str = get_latest_version_str(catalog, dataset_id)
-    base_url = f"/datasets/{dataset_id}/versions/{v_str}/metadata"
+    base_url = catalog._ns_url(f"/datasets/{dataset_id}/versions/{v_str}/metadata")
 
     # Primo set
     catalog._post(base_url, json={"key": "status", "value": "initial"})
@@ -157,10 +157,10 @@ def test_metadata_special_characters_in_value(catalog, dataset_id, sample_data):
     v_str = get_latest_version_str(catalog, dataset_id)
     complex_value = '{"project": "waluigi", "tags": ["test", "🚀"], "path": "C:\\\\temp"}'
     
-    catalog._post(f"/datasets/{dataset_id}/versions/{v_str}/metadata", 
+    catalog._post(catalog._ns_url(f"/datasets/{dataset_id}/versions/{v_str}/metadata"),
                  json={"key": "config_json", "value": complex_value})
 
-    metadata = catalog._get(f"/datasets/{dataset_id}/versions/{v_str}/metadata")
+    metadata = catalog._get(catalog._ns_url(f"/datasets/{dataset_id}/versions/{v_str}/metadata"))
     assert metadata["config_json"] == complex_value
 
 
@@ -173,7 +173,7 @@ def test_delete_nonexistent_key(catalog, dataset_id, sample_data):
     v_str = get_latest_version_str(catalog, dataset_id)
     
     with pytest.raises(CatalogError) as exc:
-        catalog._delete(f"/datasets/{dataset_id}/versions/{v_str}/metadata/ghost_key")
+        catalog._delete(catalog._ns_url(f"/datasets/{dataset_id}/versions/{v_str}/metadata/ghost_key"))
     assert "404" in str(exc.value)
 
 
@@ -186,14 +186,14 @@ def test_set_metadata_on_deprecated_version(catalog, dataset_id, sample_data):
     v_str = get_latest_version_str(catalog, dataset_id)
     
     # Depreca la versione
-    catalog._delete(f"/datasets/{dataset_id}/_deprecate/{v_str}")
-    
-    # Il MetadataService dovrebbe comunque trovare la versione nel DB 
+    catalog._delete(catalog._ns_url(f"/datasets/{dataset_id}/_deprecate/{v_str}"))
+
+    # Il MetadataService dovrebbe comunque trovare la versione nel DB
     # (a meno di logiche di hard-delete nel service)
-    catalog._post(f"/datasets/{dataset_id}/versions/{v_str}/metadata", 
+    catalog._post(catalog._ns_url(f"/datasets/{dataset_id}/versions/{v_str}/metadata"),
                  json={"key": "post_deprecate", "value": "true"})
-    
-    meta = catalog._get(f"/datasets/{dataset_id}/versions/{v_str}/metadata")
+
+    meta = catalog._get(catalog._ns_url(f"/datasets/{dataset_id}/versions/{v_str}/metadata"))
     assert meta["post_deprecate"] == "true"
 
 
@@ -204,7 +204,7 @@ def test_metadata_large_number_of_keys(catalog, dataset_id, sample_data):
         ctx.write(sample_data)
     
     v_str = get_latest_version_str(catalog, dataset_id)
-    base_url = f"/datasets/{dataset_id}/versions/{v_str}/metadata"
+    base_url = catalog._ns_url(f"/datasets/{dataset_id}/versions/{v_str}/metadata")
 
     for i in range(50):
         catalog._post(base_url, json={"key": f"key_{i}", "value": f"val_{i}"})
@@ -223,12 +223,12 @@ def test_metadata_error_status_codes(catalog, dataset_id, sample_data):
 
     # Caso 422: Chiave riservata (str(e) contiene "reserved")
     with pytest.raises(CatalogError) as exc:
-        catalog._post(f"/datasets/{dataset_id}/versions/{v_str}/metadata", 
+        catalog._post(catalog._ns_url(f"/datasets/{dataset_id}/versions/{v_str}/metadata"),
                      json={"key": "sys.anything", "value": "fail"})
     # Se il tuo router mappa "reserved" -> 422
     assert "422" in str(exc.value)
 
     # Caso 404: Dataset o versione inesistente
     with pytest.raises(CatalogError) as exc:
-        catalog._get(f"/datasets/wrong_id/versions/{v_str}/metadata")
+        catalog._get(catalog._ns_url(f"/datasets/wrong_id/versions/{v_str}/metadata"))
     assert "404" in str(exc.value)

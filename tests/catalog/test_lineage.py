@@ -19,13 +19,13 @@ def setup_lineage_source(catalog):
 def ds_names(catalog):
     uid = str(uuid.uuid4())[:8]
     names = {
-        "raw": f"test/lineage/raw_{uid}",
-        "silver": f"test/lineage/silver_{uid}",
-        "gold": f"test/lineage/gold_{uid}"
+        "raw": f"lineage/raw_{uid}",
+        "silver": f"lineage/silver_{uid}",
+        "gold": f"lineage/gold_{uid}"
     }
     yield names
     for name in names.values():
-        try: catalog._delete(f"/datasets/{name}")
+        try: catalog._delete(catalog._ns_url(f"/datasets/{name}"))
         except Exception: pass
 
 # ── Suite di Test ────────────────────────────────────────────────────────────
@@ -53,17 +53,17 @@ def test_lineage_full_chain(catalog, ds_names):
     # VERIFICA SILVER (Punto centrale della catena)
     lineage = catalog.get_lineage(ds_names["silver"], v_silver)
     
-    assert lineage["dataset_id"] == ds_names["silver"]
+    assert lineage["dataset_id"].endswith(ds_names["silver"])
     assert lineage["version"] == v_silver
-    
+
     # Check Upstream
     assert len(lineage["upstream"]) == 1
-    assert lineage["upstream"][0]["dataset_id"] == ds_names["raw"]
+    assert lineage["upstream"][0]["dataset_id"].endswith(ds_names["raw"])
     assert lineage["upstream"][0]["version"] == v_raw
 
     # Check Downstream
     assert len(lineage["downstream"]) == 1
-    assert lineage["downstream"][0]["dataset_id"] == ds_names["gold"]
+    assert lineage["downstream"][0]["dataset_id"].endswith(ds_names["gold"])
     assert lineage["downstream"][0]["version"] == v_gold
 
 
@@ -123,8 +123,8 @@ def test_lineage_multiple_inputs(catalog, ds_names):
     assert len(lineage["upstream"]) == 2
     
     upstream_ids = [u["dataset_id"] for u in lineage["upstream"]]
-    assert raw_a in upstream_ids
-    assert raw_b in upstream_ids
+    assert any(uid.endswith(raw_a) for uid in upstream_ids)
+    assert any(uid.endswith(raw_b) for uid in upstream_ids)
 
 
 def test_lineage_mandatory_version_error(catalog):

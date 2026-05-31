@@ -24,22 +24,26 @@ def _safe(v):
 
 class ChartService:
 
-    def __init__(self, datasets_repository: DatasetRepository, versions_repository: VersionRepository,
-                 sources_repository: SourceRepository, charts_repository: ChartRepository):
+    def __init__(self, datasets_repository: DatasetRepository,
+                 versions_repository: VersionRepository,
+                 sources_repository: SourceRepository,
+                 charts_repository: ChartRepository):
         self.datasets_repository = datasets_repository
         self.versions_repository = versions_repository
         self.sources_repository  = sources_repository
         self.charts_repository   = charts_repository
 
-    def render(self, chart: dict, dataset_id: str, version: str | None) -> dict:
-        dataset = self.datasets_repository.get(dataset_id)
+    def render(self, chart: dict, namespace: str, dataset_id: str,
+               version: str | None) -> dict:
+        dataset = self.datasets_repository.get(namespace, dataset_id)
         if not dataset:
             raise ValueError("Dataset not found")
-        ver = (self.versions_repository.get(dataset_id, version)
-               if version else self.versions_repository.get_latest(dataset_id))
+        browse_path = f"{namespace}/{dataset_id}"
+        ver = (self.versions_repository.get(browse_path, version)
+               if version else self.versions_repository.get_latest(browse_path))
         if not ver:
             raise ValueError("No committed version available")
-        source = self.sources_repository.get(dataset.source_id)
+        source = self.sources_repository.get(namespace, dataset.source_id)
         if not source:
             raise ValueError(
                 f"Source '{dataset.source_id}' not found "
@@ -54,34 +58,40 @@ class ChartService:
             "is_latest": version is None,
         }
 
-    def list_charts(self, dataset_id: str) -> list:
-        if not self.datasets_repository.exists(dataset_id):
+    def list_charts(self, namespace: str, dataset_id: str) -> list:
+        if not self.datasets_repository.exists(namespace, dataset_id):
             raise ValueError("Dataset not found")
-        return self.charts_repository.list(dataset_id)
+        return self.charts_repository.list(f"{namespace}/{dataset_id}")
 
-    def get_chart(self, dataset_id: str, chart_id: int) -> dict | None:
-        return self.charts_repository.get(dataset_id, chart_id)
+    def get_chart(self, namespace: str, dataset_id: str,
+                  chart_id: int) -> dict | None:
+        return self.charts_repository.get(f"{namespace}/{dataset_id}", chart_id)
 
-    def get_chart_by_key(self, dataset_id: str, key: str) -> dict | None:
-        return self.charts_repository.get_by_key(dataset_id, key)
+    def get_chart_by_key(self, namespace: str, dataset_id: str,
+                         key: str) -> dict | None:
+        return self.charts_repository.get_by_key(f"{namespace}/{dataset_id}", key)
 
-    def add_chart(self, dataset_id: str, key: str, title: str,
-                  spec: dict, position: int) -> dict:
-        if not self.datasets_repository.exists(dataset_id):
+    def add_chart(self, namespace: str, dataset_id: str, key: str,
+                  title: str, spec: dict, position: int) -> dict:
+        if not self.datasets_repository.exists(namespace, dataset_id):
             raise ValueError("Dataset not found")
-        return self.charts_repository.add(dataset_id, key, title, spec, position)
+        return self.charts_repository.add(
+            f"{namespace}/{dataset_id}", key, title, spec, position)
 
-    def update_chart(self, dataset_id: str, chart_id: int, **updates) -> dict:
-        if not self.datasets_repository.exists(dataset_id):
+    def update_chart(self, namespace: str, dataset_id: str,
+                     chart_id: int, **updates) -> dict:
+        browse_path = f"{namespace}/{dataset_id}"
+        if not self.datasets_repository.exists(namespace, dataset_id):
             raise ValueError("Dataset not found")
-        if not self.charts_repository.update(dataset_id, chart_id, **updates):
+        if not self.charts_repository.update(browse_path, chart_id, **updates):
             raise ValueError("Chart not found")
-        return self.charts_repository.get(dataset_id, chart_id)
+        return self.charts_repository.get(browse_path, chart_id)
 
-    def delete_chart(self, dataset_id: str, chart_id: int) -> dict:
-        if not self.datasets_repository.exists(dataset_id):
+    def delete_chart(self, namespace: str, dataset_id: str,
+                     chart_id: int) -> dict:
+        if not self.datasets_repository.exists(namespace, dataset_id):
             raise ValueError("Dataset not found")
-        if not self.charts_repository.delete(dataset_id, chart_id):
+        if not self.charts_repository.delete(f"{namespace}/{dataset_id}", chart_id):
             raise ValueError("Chart not found")
         return {"deleted": chart_id}
 

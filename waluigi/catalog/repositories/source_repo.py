@@ -10,38 +10,44 @@ from waluigi.catalog.entities import Source
 
 class SourceRepository(BaseRepository):
 
-    def list(self) -> list[Source]:
+    def list(self, namespace: str) -> list[Source]:
         with self._conn() as conn:
-            rows = conn.execute(text("SELECT * FROM sources ORDER BY id")).fetchall()
+            rows = conn.execute(
+                text("SELECT * FROM sources WHERE namespace = :ns ORDER BY id"),
+                {"ns": namespace},
+            ).fetchall()
         return [Source.from_row(r) for r in rows]
 
-    def get(self, id: str) -> Source | None:
+    def get(self, namespace: str, id: str) -> Source | None:
         with self._conn() as conn:
             row = conn.execute(
-                text("SELECT * FROM sources WHERE id = :id"), {"id": id}
+                text("SELECT * FROM sources WHERE namespace = :ns AND id = :id"),
+                {"ns": namespace, "id": id},
             ).fetchone()
         return Source.from_row(row)
 
-    def exists(self, id: str) -> bool:
+    def exists(self, namespace: str, id: str) -> bool:
         with self._conn() as conn:
             row = conn.execute(
-                text("SELECT 1 FROM sources WHERE id = :id"), {"id": id}
+                text("SELECT 1 FROM sources WHERE namespace = :ns AND id = :id"),
+                {"ns": namespace, "id": id},
             ).fetchone()
         return row is not None
 
-    def create(self, id: str, type: str, config: dict,
+    def create(self, namespace: str, id: str, type: str, config: dict,
                description: str = None) -> bool:
         now = _now()
         with self._conn() as conn:
             stmt = self._insert_ignore_stmt(_t_sources, {
-                "id": id, "description": description, "type": type,
+                "namespace": namespace, "id": id,
+                "description": description, "type": type,
                 "config": json.dumps(config), "username": _user(),
                 "createdate": now, "updatedate": now,
-            }, ["id"])
+            }, ["namespace", "id"])
             result = conn.execute(stmt)
         return result.rowcount > 0
 
-    def update(self, id: str, **kwargs) -> bool:
+    def update(self, namespace: str, id: str, **kwargs) -> bool:
         allowed = {"type", "config", "description"}
         updates = {k: v for k, v in kwargs.items() if k in allowed}
         if not updates:
@@ -51,32 +57,35 @@ class SourceRepository(BaseRepository):
         updates["updatedate"] = _now()
         updates["username"] = _user()
         cols = ", ".join(f"{k} = :{k}" for k in updates)
+        updates["_ns"] = namespace
         updates["_id"] = id
         with self._conn() as conn:
             result = conn.execute(
-                text(f"UPDATE sources SET {cols} WHERE id = :_id"), updates
+                text(f"UPDATE sources SET {cols} WHERE namespace = :_ns AND id = :_id"),
+                updates,
             )
         return result.rowcount > 0
 
-    def upsert(self, id: str, type: str, config: dict,
+    def upsert(self, namespace: str, id: str, type: str, config: dict,
                description: str = None) -> None:
         now = _now()
         with self._conn() as conn:
             stmt = self._upsert_stmt(
                 _t_sources,
-                {"id": id, "type": type, "config": json.dumps(config),
-                 "description": description, "username": _user(),
-                 "createdate": now, "updatedate": now},
-                ["id"],
+                {"namespace": namespace, "id": id, "type": type,
+                 "config": json.dumps(config), "description": description,
+                 "username": _user(), "createdate": now, "updatedate": now},
+                ["namespace", "id"],
                 ["config", "description", "username", "updatedate"],
             )
             conn.execute(stmt)
 
-    def delete(self, id: str) -> bool:
+    def delete(self, namespace: str, id: str) -> bool:
         try:
             with self._conn() as conn:
                 result = conn.execute(
-                    text("DELETE FROM sources WHERE id = :id"), {"id": id}
+                    text("DELETE FROM sources WHERE namespace = :ns AND id = :id"),
+                    {"ns": namespace, "id": id},
                 )
             return result.rowcount > 0
         except Exception as e:

@@ -1,4 +1,5 @@
 import { api }        from '../api.js';
+import { nsStore }   from '../store.js';
 import BasePage       from './BasePage.js';
 import BasePanel      from './BasePanel.js';
 import BaseTable      from './BaseTable.js';
@@ -86,7 +87,7 @@ export default {
       loading.value   = true;
       pageError.value = null;
       try {
-        const res     = await api.catalogSources();
+        const res     = await api.catalogSources(nsStore.selected);
         sources.value = res.data || [];
       } catch (e) {
         pageError.value = e.message;
@@ -115,7 +116,7 @@ export default {
 
       saving.value = true;
       try {
-        await api.catalogCreateSource({
+        await api.catalogCreateSource(nsStore.selected, {
           id,
           type:        form.value.type,
           description: form.value.description || '',
@@ -151,7 +152,7 @@ export default {
       formError.value = null;
       saving.value    = true;
       try {
-        await api.catalogUpdateSource(form.value.id, {
+        await api.catalogUpdateSource(nsStore.selected, form.value.id, {
           description: form.value.description || '',
           config:      buildConfig(form.value.config, form.value.type),
         });
@@ -176,7 +177,7 @@ export default {
         async (confirmed) => {
           if (!confirmed) return;
           try {
-            await api.catalogDeleteSource(src.id);
+            await api.catalogDeleteSource(nsStore.selected, src.id);
             await loadSources();
           } catch (e) {
             pageError.value = e.message;

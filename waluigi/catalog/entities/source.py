@@ -6,6 +6,7 @@ from dataclasses import dataclass, asdict
 
 @dataclass
 class Source:
+    namespace:   str
     id:          str
     type:        str
     config:      dict
@@ -23,6 +24,7 @@ class Source:
         if isinstance(config, str):
             config = json.loads(config)
         return cls(
+            namespace=d["namespace"],
             id=d["id"],
             type=d["type"],
             config=config,

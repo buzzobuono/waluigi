@@ -9,7 +9,7 @@ from pathlib import Path
 from waluigi.sdk.catalog import CatalogError
 from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 
-DATASET_ID   = "test/chart/sales_graph"
+DATASET_ID   = "chart/sales_graph"
 SOURCE_ID    = "local_graph_test"
 CHARTS_YAML  = Path(__file__).parent / "sales_charts.yaml"
 
@@ -51,7 +51,7 @@ def setup_dataset(catalog):
     yield
 
     try:
-        catalog._delete(f"/datasets/{DATASET_ID}")
+        catalog._delete(catalog._ns_url(f"/datasets/{DATASET_ID}"))
     except Exception:
         pass
     try:
@@ -120,7 +120,7 @@ def test_chart_update(catalog, charts):
     chart = charts[0]
     new_title = "Updated Title"
     updated = catalog._patch(
-        f"/datasets/{DATASET_ID}/charts/{chart['id']}",
+        catalog._ns_url(f"/datasets/{DATASET_ID}/charts/{chart['id']}"),
         json={"title": new_title},
     )
     assert updated["title"] == new_title
@@ -130,7 +130,7 @@ def test_chart_delete(catalog):
     handle = catalog.create_dataset(DATASET_ID, format="csv", source_id=SOURCE_ID)
     tmp = handle.set_chart("_tmp_delete_me", "Temporary", {"type": "bar", "x": {"field": "date"}, "y": {"field": "revenue"}})
     chart_id = tmp["id"]
-    catalog._delete(f"/datasets/{DATASET_ID}/charts/{chart_id}")
+    catalog._delete(catalog._ns_url(f"/datasets/{DATASET_ID}/charts/{chart_id}"))
     listed = catalog.list_charts(DATASET_ID)
     assert all(c["id"] != chart_id for c in listed)
 
@@ -139,7 +139,7 @@ def test_chart_delete(catalog):
 
 def test_render_by_id(catalog, charts):
     for chart in charts:
-        result = catalog._get(f"/datasets/{DATASET_ID}/charts/{chart['id']}/render")
+        result = catalog._get(catalog._ns_url(f"/datasets/{DATASET_ID}/charts/{chart['id']}/render"))
         assert "option" in result
         assert "version" in result
         assert "rows" in result
@@ -149,7 +149,7 @@ def test_render_by_id(catalog, charts):
 def test_render_by_key(catalog, chart_defs, charts):
     for cdef in chart_defs:
         result = catalog._get(
-            f"/datasets/{DATASET_ID}/charts/_render",
+            catalog._ns_url(f"/datasets/{DATASET_ID}/charts/_render"),
             params={"key": cdef["key"]},
         )
         assert "option" in result
@@ -160,7 +160,7 @@ def test_render_by_key(catalog, chart_defs, charts):
 
 def test_render_each_chart_type_has_data(catalog, charts):
     for chart in charts:
-        result = catalog._get(f"/datasets/{DATASET_ID}/charts/{chart['id']}/render")
+        result = catalog._get(catalog._ns_url(f"/datasets/{DATASET_ID}/charts/{chart['id']}/render"))
         option = result["option"]
         series = option.get("series", [])
         has_data = any(len(s.get("data", [])) > 0 for s in series)
@@ -172,7 +172,7 @@ def test_render_bar_structure(catalog, charts, chart_defs):
     if bar_def is None:
         pytest.skip("No bar chart in YAML")
     bar_chart = next(c for c in charts if c["key"] == bar_def["key"])
-    result = catalog._get(f"/datasets/{DATASET_ID}/charts/{bar_chart['id']}/render")
+    result = catalog._get(catalog._ns_url(f"/datasets/{DATASET_ID}/charts/{bar_chart['id']}/render"))
     option = result["option"]
     assert "xAxis" in option
     assert "yAxis" in option
@@ -184,7 +184,7 @@ def test_render_pie_structure(catalog, charts, chart_defs):
     if pie_def is None:
         pytest.skip("No pie chart in YAML")
     pie_chart = next(c for c in charts if c["key"] == pie_def["key"])
-    result = catalog._get(f"/datasets/{DATASET_ID}/charts/{pie_chart['id']}/render")
+    result = catalog._get(catalog._ns_url(f"/datasets/{DATASET_ID}/charts/{pie_chart['id']}/render"))
     option = result["option"]
     series = option["series"]
     assert series[0]["type"] == "pie"
@@ -196,7 +196,7 @@ def test_render_radar_has_indicator(catalog, charts, chart_defs):
     if radar_def is None:
         pytest.skip("No radar chart in YAML")
     radar_chart = next(c for c in charts if c["key"] == radar_def["key"])
-    result = catalog._get(f"/datasets/{DATASET_ID}/charts/{radar_chart['id']}/render")
+    result = catalog._get(catalog._ns_url(f"/datasets/{DATASET_ID}/charts/{radar_chart['id']}/render"))
     option = result["option"]
     assert "radar" in option
     axes = radar_def["spec"]["axes"]
@@ -205,12 +205,12 @@ def test_render_radar_has_indicator(catalog, charts, chart_defs):
 
 def test_render_nonexistent_chart(catalog):
     with pytest.raises(CatalogError):
-        catalog._get(f"/datasets/{DATASET_ID}/charts/999999/render")
+        catalog._get(catalog._ns_url(f"/datasets/{DATASET_ID}/charts/999999/render"))
 
 
 def test_render_by_nonexistent_key(catalog):
     with pytest.raises(CatalogError):
         catalog._get(
-            f"/datasets/{DATASET_ID}/charts/_render",
+            catalog._ns_url(f"/datasets/{DATASET_ID}/charts/_render"),
             params={"key": "_no_such_chart"},
         )

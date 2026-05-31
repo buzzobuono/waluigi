@@ -1,4 +1,5 @@
 import { api }       from '../api.js';
+import { nsStore }  from '../store.js';
 import BasePage     from './BasePage.js';
 import BasePanel    from './BasePanel.js';
 import BaseButton   from './BaseButton.js';
@@ -104,7 +105,7 @@ export default {
       error.value    = null;
       noResult.value = false;
       try {
-        const res    = await api.datasetDQResult(datasetId.value, version.value);
+        const res    = await api.datasetDQResult(nsStore.selected, datasetId.value, version.value);
         result.value = res.data ?? null;
       } catch (e) {
         if (e.message.includes('404')) noResult.value = true;

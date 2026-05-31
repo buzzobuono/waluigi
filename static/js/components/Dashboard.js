@@ -1,4 +1,5 @@
 import { api }         from '../api.js';
+import { nsStore }    from '../store.js';
 import BasePage       from './BasePage.js';
 import BasePanel      from './BasePanel.js';
 import BaseButton     from './BaseButton.js';
@@ -41,7 +42,7 @@ export default {
       p.error   = null;
       p.option  = null;
       try {
-        const res = await api.renderChartByKey(p.dataset_id, p.chart_key, p.version || null);
+        const res = await api.renderChartByKey(nsStore.selected, p.dataset_id, p.chart_key, p.version || null);
         p.option          = res.data?.option          ?? null;
         p.renderedVersion = res.data?.version         ?? null;
         p.isLatest        = res.data?.is_latest       ?? true;
@@ -67,9 +68,10 @@ export default {
       if (!addDatasetId.value.trim()) return;
       addLoading.value = true;
       try {
+        const ns = nsStore.selected;
         const [chartsRes, versionsRes] = await Promise.all([
-          api.datasetCharts(addDatasetId.value.trim()),
-          api.catalogDatasetVersions(addDatasetId.value.trim()),
+          api.datasetCharts(ns, addDatasetId.value.trim()),
+          api.catalogDatasetVersions(ns, addDatasetId.value.trim()),
         ]);
         addCharts.value   = chartsRes.data  ?? [];
         addVersions.value = versionsRes.data ?? [];

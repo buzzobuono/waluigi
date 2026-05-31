@@ -6,44 +6,51 @@ from waluigi.catalog.services.source_service import SourceService
 from waluigi.catalog.config.dependencies import source_service
 
 source_router = APIRouter(
-    prefix="/sources",
+    prefix="/namespaces/{namespace}/sources",
     tags=["Sources"]
 )
 
 
 @source_router.get("", summary="List sources")
-async def list_sources(source_service: SourceService = Depends(source_service)):
-    return ok(source_service.list())
+async def list_sources(namespace: str,
+                       svc: SourceService = Depends(source_service)):
+    return ok(svc.list(namespace))
 
 
 @source_router.post("", summary="Register or update a source (upsert)", status_code=200)
-async def create_source(body: SourceCreateRequest, source_service: SourceService = Depends(source_service)):
+async def create_source(namespace: str, body: SourceCreateRequest,
+                        svc: SourceService = Depends(source_service)):
     try:
-        return ok(source_service.upsert(body.id, body.type.value, body.config, body.description))
+        return ok(svc.upsert(namespace, body.id, body.type.value,
+                             body.config, body.description))
     except ValueError as e:
         return ko(str(e), 409)
 
 
 @source_router.get("/{source_id}", summary="Get a source details")
-async def get_source(source_id: str, source_service: SourceService = Depends(source_service)):
-    source = source_service.get(source_id)
+async def get_source(namespace: str, source_id: str,
+                     svc: SourceService = Depends(source_service)):
+    source = svc.get(namespace, source_id)
     if not source:
         return ko("Source not found", 404)
     return ok(source)
 
 
 @source_router.patch("/{source_id}", summary="Update a source")
-async def update_source(source_id: str, body: SourceUpdateRequest, source_service: SourceService = Depends(source_service)):
-    source = source_service.update(source_id, **_model_dump(body))
+async def update_source(namespace: str, source_id: str,
+                        body: SourceUpdateRequest,
+                        svc: SourceService = Depends(source_service)):
+    source = svc.update(namespace, source_id, **_model_dump(body))
     if not source:
         return ko("Source not found", 404)
     return ok(source)
 
 
 @source_router.delete("/{source_id}", summary="Delete a source")
-async def delete_source(source_id: str, source_service: SourceService = Depends(source_service)):
+async def delete_source(namespace: str, source_id: str,
+                        svc: SourceService = Depends(source_service)):
     try:
-        deleted = source_service.delete(source_id)
+        deleted = svc.delete(namespace, source_id)
     except ValueError as e:
         return ko(str(e), 409)
     if not deleted:

@@ -25,6 +25,7 @@ class DQService:
     def run_on_commit(self, dataset_id: str, version: str,
                       connector, location: str, fmt: str,
                       expectations: list) -> dict | None:
+        """dataset_id here is the browse_path (namespace/local_id)."""
         try:
             if not expectations:
                 return None
@@ -93,44 +94,51 @@ class DQService:
             for rule_id, rule in sorted(self.dq_manager.catalogue.items())
         ]
 
-    def list_results(self, dataset_id: str) -> list:
-        if not self.datasets_repository.exists(dataset_id):
+    def list_results(self, namespace: str, dataset_id: str) -> list:
+        if not self.datasets_repository.exists(namespace, dataset_id):
             raise ValueError("Dataset not found")
-        return self.dq_results_repository.list(dataset_id)
+        return self.dq_results_repository.list(f"{namespace}/{dataset_id}")
 
-    def get_result(self, dataset_id: str, version: str) -> dict:
-        if not self.datasets_repository.exists(dataset_id):
+    def get_result(self, namespace: str, dataset_id: str, version: str) -> dict:
+        if not self.datasets_repository.exists(namespace, dataset_id):
             raise ValueError("Dataset not found")
-        row = self.dq_results_repository.get(dataset_id, version)
+        row = self.dq_results_repository.get(f"{namespace}/{dataset_id}", version)
         if not row:
             raise ValueError("No DQ result for this version")
         return row
 
-    def list_expectations(self, dataset_id: str) -> list[ExpectationResponse]:
-        if not self.datasets_repository.exists(dataset_id):
+    def list_expectations(self, namespace: str,
+                          dataset_id: str) -> list[ExpectationResponse]:
+        if not self.datasets_repository.exists(namespace, dataset_id):
             raise ValueError("Dataset not found")
         return [ExpectationResponse.from_entity(e)
-                for e in self.expectations_repository.list(dataset_id)]
+                for e in self.expectations_repository.list(
+                    f"{namespace}/{dataset_id}")]
 
-    def add_expectation(self, dataset_id: str, rule_id: str, inputs: dict,
-                        params: dict, tolerance: float, position: int) -> ExpectationResponse:
-        if not self.datasets_repository.exists(dataset_id):
+    def add_expectation(self, namespace: str, dataset_id: str, rule_id: str,
+                        inputs: dict, params: dict, tolerance: float,
+                        position: int) -> ExpectationResponse:
+        if not self.datasets_repository.exists(namespace, dataset_id):
             raise ValueError("Dataset not found")
-        entity = self.expectations_repository.add(dataset_id, rule_id, inputs, params,
-                                       tolerance, position)
+        browse_path = f"{namespace}/{dataset_id}"
+        entity = self.expectations_repository.add(browse_path, rule_id, inputs,
+                                                   params, tolerance, position)
         return ExpectationResponse.from_entity(entity)
 
-    def update_expectation(self, dataset_id: str, exp_id: int,
+    def update_expectation(self, namespace: str, dataset_id: str, exp_id: int,
                            **updates) -> ExpectationResponse:
-        if not self.datasets_repository.exists(dataset_id):
+        if not self.datasets_repository.exists(namespace, dataset_id):
             raise ValueError("Dataset not found")
-        if not self.expectations_repository.update(dataset_id, exp_id, **updates):
+        browse_path = f"{namespace}/{dataset_id}"
+        if not self.expectations_repository.update(browse_path, exp_id, **updates):
             raise ValueError("Expectation not found")
-        return ExpectationResponse.from_entity(self.expectations_repository.get(dataset_id, exp_id))
+        return ExpectationResponse.from_entity(
+            self.expectations_repository.get(browse_path, exp_id))
 
-    def delete_expectation(self, dataset_id: str, exp_id: int) -> dict:
-        if not self.datasets_repository.exists(dataset_id):
+    def delete_expectation(self, namespace: str, dataset_id: str,
+                           exp_id: int) -> dict:
+        if not self.datasets_repository.exists(namespace, dataset_id):
             raise ValueError("Dataset not found")
-        if not self.expectations_repository.delete(dataset_id, exp_id):
+        if not self.expectations_repository.delete(f"{namespace}/{dataset_id}", exp_id):
             raise ValueError("Expectation not found")
         return {"deleted": exp_id}

@@ -22,10 +22,10 @@ def ensure_source(catalog):
 @pytest.fixture
 def dataset_id(catalog):
     uid = str(uuid.uuid4())[:8]
-    id_ = f"test/unit/ds_{uid}"
+    id_ = f"unit/ds_{uid}"
     yield id_
     try:
-        catalog._delete(f"/datasets/{id_}")
+        catalog._delete(catalog._ns_url(f"/datasets/{id_}"))
     except Exception:
         pass
 
@@ -36,7 +36,7 @@ def test_list_datasets_returns_list(catalog):
     assert isinstance(result, list)
 
 def test_create_and_get_dataset(catalog, dataset_id):
-    handle = catalog.create_dataset(dataset_id, format="parquet",
+    handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID,
                                     description="Dataset di test unitario")
     assert handle is not None
 
@@ -46,8 +46,8 @@ def test_create_and_get_dataset(catalog, dataset_id):
     assert dataset["status"] == DatasetStatus.DRAFT
 
 def test_create_dataset_idempotent(catalog, dataset_id):
-    catalog.create_dataset(dataset_id, format="csv", description="first")
-    catalog.create_dataset(dataset_id, format="csv", description="second")
+    catalog.create_dataset(dataset_id, format="csv", source_id=SOURCE_ID, description="first")
+    catalog.create_dataset(dataset_id, format="csv", source_id=SOURCE_ID, description="second")
     dataset = catalog.get_dataset(dataset_id)
     assert dataset["id"] == dataset_id
 
@@ -56,17 +56,17 @@ def test_get_nonexistent_dataset(catalog):
         catalog.get_dataset("does/not/exist")
 
 def test_delete_dataset(catalog, dataset_id):
-    catalog.create_dataset(dataset_id, format="csv")
-    catalog._delete(f"/datasets/{dataset_id}")
+    catalog.create_dataset(dataset_id, format="csv", source_id=SOURCE_ID)
+    catalog._delete(catalog._ns_url(f"/datasets/{dataset_id}"))
     with pytest.raises(CatalogError):
         catalog.get_dataset(dataset_id)
 
 # ── DQ Expectations Management ────────────────────────────────────────────────
 
 def test_add_and_list_expectations(catalog, dataset_id):
-    catalog.create_dataset(dataset_id, format="parquet")
+    catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     
-    catalog._post(f"/datasets/{dataset_id}/expectations", json={
+    catalog._post(catalog._ns_url(f"/datasets/{dataset_id}/expectations"), json={
         "rule_id": "expect_column_values_to_not_be_null",
         "inputs": {"column": "user_id"},
         "params": {},
@@ -74,25 +74,25 @@ def test_add_and_list_expectations(catalog, dataset_id):
         "position": 0
     })
 
-    expectations = catalog._get(f"/datasets/{dataset_id}/expectations")
+    expectations = catalog._get(catalog._ns_url(f"/datasets/{dataset_id}/expectations"))
     assert len(expectations) == 1
     assert expectations[0]["rule_id"] == "expect_column_values_to_not_be_null"
 
 def test_update_expectation(catalog, dataset_id):
-    catalog.create_dataset(dataset_id, format="parquet")
-    exp = catalog._post(f"/datasets/{dataset_id}/expectations", json={
+    catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
+    exp = catalog._post(catalog._ns_url(f"/datasets/{dataset_id}/expectations"), json={
         "rule_id": "expect_column_values_to_be_between",
         "inputs": {"column": "age"},
         "params": {"min_value": 0, "max_value": 120},
         "tolerance": 0.80,
         "position": 1
     })
-    
-    catalog._patch(f"/datasets/{dataset_id}/expectations/{exp['id']}", json={
+
+    catalog._patch(catalog._ns_url(f"/datasets/{dataset_id}/expectations/{exp['id']}"), json={
         "tolerance": 0.99
     })
-    
-    expectations = catalog._get(f"/datasets/{dataset_id}/expectations")
+
+    expectations = catalog._get(catalog._ns_url(f"/datasets/{dataset_id}/expectations"))
     updated = next(e for e in expectations if e["id"] == exp["id"])
     assert float(updated["tolerance"]) == 0.99
 
@@ -104,7 +104,7 @@ def test_dq_flow_on_commit(catalog, dataset_id, sample_data):
 
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     
-    catalog._post(f"/datasets/{dataset_id}/expectations", json={
+    catalog._post(catalog._ns_url(f"/datasets/{dataset_id}/expectations"), json={
         "rule_id": "expect_column_values_to_not_be_null",
         "inputs": {"x": "this.id"},
         "params": {},
@@ -114,8 +114,8 @@ def test_dq_flow_on_commit(catalog, dataset_id, sample_data):
 
     with handle.create_version(metadata={"ref": "dq-test"}, force=True) as ctx:
         ctx.write(sample_data)
-    
-    results = catalog._get(f"/datasets/{dataset_id}/dq")
+
+    results = catalog._get(catalog._ns_url(f"/datasets/{dataset_id}/dq"))
     assert len(results) > 0
     
     latest_res = results[0]
@@ -153,12 +153,12 @@ def test_get_dq_suite_enrichment(catalog, tmp_path):
 
 def test_list_dq_results_not_found(catalog):
     with pytest.raises(CatalogError):
-        catalog._get("/datasets/non_existent_ds/dq")
+        catalog._get(catalog._ns_url("/datasets/non_existent_ds/dq"))
 
 
 def test_add_expectation_invalid_dataset(catalog):
     with pytest.raises(CatalogError):
-        catalog._post("/datasets/ghost_ds/expectations", json={
+        catalog._post(catalog._ns_url("/datasets/ghost_ds/expectations"), json={
             "rule_id": "expect_column_values_to_not_be_null",
             "inputs": {"x": "this.id"},
             "params": {}, "tolerance": 1.0, "position": 0
@@ -171,7 +171,7 @@ def test_dq_result_error_handling(catalog, dataset_id):
     handle = catalog.create_dataset(dataset_id, format="parquet", source_id=SOURCE_ID)
     
     # Forza un'expectation con una colonna che non esiste per generare un errore nel run
-    catalog._post(f"/datasets/{dataset_id}/expectations", json={
+    catalog._post(catalog._ns_url(f"/datasets/{dataset_id}/expectations"), json={
         "rule_id": "expect_column_values_to_not_be_null",
         "inputs": {"x": "this.non_existent_column"},
         "params": {}, "tolerance": 1.0, "position": 0
@@ -180,8 +180,8 @@ def test_dq_result_error_handling(catalog, dataset_id):
     # Scriviamo dati validi (la DQ fallirà internamente cercando la colonna)
     with handle.create_version(metadata={"ref": "error-test"}, force=True) as ctx:
         ctx.write([{"id": 1}])
-    
-    results = catalog._get(f"/datasets/{dataset_id}/dq")
+
+    results = catalog._get(catalog._ns_url(f"/datasets/{dataset_id}/dq"))
     assert len(results) > 0
     # In base al tuo DQService, in caso di Exception success diventa False
     assert results[0]["success"] is False

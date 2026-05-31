@@ -5,11 +5,12 @@ from dataclasses import dataclass, asdict
 
 @dataclass
 class Dataset:
+    namespace:   str
     id:          str
     format:      str
     description: str | None
     status:      str
-    source_id:   str | None
+    source_id:   str
     dq_suite:    str | None
     username:    str
     createdate:  str
@@ -21,11 +22,12 @@ class Dataset:
             return None
         d = dict(row._mapping)
         return cls(
+            namespace=d["namespace"],
             id=d["id"],
             format=d["format"],
             description=d.get("description"),
             status=d["status"],
-            source_id=d.get("source_id"),
+            source_id=d["source_id"],
             dq_suite=d.get("dq_suite"),
             username=d["username"],
             createdate=d["createdate"],

@@ -1,4 +1,5 @@
 import { api } from '../api.js';
+import { nsStore } from '../store.js';
 import BasePage from './BasePage.js';
 import BasePanel from './BasePanel.js';
 import BaseButton from './BaseButton.js';
@@ -42,9 +43,10 @@ export default {
       try {
         const limit  = pageSize.value;
         const offset = (currentPage.value - 1) * limit;
+        const ns = nsStore.selected;
         const [previewRes, metaRes] = await Promise.all([
-          api.catalogDatasetPreview(id, version, limit, offset),
-          api.catalogDatasetMetadata(id, version),
+          api.catalogDatasetPreview(ns, id, version, limit, offset),
+          api.catalogDatasetMetadata(ns, id, version),
         ]);
         columns.value  = (previewRes.data.columns || []).map(col => ({ key: col, label: col }));
         rows.value     = previewRes.data.rows || [];

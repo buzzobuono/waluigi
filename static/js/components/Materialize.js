@@ -1,4 +1,5 @@
 import { api }       from '../api.js';
+import { nsStore }  from '../store.js';
 import BaseModal     from './BaseModal.js';
 import BaseButton    from './BaseButton.js';
 import BaseInput     from './BaseInput.js';
@@ -56,7 +57,7 @@ export default defineComponent({
 
       loading.value = true;
       try {
-        const res = await api.catalogMaterialize(datasetId.value.trim(), {
+        const res = await api.catalogMaterialize(nsStore.selected, datasetId.value.trim(), {
           base_url: baseUrl.value.trim().replace(/\/+$/, ''),
           endpoint: endpoint.value.trim().startsWith('/')
             ? endpoint.value.trim()

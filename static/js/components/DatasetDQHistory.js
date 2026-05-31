@@ -1,4 +1,5 @@
 import { api }       from '../api.js';
+import { nsStore }  from '../store.js';
 import BasePage     from './BasePage.js';
 import BasePanel    from './BasePanel.js';
 import BaseButton   from './BaseButton.js';
@@ -67,7 +68,7 @@ export default {
       loading.value = true;
       error.value   = null;
       try {
-        const res    = await api.datasetDQResults(datasetId.value);
+        const res    = await api.datasetDQResults(nsStore.selected, datasetId.value);
         history.value = res.data || [];
       } catch (e) {
         error.value = e.message;

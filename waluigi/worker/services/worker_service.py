@@ -34,6 +34,7 @@ class WorkerService:
             env["WALUIGI_TASK_ID"] = id
             env["WALUIGI_JOB_ID"] = job_id
             env["WALUIGI_CONFIG"] = json.dumps(config)
+            env["WALUIGI_CATALOG_NAMESPACE"] = namespace
             if script:
                 env["WALUIGI_SCRIPT"] = script
             os.makedirs(workdir, exist_ok=True)

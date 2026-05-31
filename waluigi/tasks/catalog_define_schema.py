@@ -35,10 +35,10 @@ def run():
         body = {k: col[k] for k in _PATCH_FIELDS if k in col}
         if body:
             encoded = quote(name, safe="")
-            catalog._patch(f"/datasets/{dataset_id}/schema/{encoded}", json=body)
+            catalog._patch(catalog._ns_url(f"/datasets/{dataset_id}/schema/{encoded}"), json=body)
 
     if publish:
-        catalog._post(f"/datasets/{dataset_id}/schema/publish", json={"published_by": "waluigi"})
+        catalog._post(catalog._ns_url(f"/datasets/{dataset_id}/schema/publish"), json={"published_by": "waluigi"})
         print(f"Dataset '{dataset_id}': {len(columns)} column(s) defined, schema published")
     else:
         print(f"Dataset '{dataset_id}': {len(columns)} column(s) defined (draft)")
