@@ -98,6 +98,7 @@ export const api = {
 
   // ── Boss — Jobs (namespace-scoped) ────────────────────────────────────────
   jobs:      (ns)        => _get(`/boss/namespaces/${_enc(ns)}/jobs`).then(_unwrap),
+  job:       (ns, jobId) => _get(`/boss/namespaces/${_enc(ns)}/jobs/${_enc(jobId)}`).then(_unwrap),
   pauseJob:  (ns, jobId) => _post(`/boss/namespaces/${_enc(ns)}/jobs/${_enc(jobId)}/_pause`).then(_unwrap),
   resumeJob: (ns, jobId) => _post(`/boss/namespaces/${_enc(ns)}/jobs/${_enc(jobId)}/_resume`).then(_unwrap),
   resetJob:  (ns, jobId) => _post(`/boss/namespaces/${_enc(ns)}/jobs/${_enc(jobId)}/_reset`).then(_unwrap),

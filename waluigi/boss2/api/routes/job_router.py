@@ -17,6 +17,14 @@ async def list_jobs(namespace: str, svc=Depends(job_service)):
     return ok(svc.list(namespace))
 
 
+@router.get("/{job_id}")
+async def get_job(namespace: str, job_id: str, svc=Depends(job_service)):
+    job = svc.get(namespace, job_id)
+    if job is None:
+        return ko(f"Job '{job_id}' not found", status=404)
+    return ok(job)
+
+
 @router.post("")
 async def submit(
     namespace: str,

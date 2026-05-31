@@ -10,6 +10,9 @@ class JobService:
     def create(self, namespace: str, job_id: str, kind: str, metadata: dict, spec: dict) -> None:
         self.repo.create(namespace, job_id, kind, metadata, spec)
 
+    def get(self, namespace: str, job_id: str) -> dict | None:
+        return self.repo.get(namespace, job_id)
+
     def list_runnable_ids(self) -> list[tuple[str, str]]:
         return self.repo.list_runnable_ids()
 

@@ -73,17 +73,6 @@ def create_boss_engine(url: str):
 
     _meta.create_all(engine)
 
-    # Add kind column to existing DBs that predate this field
-    if engine.dialect.name == "sqlite":
-        with engine.begin() as conn:
-            cols = [r[1] for r in conn.execute(
-                __import__("sqlalchemy").text("PRAGMA table_info(jobs)")
-            ).fetchall()]
-            if "kind" not in cols:
-                conn.execute(__import__("sqlalchemy").text(
-                    "ALTER TABLE jobs ADD COLUMN kind TEXT NOT NULL DEFAULT 'Job'"
-                ))
-
     from sqlalchemy import select, insert
     with engine.begin() as conn:
         if not conn.execute(select(_t_resources)).fetchone():

@@ -114,6 +114,21 @@ class JobRepository(BaseRepository):
                 .values(locked_by=None, locked_until=None)
             )
 
+    def get(self, namespace: str, job_id: str) -> dict | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                select(_t_jobs).where(and_(
+                    _t_jobs.c.namespace == namespace,
+                    _t_jobs.c.job_id == job_id,
+                ))
+            ).fetchone()
+            if row is None:
+                return None
+            d = dict(row._mapping)
+            d["metadata"] = json.loads(d["metadata"]) if isinstance(d["metadata"], str) else (d["metadata"] or {})
+            d["spec"]     = json.loads(d["spec"])     if isinstance(d["spec"],     str) else (d["spec"]     or {})
+            return d
+
     def list(self, namespace: str | None = None) -> list[dict]:
         with self._conn() as conn:
             q = select(_t_jobs)

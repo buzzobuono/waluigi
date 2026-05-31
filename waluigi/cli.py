@@ -280,11 +280,9 @@ class WaluigiCLI:
         ns = self._resolve_namespace(namespace)
         if not ns: return
         try:
-            r = self._http.get(f"/boss/namespaces/{ns}/jobs", headers=self._headers())
+            r = self._http.get(f"/boss/namespaces/{ns}/jobs/{job_id}", headers=self._headers())
             if not _ok(r): return
-            job = next((j for j in _data(r) if j.get("job_id") == job_id), None)
-            if not job:
-                print(f"job '{job_id}' not found in namespace '{ns}'."); return
+            job = _data(r)
 
             r2    = self._http.get(f"/boss/namespaces/{ns}/tasks",
                                    params={"job_id": job_id}, headers=self._headers())
@@ -293,11 +291,12 @@ class WaluigiCLI:
             if output == "json":
                 print(json.dumps({"job": job, "tasks": tasks}, indent=2)); return
 
-            meta = _parse_json_field(job.get("metadata", {}))
-            spec = _parse_json_field(job.get("spec", {}))
+            meta = job.get("metadata") or {}
+            spec = job.get("spec")     or {}
 
             print(f"\nJob: {job_id}  (namespace: {ns})")
             summary = [
+                ["kind",       job.get("kind", "Job")],
                 ["status",     _color(job.get("status", ""))],
                 ["started_at", job.get("started_at") or "-"],
                 ["locked_by",  job.get("locked_by")  or "-"],

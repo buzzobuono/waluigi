@@ -15,6 +15,7 @@ export default {
     const namespace  = Vue.ref(decodeURIComponent(route.params.namespace));
     const jobId      = Vue.ref(decodeURIComponent(route.params.jobId));
     const tasks      = Vue.ref([]);
+    const job        = Vue.ref(null);
     const loading    = Vue.ref(false);
     const logModalRef = Vue.ref(null);
 
@@ -29,7 +30,10 @@ export default {
     const load = async () => {
       loading.value = true;
       try {
-        tasks.value = await api.jobTasks(namespace.value, jobId.value);
+        [job.value, tasks.value] = await Promise.all([
+          api.job(namespace.value, jobId.value),
+          api.jobTasks(namespace.value, jobId.value),
+        ]);
       } finally {
         loading.value = false;
       }
@@ -59,7 +63,7 @@ export default {
     });
 
     return {
-      namespace, jobId, tasks, loading, logModalRef,
+      namespace, jobId, job, tasks, loading, logModalRef,
       STATUS_COLOR, resetTask, deleteTask, openLogs, load
     };
   },
@@ -80,6 +84,9 @@ export default {
         />
         <span class="ml-3 badge badge-secondary align-self-center">
           <i class="fas fa-layer-group mr-1"></i>{{ namespace }}
+        </span>
+        <span v-if="job" :class="['ml-2 badge align-self-center', job.kind === 'StatefulJob' ? 'badge-primary' : 'badge-light border']">
+          {{ job.kind || 'Job' }}
         </span>
         <base-button
           label="Refresh"
