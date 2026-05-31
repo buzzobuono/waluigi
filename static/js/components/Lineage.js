@@ -26,6 +26,12 @@ export default {
       if (route.query.id)  search();
     });
 
+    function stripNs(browsePath) {
+      if (!browsePath) return browsePath;
+      const prefix = nsStore.selected + '/';
+      return browsePath.startsWith(prefix) ? browsePath.slice(prefix.length) : browsePath;
+    }
+
     async function search() {
       const id = idInput.value.trim();
       if (!id) { error.value = 'Dataset ID is required.'; return; }
@@ -51,11 +57,11 @@ export default {
           verInput.value = ver;
         }
 
-        current.value = versions.find(v => v.version === ver) || { dataset_id: id, version: ver };
+        current.value = { dataset_id: id, version: ver };
 
         const lineage    = await api.catalogDatasetLineage(nsStore.selected, id, ver);
-        upstream.value   = lineage.data.upstream   || [];
-        downstream.value = lineage.data.downstream || [];
+        upstream.value   = (lineage.data.upstream   || []).map(u => ({ ...u, dataset_id: stripNs(u.dataset_id) }));
+        downstream.value = (lineage.data.downstream || []).map(d => ({ ...d, dataset_id: stripNs(d.dataset_id) }));
 
       } catch (e) {
         error.value = `Error: ${e.message}`;
