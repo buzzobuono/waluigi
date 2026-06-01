@@ -1,0 +1,15 @@
+kind: Job
+metadata:
+    name: "hello-job"
+    namespace: "test"
+    workdir: "work"
+spec:
+    tasks:
+        - id: "hello"
+          taskRef:
+              name: "hello-task"
+          taskSpec:
+              script: |
+                  print(f"Hello Word")
+          resources:
+              coin: 1
