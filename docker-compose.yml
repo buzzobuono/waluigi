@@ -8,7 +8,7 @@ services:
       protocol: tcp
       mode: ingress
     environment:
-      - WALUIGI_BOSS_DB_PATH=/db/waluigi.db
+      - WALUIGI_BOSS_DB_URL=sqlite:////db/waluigi.db
     volumes:
       - ./db:/db
     deploy:
