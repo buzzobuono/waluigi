@@ -57,6 +57,15 @@ _t_task_logs = Table("task_logs", _meta,
 
 Index("idx_logs_ns_task", _t_task_logs.c.namespace, _t_task_logs.c.task_id)
 
+_t_task_defnitions = Table("task_definitions", _meta,
+    Column("namespace",    Text, nullable=False),
+    Column("id",       Text, nullable=False),
+    Column("kind",         Text, nullable=False, default="Job"),
+    Column("metadata",     Text),
+    Column("spec",         Text),
+    PrimaryKeyConstraint("namespace", "id"),
+)
+
 
 def create_boss_engine(url: str):
     kwargs = {"pool_pre_ping": True}

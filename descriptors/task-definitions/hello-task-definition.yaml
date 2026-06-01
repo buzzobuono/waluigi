@@ -1,0 +1,7 @@
+kind: TaskDefinition
+metadata:
+    name: "hello-task-definition"
+spec:
+    script: |
+        print(f"Hello Word")
+

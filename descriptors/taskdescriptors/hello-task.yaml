@@ -1,8 +1,0 @@
-kind: TaskDescriptor
-metadata:
-    name: "hello-task"
-    namespace: "default"
-spec:
-    script: |
-        print(f"Hello Word")
-

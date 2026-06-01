@@ -68,6 +68,10 @@ def update_service(db=Depends(get_db)):
     from waluigi.boss2.services.update_service import UpdateService
     return UpdateService(db.tasks, db.resources, db.workers)
 
+def task_definition_service(db=Depends(get_db)):
+    from waluigi.boss2.services.task_definition_service import TaskDefinitionService
+    return TaskDefinitionService(db.task_definitions)
+
 def boss_engine(db=Depends(get_db)):
     from waluigi.boss2.engine import BossEngine
-    return BossEngine(db.tasks, db.workers, db.resources)
+    return BossEngine(db.tasks, db.workers, db.resources, db.task_definitions)

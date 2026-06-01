@@ -11,11 +11,12 @@ from waluigi.boss2.engine import BossEngine
 from waluigi.boss2.planner import planner_loop
 from waluigi.boss2.services.job_service import JobService
 
-from waluigi.boss2.api.routes.namespace_router import router as namespace_router
-from waluigi.boss2.api.routes.task_router      import router as task_router
-from waluigi.boss2.api.routes.job_router       import router as job_router
-from waluigi.boss2.api.routes.worker_router    import router as worker_router
-from waluigi.boss2.api.routes.resource_router  import router as resource_router
+from waluigi.boss2.api.routes.namespace_router         import router as namespace_router
+from waluigi.boss2.api.routes.task_router              import router as task_router
+from waluigi.boss2.api.routes.job_router               import router as job_router
+from waluigi.boss2.api.routes.worker_router            import router as worker_router
+from waluigi.boss2.api.routes.resource_router          import router as resource_router
+from waluigi.boss2.api.routes.task_definition_router   import router as task_definition_router
 
 logger = logging.getLogger("waluigi")
 
@@ -30,6 +31,7 @@ app.include_router(job_router)
 app.include_router(task_router)
 app.include_router(worker_router)
 app.include_router(resource_router)
+app.include_router(task_definition_router)
 
 
 def main():
@@ -50,7 +52,7 @@ def main():
     init_db(args.db_url)
     db = get_db()
 
-    engine  = BossEngine(db.tasks, db.workers, db.resources)
+    engine  = BossEngine(db.tasks, db.workers, db.resources, db.task_definitions)
     job_svc = JobService(db.jobs)
 
     threading.Thread(

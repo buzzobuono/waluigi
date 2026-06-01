@@ -167,6 +167,16 @@ class WaluigiCLI:
                     f"/boss/namespaces/{ns}/jobs",
                     json=doc, headers=self._headers(),
                 )
+            elif kind == 'TaskDefinition':
+                ns = namespace_override or doc.get('metadata', {}).get('namespace')
+                if not ns:
+                    ns = self._resolve_namespace(None)
+                if not ns:
+                    return
+                r = self._http.post(
+                    f"/boss/namespaces/{ns}/task-definitions",
+                    json=doc, headers=self._headers(),
+                )
             elif kind == 'ClusterResources':
                 r = self._http.post("/boss/resources", json=doc, headers=self._headers())
             else:
@@ -274,6 +284,25 @@ class WaluigiCLI:
         except Exception as e:
             print(f"Error: {e}")
 
+    def get_task_definitions(self, namespace=None, output=None):
+        ns = self._resolve_namespace(namespace)
+        if not ns: return
+        try:
+            r = self._http.get(f"/boss/namespaces/{ns}/task-definitions", headers=self._headers())
+            if not _ok(r): return
+            data = _data(r)
+            if output == "json":
+                print(json.dumps(data, indent=2)); return
+            if not data:
+                print("No task definitions found."); return
+            table = [
+                [d.get("id"), d.get("kind", "TaskDefinition"), d.get("namespace")]
+                for d in data
+            ]
+            print(tabulate(table, headers=["ID", "KIND", "NAMESPACE"], tablefmt="plain"))
+        except Exception as e:
+            print(f"Error: {e}")
+
     # ── Describe ──────────────────────────────────────────────────────────────
 
     def describe_job(self, namespace=None, job_id=None, output=None):
@@ -340,6 +369,32 @@ class WaluigiCLI:
                 ["attributes",  task.get("attributes") or "-"],
                 ["last_update", task.get("last_update","-")],
             ]
+            print(tabulate(rows, tablefmt="plain"))
+        except Exception as e:
+            print(f"Error: {e}")
+
+    def describe_task_definition(self, namespace=None, id=None, output=None):
+        ns = self._resolve_namespace(namespace)
+        if not ns: return
+        try:
+            r = self._http.get(f"/boss/namespaces/{ns}/task-definitions/{id}", headers=self._headers())
+            if not _ok(r): return
+            defn = _data(r)
+            if output == "json":
+                print(json.dumps(defn, indent=2)); return
+            meta = defn.get("metadata") or {}
+            spec = defn.get("spec")     or {}
+            rows = [
+                ["id",        defn.get("id")],
+                ["namespace", ns],
+                ["kind",      defn.get("kind", "TaskDefinition")],
+            ]
+            for k, v in meta.items():
+                if k not in ("name", "namespace"):
+                    rows.append([k, v])
+            rows.append(["---", "---"])
+            for k, v in spec.items():
+                rows.append([k, v])
             print(tabulate(rows, tablefmt="plain"))
         except Exception as e:
             print(f"Error: {e}")
@@ -453,7 +508,7 @@ def main():
 
     # get
     p = sub.add_parser('get', help='List resources')
-    p.add_argument('type', choices=['namespaces', 'jobs', 'tasks', 'resources', 'workers'])
+    p.add_argument('type', choices=['namespaces', 'jobs', 'tasks', 'resources', 'workers', 'taskdefinitions'])
     p.add_argument('-n', '--namespace', help='Namespace (required for jobs/tasks; auto-detected if token has one)')
     p.add_argument('-j', '--job_id',    help='Filter tasks by job ID')
     p.add_argument('-s', '--status',    help='Filter jobs by status (PENDING|RUNNING|SUCCESS|FAILED|CANCELLED|PAUSED)')
@@ -461,8 +516,8 @@ def main():
 
     # describe
     p = sub.add_parser('describe', help='Show full details of a job or task')
-    p.add_argument('type',   choices=['job', 'task'])
-    p.add_argument('target', help='Job ID or task ID')
+    p.add_argument('type',   choices=['job', 'task', 'taskdefinition'])
+    p.add_argument('target', help='Job ID, task ID, or TaskDefinition name')
     p.add_argument('-n', '--namespace', help='Namespace (auto-detected if token has one)')
     p.add_argument('-o', '--output',    choices=['json'], help='Output format')
 
@@ -512,11 +567,13 @@ def main():
         if   args.type == 'namespaces': cli.get_namespaces(output=out)
         elif args.type == 'jobs':       cli.get_jobs(namespace=ns, status=args.status, output=out)
         elif args.type == 'tasks':      cli.get_tasks(namespace=ns, job_id=args.job_id, output=out)
-        elif args.type == 'resources':  cli.get_resources(output=out)
-        elif args.type == 'workers':    cli.get_workers(output=out)
+        elif args.type == 'resources':        cli.get_resources(output=out)
+        elif args.type == 'workers':          cli.get_workers(output=out)
+        elif args.type == 'taskdefinitions':  cli.get_task_definitions(namespace=ns, output=out)
     elif args.command == 'describe':
-        if   args.type == 'job':  cli.describe_job(namespace=ns, job_id=args.target, output=out)
-        elif args.type == 'task': cli.describe_task(namespace=ns, task_id=args.target, output=out)
+        if   args.type == 'job':            cli.describe_job(namespace=ns, job_id=args.target, output=out)
+        elif args.type == 'task':           cli.describe_task(namespace=ns, task_id=args.target, output=out)
+        elif args.type == 'taskdefinition': cli.describe_task_definition(namespace=ns, id=args.target, output=out)
     elif args.command == 'cancel':
         cli.cancel(namespace=ns, job_id=args.target)
     elif args.command == 'pause':

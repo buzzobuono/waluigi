@@ -1,0 +1,12 @@
+kind: CronJob
+metadata:
+  name: "daily-etl"
+  namespace: "analytics"
+spec:
+  schedule: "0 6 * * *"        # ogni giorno alle 06:00
+  timezone: "Europe/Rome"       # default UTC se omesso
+  enabled: true
+  concurrencyPolicy: Forbid     # salta se il run precedente è ancora attivo
+
+  jobRef:
+    name: "erp-pipeline"        # referenzia un job esistente nel namespace

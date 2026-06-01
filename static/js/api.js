@@ -113,6 +113,11 @@ export const api = {
   logs:      (ns, taskId, limit = 100) =>
     _get(`/boss/namespaces/${_enc(ns)}/tasks/${_enc(taskId)}/logs`, { limit }).then(_unwrap),
 
+  // ── Boss — Task Definitions (namespace-scoped) ───────────────────────────
+  taskDefinitions:      (ns)       => _get(`/boss/namespaces/${_enc(ns)}/task-definitions`).then(_unwrap),
+  upsertTaskDefinition: (ns, body) => _postJson(`/boss/namespaces/${_enc(ns)}/task-definitions`, body).then(_unwrap),
+  deleteTaskDefinition: (ns, id)   => _delete(`/boss/namespaces/${_enc(ns)}/task-definitions/${_enc(id)}`).then(_unwrap),
+
   // ── Boss — Cluster ────────────────────────────────────────────────────────
   workers:   () => _get('/boss/workers').then(_unwrap),
   resources: () => _get('/boss/resources').then(_unwrap),

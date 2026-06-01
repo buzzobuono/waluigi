@@ -1,10 +1,12 @@
 from __future__ import annotations
+import json
 import logging
 import httpx
 
 from waluigi.boss2.repositories.task_repo import TaskRepository
 from waluigi.boss2.repositories.worker_repo import WorkerRepository
 from waluigi.boss2.repositories.resource_repo import ResourceRepository
+from waluigi.boss2.repositories.task_definition_repo import TaskDefinitionRepository
 
 logger = logging.getLogger("waluigi")
 
@@ -14,10 +16,12 @@ _DEFAULT_RESOURCES = {"coin": 1.0}
 class BossEngine:
 
     def __init__(self, task_repo: TaskRepository, worker_repo: WorkerRepository,
-                 resource_repo: ResourceRepository):
-        self.tasks     = task_repo
-        self.workers   = worker_repo
-        self.resources = resource_repo
+                 resource_repo: ResourceRepository,
+                 task_definition_repo: TaskDefinitionRepository | None = None):
+        self.tasks            = task_repo
+        self.workers          = worker_repo
+        self.resources        = resource_repo
+        self.task_definitions = task_definition_repo
 
     # ── Registration (called at submit time) ──────────────────────────────────
 
@@ -77,6 +81,22 @@ class BossEngine:
         status = self.tasks.get_status(namespace, task.id, params_hash)
         if status in ("RUNNING", "READY"):
             return False
+
+        # Resolve taskRef against DB-defined TaskDefinitions if not a built-in type
+        if task.type and self.task_definitions is not None:
+            from waluigi.tasks import REGISTRY
+            if task.type not in REGISTRY:
+                defn = self.task_definitions.get(namespace, task.type)
+                if defn is None:
+                    logger.error(f"❌ Unknown task type '{task.type}' — no built-in or TaskDefinition found")
+                    self._set_status(namespace, task, "FAILED")
+                    return None
+                spec = defn["spec"]
+                task.command   = spec.get("command", "")
+                task.script    = spec.get("script")
+                if "resources" in spec:
+                    task.resources = spec["resources"]
+                task.type = None  # resolved: let worker use command/script directly
 
         task_resources = getattr(task, "resources", _DEFAULT_RESOURCES)
 
