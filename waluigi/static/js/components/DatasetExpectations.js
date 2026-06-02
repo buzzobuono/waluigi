@@ -167,7 +167,7 @@ export default {
       <base-panel :no-padding="true">
         <template #tools>
           <base-button icon="fas fa-external-link-alt" color="outline-secondary" title="Browse rules" @click="goToRules" />
-          <base-button icon="fas fa-plus" label="Add" color="outline-primary" class="ml-1" @click="openAddExpectation" />
+          <base-button icon="fas fa-plus" label="Add" color="primary" class="ml-1" @click="openAddExpectation" />
         </template>
 
         <base-table :columns="EXP_COLUMNS" :items="expectations">
@@ -198,7 +198,7 @@ export default {
 
           <template #cell(actions)="{ item }">
             <base-button-group>
-              <base-button icon="fas fa-pencil-alt" color="outline-primary" title="Edit"   @click="openEditExpectation(item)" />
+              <base-button icon="fas fa-pencil-alt" color="outline-secondary" title="Edit"   @click="openEditExpectation(item)" />
               <base-button icon="fas fa-trash"      color="outline-danger"  title="Delete" @click="askDeleteExpectation(item)" />
             </base-button-group>
           </template>

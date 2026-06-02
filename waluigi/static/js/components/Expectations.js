@@ -57,7 +57,7 @@ export default {
       :loading="loading">
 
       <template #actions>
-        <base-button icon="fas fa-sync" color="outline-secondary" label="Refresh" @click="loadRules" />
+        <base-button icon="fas fa-sync-alt" color="outline-primary" label="Refresh" @click="loadRules" />
       </template>
 
       <div v-if="pageError" class="alert alert-danger">{{ pageError }}</div>

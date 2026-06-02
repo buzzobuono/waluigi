@@ -255,7 +255,7 @@ export default {
 
           <template #cell(actions)="{ item }">
             <base-button-group>
-              <base-button icon="fas fa-pencil-alt" color="outline-primary" title="Edit"           @click="openEdit(item)" />
+              <base-button icon="fas fa-pencil-alt" color="outline-secondary" title="Edit"           @click="openEdit(item)" />
               <base-button v-if="item.status !== 'published'"
                            icon="fas fa-check"      color="outline-success" title="Approve column" :disabled="saving" @click="askApproveColumn(item)" />
               <base-button icon="fas fa-trash"      color="outline-danger"  title="Delete column"  :disabled="saving" @click="askDeleteColumn(item)" />

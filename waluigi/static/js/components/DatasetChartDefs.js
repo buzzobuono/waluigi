@@ -144,7 +144,7 @@ export default {
 
       <base-panel :no-padding="true">
         <template #tools>
-          <base-button icon="fas fa-plus" label="Add" color="outline-primary" @click="openAddChart" />
+          <base-button icon="fas fa-plus" label="Add" color="primary" @click="openAddChart" />
         </template>
 
         <base-table :columns="CHART_COLUMNS" :items="charts">
@@ -164,7 +164,7 @@ export default {
 
           <template #cell(actions)="{ item }">
             <base-button-group>
-              <base-button icon="fas fa-pencil-alt" color="outline-primary" title="Edit"   @click="openEditChart(item)" />
+              <base-button icon="fas fa-pencil-alt" color="outline-secondary" title="Edit"   @click="openEditChart(item)" />
               <base-button icon="fas fa-trash"      color="outline-danger"  title="Delete" @click="askDeleteChart(item)" />
             </base-button-group>
           </template>

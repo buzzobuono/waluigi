@@ -78,7 +78,7 @@ export default {
         <base-button
           icon="fas fa-sync-alt"
           color="outline-primary"
-          label="Update"
+          label="Refresh"
           class="ml-auto"
           :loading="loading"
           @click="load"
