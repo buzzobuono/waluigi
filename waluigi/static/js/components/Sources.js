@@ -190,6 +190,7 @@ export default {
     watch(() => nsStore.selected, loadSources, { immediate: true });
 
     return {
+      nsStore,
       sources, loading, saving, pageError, formError,
       mode, modalTitle,
       modalRef, confirmRef,
