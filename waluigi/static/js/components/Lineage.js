@@ -108,12 +108,12 @@ export default {
       title="Lineage"
       subtitle="Explore dataset lineage"
       icon="fas fa-project-diagram"
+      :loading="loading && !current"
     >
 
-      <template #actions>
-        <div class="row w-100">
-
-          <div class="col-12 col-sm-4 mb-2">
+      <base-panel class="mb-4">
+        <div class="row align-items-end">
+          <div class="col-12 col-sm-4 mb-2 mb-sm-0">
             <label class="text-muted small">Dataset ID</label>
             <BaseInput
               v-model="idInput"
@@ -121,8 +121,7 @@ export default {
               @keyup.enter="search"
             />
           </div>
-
-          <div class="col-12 col-sm-2 mb-2">
+          <div class="col-12 col-sm-2 mb-2 mb-sm-0">
             <label class="text-muted small">Version</label>
             <BaseInput
               v-model="verInput"
@@ -130,29 +129,22 @@ export default {
               @keyup.enter="search"
             />
           </div>
-
-          <div class="col-12 col-sm-2 mb-2 d-flex align-items-end">
+          <div class="col-12 col-sm-2">
             <BaseButton
               label="Search"
               icon="fas fa-search"
-              color="outline-primary"
-              :disabled="loading"
+              color="primary"
+              :loading="loading"
               @click="search"
             />
           </div>
-
-          <div v-if="error" class="col-12 text-danger small mt-1">
-            {{ error }}
-          </div>
-
         </div>
-      </template>
+        <div v-if="error" class="text-danger small mt-2">
+          <i class="fas fa-exclamation-circle mr-1"></i>{{ error }}
+        </div>
+      </base-panel>
 
-      <div v-if="loading" class="text-center py-4 text-muted">
-        <i class="fas fa-spinner fa-spin mr-2"></i> Loading...
-      </div>
-
-      <div v-else-if="current" class="row">
+      <div v-if="current" class="row">
 
         <!-- Upstream -->
         <div class="col-12 col-md-4 mb-3">
