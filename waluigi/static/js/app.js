@@ -67,13 +67,13 @@ const App = {
           { path: '/jobs',             label: 'Jobs',             icon: 'fa-briefcase' },
           { path: '/tasks',            label: 'Tasks',            icon: 'fa-tasks' },
           { path: '/task-definitions', label: 'Task Definitions', icon: 'fa-cubes' },
+          { path: '/resources',        label: 'Resources',        icon: 'fa-chart-bar' },
         ]
       },
       {
         label: 'Cluster', icon: 'fa-microchip', adminOnly: true,
         children: [
-          { path: '/workers',   label: 'Workers',   icon: 'fa-server' },
-          { path: '/resources', label: 'Resources', icon: 'fa-chart-bar' },
+          { path: '/workers', label: 'Workers', icon: 'fa-server' },
         ]
       },
       {

@@ -5,59 +5,80 @@ from sqlalchemy import select, update, delete, case
 from waluigi.boss2.db.base import BaseRepository
 from waluigi.boss2.db.engine import _t_resources
 
+_r = _t_resources.c
+
 
 class ResourceRepository(BaseRepository):
     # Serialises acquire/release within a single Boss process.
     # For multi-Boss deployments use PostgreSQL (SERIALIZABLE isolation handles it).
     _lock = threading.Lock()
 
-    def list(self) -> list[dict]:
+    def list(self, namespace: str) -> list[dict]:
         with self._conn() as conn:
-            return self._rows(conn.execute(select(_t_resources)).fetchall())
+            return self._rows(
+                conn.execute(
+                    select(_t_resources).where(_r.namespace == namespace)
+                ).fetchall()
+            )
 
-    def acquire(self, resources: dict) -> bool:
-        """Check-and-reserve all requested resources atomically. Returns False if any insufficient."""
+    def acquire(self, namespace: str, resources: dict) -> bool:
+        """
+        Check-and-reserve atomically.
+        If a resource pool is not defined in the namespace, it is silently
+        ignored (no throttling applied — the task proceeds freely).
+        Returns False only when a defined pool is exhausted.
+        """
+        if not resources:
+            return True
         with self._lock:
             with self._conn() as conn:
                 for name, amount in resources.items():
                     row = conn.execute(
-                        select(_t_resources.c.amount, _t_resources.c.usage)
-                        .where(_t_resources.c.name == name)
+                        select(_r.amount, _r.usage)
+                        .where(_r.namespace == namespace)
+                        .where(_r.name == name)
                     ).fetchone()
-                    if not row or (row[1] + float(amount) > row[0]):
-                        return False
+                    if row is None:
+                        continue  # pool not defined → no throttling
+                    if row[1] + float(amount) > row[0]:
+                        return False  # pool exhausted
                 for name, amount in resources.items():
                     conn.execute(
                         update(_t_resources)
-                        .where(_t_resources.c.name == name)
-                        .values(usage=_t_resources.c.usage + float(amount))
+                        .where(_r.namespace == namespace)
+                        .where(_r.name == name)
+                        .values(usage=_r.usage + float(amount))
                     )
                 return True
 
-    def release(self, resources: dict) -> None:
+    def release(self, namespace: str, resources: dict) -> None:
+        if not resources:
+            return
         with self._lock:
             with self._conn() as conn:
                 for name, amount in resources.items():
                     conn.execute(
                         update(_t_resources)
-                        .where(_t_resources.c.name == name)
+                        .where(_r.namespace == namespace)
+                        .where(_r.name == name)
                         .values(usage=case(
-                            (_t_resources.c.usage > float(amount),
-                             _t_resources.c.usage - float(amount)),
+                            (_r.usage > float(amount), _r.usage - float(amount)),
                             else_=0.0,
                         ))
                     )
 
-    def update_limits(self, limits: dict) -> tuple[bool, str]:
-        """Replace the resource pool definition. Rejects if resources in use would be violated."""
+    def update_limits(self, namespace: str, limits: dict) -> tuple[bool, str]:
+        """Replace the resource pool for a namespace. Rejects if in-use resources would be violated."""
         with self._lock:
             with self._conn() as conn:
-                rows = conn.execute(select(_t_resources)).fetchall()
-                current = {r[0]: (r[1], r[2]) for r in rows}   # name → (amount, usage)
+                rows = conn.execute(
+                    select(_t_resources).where(_r.namespace == namespace)
+                ).fetchall()
+                current = {r["name"]: (r["amount"], r["usage"]) for r in rows}
 
                 for name, (_, usage) in current.items():
                     if name not in limits and usage > 0:
-                        return False, f"Risorse occupate: '{name}' in uso ({usage}), impossibile rimuovere"
+                        return False, f"Resource '{name}' in use ({usage}), cannot remove"
 
                 for name, new_amount in limits.items():
                     new_amount = float(new_amount)
@@ -65,20 +86,25 @@ class ResourceRepository(BaseRepository):
                         _, usage = current[name]
                         if new_amount < usage:
                             return False, (
-                                f"Risorse occupate: '{name}' uso attuale ({usage}) > richiesto ({new_amount})"
+                                f"Resource '{name}' current usage ({usage}) > new limit ({new_amount})"
                             )
 
                 for name, new_amount in limits.items():
                     stmt = self._upsert_stmt(
                         _t_resources,
-                        values={"name": name, "amount": float(new_amount), "usage": 0.0},
-                        conflict_cols=["name"],
+                        values={"namespace": namespace, "name": name,
+                                "amount": float(new_amount), "usage": 0.0},
+                        conflict_cols=["namespace", "name"],
                         update_cols=["amount"],
                     )
                     conn.execute(stmt)
 
                 for name in current:
                     if name not in limits:
-                        conn.execute(delete(_t_resources).where(_t_resources.c.name == name))
+                        conn.execute(
+                            delete(_t_resources)
+                            .where(_r.namespace == namespace)
+                            .where(_r.name == name)
+                        )
 
-                return True, "Risorse aggiornate con successo"
+                return True, "Resources updated"

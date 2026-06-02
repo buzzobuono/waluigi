@@ -25,7 +25,7 @@ class UpdateService:
                 return False
 
         if status in ("SUCCESS", "FAILED"):
-            self.resources.release(resources)
+            self.resources.release(namespace, resources)
             if worker_url:
                 self.workers.release_slot(worker_url)
 

@@ -177,8 +177,13 @@ class WaluigiCLI:
                     f"/boss/namespaces/{ns}/task-definitions",
                     json=doc, headers=self._headers(),
                 )
-            elif kind == 'ClusterResources':
-                r = self._http.post("/boss/resources", json=doc, headers=self._headers())
+            elif kind in ('NamespaceResources', 'ClusterResources'):
+                ns = namespace_override or doc.get('metadata', {}).get('namespace')
+                if not ns:
+                    ns = self._resolve_namespace(None)
+                if not ns:
+                    return
+                r = self._http.post(f"/boss/namespaces/{ns}/resources", json=doc, headers=self._headers())
             else:
                 print(f"Error: Kind '{kind}' not supported")
                 return
@@ -246,9 +251,11 @@ class WaluigiCLI:
         except Exception as e:
             print(f"Error: {e}")
 
-    def get_resources(self, output=None):
+    def get_resources(self, namespace=None, output=None):
+        ns = self._resolve_namespace(namespace)
+        if not ns: return
         try:
-            r = self._http.get("/boss/resources", headers=self._headers())
+            r = self._http.get(f"/boss/namespaces/{ns}/resources", headers=self._headers())
             if not _ok(r): return
             data = _data(r)
             if output == "json":
@@ -567,7 +574,7 @@ def main():
         if   args.type == 'namespaces': cli.get_namespaces(output=out)
         elif args.type == 'jobs':       cli.get_jobs(namespace=ns, status=args.status, output=out)
         elif args.type == 'tasks':      cli.get_tasks(namespace=ns, job_id=args.job_id, output=out)
-        elif args.type == 'resources':        cli.get_resources(output=out)
+        elif args.type == 'resources':        cli.get_resources(namespace=ns, output=out)
         elif args.type == 'workers':          cli.get_workers(output=out)
         elif args.type == 'taskdefinitions':  cli.get_task_definitions(namespace=ns, output=out)
     elif args.command == 'describe':

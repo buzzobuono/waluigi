@@ -41,9 +41,11 @@ _t_workers = Table("workers", _meta,
 )
 
 _t_resources = Table("resources", _meta,
-    Column("name",   Text, primary_key=True),
-    Column("amount", Float, nullable=False),
-    Column("usage",  Float, nullable=False, default=0.0),
+    Column("namespace", Text, nullable=False),
+    Column("name",      Text, nullable=False),
+    Column("amount",    Float, nullable=False),
+    Column("usage",     Float, nullable=False, default=0.0),
+    PrimaryKeyConstraint("namespace", "name"),
 )
 
 _t_task_logs = Table("task_logs", _meta,
@@ -81,10 +83,5 @@ def create_boss_engine(url: str):
             dbapi_conn.execute("PRAGMA foreign_keys=ON")
 
     _meta.create_all(engine)
-
-    from sqlalchemy import select, insert
-    with engine.begin() as conn:
-        if not conn.execute(select(_t_resources)).fetchone():
-            conn.execute(insert(_t_resources).values(name="coin", amount=2.0, usage=0.0))
 
     return engine

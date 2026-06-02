@@ -7,8 +7,8 @@ class ResourceService:
     def __init__(self, repo: ResourceRepository):
         self.repo = repo
 
-    def list(self) -> list[dict]:
-        return self.repo.list()
+    def list(self, namespace: str) -> list[dict]:
+        return self.repo.list(namespace)
 
-    def apply(self, spec: dict) -> tuple[bool, str]:
-        return self.repo.update_limits(spec)
+    def apply(self, namespace: str, spec: dict) -> tuple[bool, str]:
+        return self.repo.update_limits(namespace, spec)

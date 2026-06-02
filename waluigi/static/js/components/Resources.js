@@ -1,4 +1,5 @@
-import { api, getToken } from '../api.js';
+import { api } from '../api.js';
+import { nsStore } from '../store.js';
 import BasePage      from './BasePage.js';
 import BasePanel     from './BasePanel.js';
 import BaseButton    from './BaseButton.js';
@@ -6,19 +7,13 @@ import BaseModal     from './BaseModal.js';
 import BaseInput     from './BaseInput.js';
 import ConfirmDialog from './ConfirmDialog.js';
 
-const { ref, onMounted } = Vue;
-
-function _isAdmin() {
-  try { return JSON.parse(atob(getToken().split('.')[1])).namespaces === '*'; }
-  catch { return false; }
-}
+const { ref, watch, onMounted } = Vue;
 
 export default {
   name: 'Resources',
   components: { BasePage, BasePanel, BaseButton, BaseModal, BaseInput, ConfirmDialog },
 
   setup() {
-    const isAdmin   = _isAdmin();
     const resources = ref([]);
     const loading   = ref(false);
     const saving    = ref(false);
@@ -31,10 +26,11 @@ export default {
     const form      = ref({ name: '', amount: '' });
 
     async function load() {
+      if (!nsStore.selected) return;
       loading.value = true;
       error.value   = null;
       try {
-        resources.value = await api.resources();
+        resources.value = await api.resources(nsStore.selected);
       } catch (e) {
         error.value = e.message;
       } finally {
@@ -73,7 +69,7 @@ export default {
       try {
         const spec = Object.fromEntries(resources.value.map(r => [r.name, r.amount]));
         spec[name] = amount;
-        await api.applyResources(spec);
+        await api.applyResources(nsStore.selected, spec);
         modalRef.value?.close();
         await load();
       } catch (e) {
@@ -95,7 +91,7 @@ export default {
           try {
             const spec = Object.fromEntries(resources.value.map(x => [x.name, x.amount]));
             delete spec[r.name];
-            await api.applyResources(spec);
+            await api.applyResources(nsStore.selected, spec);
             await load();
           } catch (e) {
             error.value = e.message;
@@ -104,26 +100,21 @@ export default {
       );
     }
 
-    onMounted(() => { if (isAdmin) load(); });
+    watch(() => nsStore.selected, load);
+    onMounted(load);
 
     return {
-      isAdmin, resources, loading, saving, error, formError,
+      nsStore, resources, loading, saving, error, formError,
       editMode, form, modalRef, confirmRef,
       load, pct, color, openCreate, openEdit, submitForm, confirmDelete,
     };
   },
 
   template: `
-    <base-page v-if="!isAdmin" title="Resources" icon="fas fa-microchip">
-      <div class="alert alert-warning">
-        <i class="fas fa-lock mr-2"></i>Access restricted to administrators.
-      </div>
-    </base-page>
-
-    <base-page v-else
+    <base-page
       title="Resources"
-      subtitle="Cluster resource pool"
-      icon="fas fa-microchip"
+      :subtitle="nsStore.selected ? 'Namespace: ' + nsStore.selected : ''"
+      icon="fas fa-chart-bar"
       :loading="loading && !resources.length"
       :error="error">
 
@@ -145,7 +136,7 @@ export default {
       </template>
 
       <div v-if="!resources.length && !loading" class="text-muted mt-3 text-center">
-        No resources configured — click <strong>Add Resource</strong> to define the cluster resource pool.
+        No resources configured — click <strong>Add Resource</strong> to define resource pools for this namespace.
       </div>
 
       <div v-else class="row">
@@ -181,7 +172,7 @@ export default {
       <!-- Add / Edit modal -->
       <base-modal ref="modalRef"
         :title="editMode === 'edit' ? 'Edit Resource' : 'Add Resource'"
-        icon="fas fa-microchip"
+        icon="fas fa-chart-bar"
         size="sm">
 
         <div class="form-group">
@@ -205,7 +196,7 @@ export default {
             type="number"
             min="1"
           />
-          <small class="text-muted">Total units available in the cluster pool.</small>
+          <small class="text-muted">Total units available in this namespace's resource pool.</small>
         </div>
 
         <div v-if="formError" class="alert alert-danger mt-3 mb-0 py-2 small">

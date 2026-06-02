@@ -58,7 +58,7 @@ class DAGTask:
         self.type = data.get('type')
         self.command = data.get('command', '')
         self.script = data.get('script')
-        self.resources = data.get('resources', {'coin': 1.0})
+        self.resources = data.get('resources', {})
         self.params = SimpleNamespace(**data.get('params', {}))
         self.attributes = SimpleNamespace(**data.get('attributes', {}))
         self.config = data.get('config', {})

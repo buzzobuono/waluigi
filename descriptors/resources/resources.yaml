@@ -1,5 +1,6 @@
-kind: ClusterResources
+kind: NamespaceResources
 metadata:
+  namespace: default
 spec:
   coin: 10.0
   pdc: 5.0

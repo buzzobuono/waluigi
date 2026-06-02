@@ -10,7 +10,7 @@ from waluigi.boss2.repositories.task_definition_repo import TaskDefinitionReposi
 
 logger = logging.getLogger("waluigi")
 
-_DEFAULT_RESOURCES = {"coin": 1.0}
+_DEFAULT_RESOURCES = {}
 
 
 class BossEngine:
@@ -101,7 +101,7 @@ class BossEngine:
         task_resources = getattr(task, "resources", _DEFAULT_RESOURCES)
 
         try:
-            if not self.resources.acquire(task_resources):
+            if not self.resources.acquire(namespace, task_resources):
                 logger.info(f"⏳ {task.id} — not enough resources, will retry")
                 return False
 
@@ -111,24 +111,24 @@ class BossEngine:
             dispatch_result = self._dispatch(namespace, job_metadata, task)
 
             if dispatch_result == "WORKERS_SATURATED":
-                self.resources.release(task_resources)
+                self.resources.release(namespace, task_resources)
                 self._set_status(namespace, task, "PENDING")
                 return "PAUSE"
 
             if dispatch_result == "FATAL_ERROR":
-                self.resources.release(task_resources)
+                self.resources.release(namespace, task_resources)
                 self._set_status(namespace, task, "FAILED")
                 return None
 
             if dispatch_result == "RETRY":
-                self.resources.release(task_resources)
+                self.resources.release(namespace, task_resources)
                 self._set_status(namespace, task, "PENDING")
                 return False
 
             logger.info(f"🚀 {task.id} dispatched")
 
         except Exception as e:
-            self.resources.release(task_resources)
+            self.resources.release(namespace, task_resources)
             logger.error(f"❌ {task.id} error: {e}")
             self._set_status(namespace, task, "PENDING")
 
