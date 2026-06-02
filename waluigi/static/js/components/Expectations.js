@@ -54,13 +54,12 @@ export default {
       title="Expectations"
       subtitle="Available rules catalogue"
       icon="fas fa-shield-alt"
-      :loading="loading">
+      :loading="loading"
+      :error="pageError">
 
       <template #actions>
         <base-button icon="fas fa-sync-alt" color="outline-primary" label="Refresh" class="ml-auto" @click="loadRules" />
       </template>
-
-      <div v-if="pageError" class="alert alert-danger">{{ pageError }}</div>
 
       <base-panel :no-padding="true">
         <base-table :columns="COLUMNS" :items="rules">
