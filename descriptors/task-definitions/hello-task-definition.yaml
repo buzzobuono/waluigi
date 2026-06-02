@@ -1,6 +1,7 @@
 kind: TaskDefinition
 metadata:
     name: "hello-task-definition"
+    namespace: test
 spec:
     script: |
         print(f"Hello Word")

@@ -7,3 +7,5 @@ spec:
         - id: "hello"
           taskRef:
               name: "hello-task-definition"
+          resources:
+              coin: 5
