@@ -137,14 +137,12 @@ export default {
             />
           </div>
         </div>
-        <div class="d-flex w-100 mt-2">
-          <base-button label="Reset NS" icon="fas fa-history" color="outline-warning"
-                       class="mr-2" :disabled="!nsStore.selected" @click="resetNs" />
-          <base-button label="Delete NS" icon="fas fa-trash-alt" color="outline-danger"
-                       class="mr-2" :disabled="!nsStore.selected" @click="deleteNs" />
-          <base-button label="Refresh" icon="fas fa-sync-alt" color="outline-primary"
-                       class="ml-auto" :loading="loading" @click="load" />
-        </div>
+        <base-button label="Reset NS"  icon="fas fa-history"    color="outline-warning"
+                     class="mt-2 mr-2"  :disabled="!nsStore.selected" @click="resetNs" />
+        <base-button label="Delete NS" icon="fas fa-trash-alt"  color="outline-danger"
+                     class="mt-2 mr-2"  :disabled="!nsStore.selected" @click="deleteNs" />
+        <base-button label="Refresh"   icon="fas fa-sync-alt"   color="outline-primary"
+                     class="mt-2 ml-auto" :loading="loading" @click="load" />
       </template>
 
       <div v-if="!nsStore.selected" class="text-center py-5 text-muted">
