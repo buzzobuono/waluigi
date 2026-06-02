@@ -36,6 +36,6 @@ wlctl = "waluigi.cli:main"
 wlboss = "waluigi.boss.__main__:main"
 wlworker = "waluigi.worker.__main__:main"
 wlcatalog = "waluigi.catalog.__main__:main"
-wlconsole = "waluigi.console:main"
+wlconsole = "waluigi.console.__main__:main"
 
 
