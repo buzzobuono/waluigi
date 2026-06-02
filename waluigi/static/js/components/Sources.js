@@ -226,7 +226,12 @@ export default {
         />
       </template>
 
-      <base-panel :no-padding="true">
+      <div v-if="!nsStore.selected" class="text-center py-5 text-muted">
+        <i class="fas fa-plug fa-3x mb-3 opacity-75"></i>
+        <p>Select a namespace to view sources.</p>
+      </div>
+
+      <base-panel v-else :no-padding="true">
         <base-table :columns="columns" :items="sources">
 
           <template #cell(id)="{ item }">
