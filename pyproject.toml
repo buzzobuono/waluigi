@@ -24,6 +24,9 @@ where = ["."]
 include = ["waluigi*"]
 namespaces = true
 
+[tool.setuptools.package-data]
+"waluigi" = ["static/**/*", "static/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"

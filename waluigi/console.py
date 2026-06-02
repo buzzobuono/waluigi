@@ -39,7 +39,7 @@ args = p.parse_args()
 
 BOSS_URL    = args.boss_url.rstrip('/')
 CATALOG_URL = args.catalog_url.rstrip('/')
-STATIC_DIR  = os.path.join(os.getcwd(), "static")
+STATIC_DIR  = os.path.join(os.path.dirname(__file__), "static")
 SECRET_KEY  = args.secret_key
 
 

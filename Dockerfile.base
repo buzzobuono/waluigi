@@ -16,6 +16,5 @@ RUN pip install /tmp/waluigi_src/
 
 RUN rm -rf /tmp/waluigi_src
 
-COPY ./static static
 COPY ./rules rules
 COPY ./logging.yaml logging.yaml
