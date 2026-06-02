@@ -119,8 +119,9 @@ export const api = {
   deleteTaskDefinition: (ns, id)   => _delete(`/boss/namespaces/${_enc(ns)}/task-definitions/${_enc(id)}`).then(_unwrap),
 
   // ── Boss — Cluster ────────────────────────────────────────────────────────
-  workers:   () => _get('/boss/workers').then(_unwrap),
-  resources: () => _get('/boss/resources').then(_unwrap),
+  workers:        ()     => _get('/boss/workers').then(_unwrap),
+  resources:      ()     => _get('/boss/resources').then(_unwrap),
+  applyResources: (spec) => _postJson('/boss/resources', { kind: 'ClusterResources', spec }).then(_unwrap),
 
   // ── Catalog ───────────────────────────────────────────────────────────────
   // All namespace-scoped catalog APIs take `ns` (namespace) as first argument.

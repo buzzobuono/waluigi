@@ -15,40 +15,21 @@ const COLUMNS = [
   { key: 'id',      label: 'Name' },
   { key: 'mode',    label: 'Type' },
   { key: 'preview', label: 'Command / Script' },
-  { key: 'res',     label: 'Resources' },
   { key: 'actions', label: '',  class: 'text-right pr-3' },
 ];
 
 function specToForm(spec) {
   const hasScript = !!spec.script;
   return {
-    mode:      hasScript ? 'script' : 'command',
-    command:   spec.command  || '',
-    script:    spec.script   || '',
-    resources: Object.entries(spec.resources || { coin: 1 }).map(([k, v]) => ({ k, v: String(v) })),
+    mode:    hasScript ? 'script' : 'command',
+    command: spec.command || '',
+    script:  spec.script  || '',
   };
 }
 
 function formToSpec(form) {
-  const spec = {};
-  if (form.mode === 'script') {
-    spec.script = form.script;
-  } else {
-    spec.command = form.command;
-  }
-  const res = {};
-  for (const { k, v } of form.resources) {
-    const key = k.trim();
-    if (key) res[key] = parseFloat(v) || 1;
-  }
-  if (Object.keys(res).length) spec.resources = res;
-  return spec;
-}
-
-function resLabel(spec) {
-  const r = spec?.resources;
-  if (!r || !Object.keys(r).length) return '—';
-  return Object.entries(r).map(([k, v]) => `${k}: ${v}`).join(', ');
+  if (form.mode === 'script') return { script: form.script };
+  return { command: form.command };
 }
 
 export default {
@@ -66,11 +47,10 @@ export default {
     const confirmRef = ref(null);
 
     const form = ref({
-      name:      '',
-      mode:      'command',
-      command:   '',
-      script:    '',
-      resources: [{ k: 'coin', v: '1' }],
+      name:    '',
+      mode:    'command',
+      command: '',
+      script:  '',
     });
 
     const modalTitle = computed(() =>
@@ -100,7 +80,7 @@ export default {
     function openCreate() {
       mode.value      = 'create';
       formError.value = null;
-      form.value      = { name: '', mode: 'command', command: '', script: '', resources: [{ k: 'coin', v: '1' }] };
+      form.value      = { name: '', mode: 'command', command: '', script: '' };
       modalRef.value?.open();
     }
 
@@ -112,11 +92,6 @@ export default {
       form.value      = { name: item.id, ...specToForm(item.spec || {}) };
       modalRef.value?.open();
     }
-
-    // ── resources rows ────────────────────────────────────────────────────────
-
-    function addResource()       { form.value.resources.push({ k: '', v: '1' }); }
-    function removeResource(i)   { form.value.resources.splice(i, 1); }
 
     // ── submit ────────────────────────────────────────────────────────────────
 
@@ -170,8 +145,7 @@ export default {
       items, loading, saving, pageError, formError,
       mode, modalTitle, form, columns: COLUMNS,
       modalRef, confirmRef, hasNs,
-      load, openCreate, openEdit, submitForm,
-      addResource, removeResource, deleteItem, resLabel,
+      load, openCreate, openEdit, submitForm, deleteItem,
     };
   },
 
@@ -224,10 +198,6 @@ export default {
                   ? item.spec.script.trim().split('\\n').slice(0,2).join(' · ').substring(0,80) + (item.spec.script.trim().split('\\n').length > 2 ? ' …' : '')
                   : (item.spec?.command || '—') }}
             </code>
-          </template>
-
-          <template #cell(res)="{ item }">
-            <span class="text-muted small">{{ resLabel(item.spec) }}</span>
           </template>
 
           <template #cell(actions)="{ item }">
@@ -309,36 +279,6 @@ export default {
             spellcheck="false"
           ></textarea>
           <small class="text-muted">Python code executed inline via <code>WALUIGI_SCRIPT</code>.</small>
-        </div>
-
-        <!-- Resources -->
-        <div class="form-group mb-0">
-          <label class="font-weight-bold">Resources</label>
-          <div
-            v-for="(row, i) in form.resources"
-            :key="i"
-            class="d-flex align-items-center mb-1"
-            style="gap:6px;"
-          >
-            <base-input v-model="row.k" placeholder="name"   style="width:120px;" />
-            <span class="text-muted">:</span>
-            <base-input v-model="row.v" placeholder="amount" style="width:80px;" />
-            <base-button
-              icon="fas fa-times"
-              color="outline-danger"
-              size="sm"
-              :disabled="form.resources.length === 1"
-              @click="removeResource(i)"
-            />
-          </div>
-          <base-button
-            icon="fas fa-plus"
-            color="outline-secondary"
-            size="sm"
-            label="Add resource"
-            class="mt-1"
-            @click="addResource"
-          />
         </div>
 
         <div v-if="formError" class="alert alert-danger mt-3 mb-0 py-2 small">
