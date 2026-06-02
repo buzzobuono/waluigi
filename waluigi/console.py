@@ -310,16 +310,28 @@ def _check_boss_namespace(request: Request, path: str) -> JSONResponse | None:
     Paths without a namespace segment (workers, resources) are always allowed.
     """
     parts = path.split("/")
-    if len(parts) >= 2 and parts[0] == "namespaces" and parts[1]:
-        namespace = parts[1]
-        # bare /namespaces list — allowed for all authenticated users (filtered later)
-        if namespace in ("", "_reset"):
+
+    if parts[0] == "namespaces":
+        # POST /namespaces — namespace creation is admin-only
+        if len(parts) == 1 and request.method == "POST":
+            if not _is_admin(request):
+                return JSONResponse({"detail": "Admin access required"}, status_code=403)
             return None
-        if not _can_access_namespace(request, namespace):
-            return JSONResponse(
-                {"detail": f"Access to namespace '{namespace}' is not allowed"},
-                status_code=403,
-            )
+
+        if len(parts) >= 2 and parts[1]:
+            namespace = parts[1]
+            if namespace in ("", "_reset"):
+                return None
+            # DELETE /namespaces/{ns} — namespace deletion is admin-only
+            if len(parts) == 2 and request.method == "DELETE":
+                if not _is_admin(request):
+                    return JSONResponse({"detail": "Admin access required"}, status_code=403)
+                return None
+            if not _can_access_namespace(request, namespace):
+                return JSONResponse(
+                    {"detail": f"Access to namespace '{namespace}' is not allowed"},
+                    status_code=403,
+                )
     return None
 
 
