@@ -20,6 +20,9 @@ class HttpClient:
     def patch(self, path: str, **kw) -> httpx.Response:
         return self._client.patch(path, **kw)
 
+    def put(self, path: str, **kw) -> httpx.Response:
+        return self._client.put(path, **kw)
+
     def delete(self, path: str, **kw) -> httpx.Response:
         return self._client.delete(path, **kw)
 
@@ -51,6 +54,9 @@ class AsyncHttpClient:
 
     async def patch(self, path: str, **kw) -> httpx.Response:
         return await self._client.patch(path, **kw)
+
+    async def put(self, path: str, **kw) -> httpx.Response:
+        return await self._client.put(path, **kw)
 
     async def delete(self, path: str, **kw) -> httpx.Response:
         return await self._client.delete(path, **kw)
