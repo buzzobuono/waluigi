@@ -7,7 +7,7 @@ import BaseInfoBox  from './BaseInfoBox.js';
 import BaseTable    from './BaseTable.js';
 import ChartWidget  from './ChartWidget.js';
 
-const { ref, computed, onMounted, watch } = Vue;
+const { ref, computed, watch } = Vue;
 
 function gaugeOption(score, success) {
   const pct   = +(score * 100).toFixed(1);
@@ -116,8 +116,7 @@ export default {
       }
     }
 
-    onMounted(load);
-    watch(() => nsStore.selected, (ns) => { if (ns) load(); });
+    watch(() => nsStore.selected, load, { immediate: true });
 
     return {
       datasetId, version, result,

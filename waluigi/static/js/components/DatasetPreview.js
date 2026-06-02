@@ -74,8 +74,7 @@ export default {
       loadPreview();
     }, { deep: true });
 
-    Vue.onMounted(loadPreview);
-    Vue.watch(() => nsStore.selected, (ns) => { if (ns) loadPreview(); });
+    Vue.watch(() => nsStore.selected, loadPreview, { immediate: true });
 
     return { columns, rows, loading, error, params, metadata, currentPage, changePage, goBack };
   },

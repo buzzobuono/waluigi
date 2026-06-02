@@ -26,8 +26,8 @@ export default {
       if (route.query.id)  search();
     });
 
-    Vue.watch(() => nsStore.selected, (ns) => {
-      if (ns && idInput.value.trim()) search();
+    Vue.watch(() => nsStore.selected, () => {
+      if (idInput.value.trim()) search();
     });
 
     function stripNs(browsePath) {
@@ -39,6 +39,7 @@ export default {
     async function search() {
       const id = idInput.value.trim();
       if (!id) { error.value = 'Dataset ID is required.'; return; }
+      if (!nsStore.selected) return;
 
       loading.value    = true;
       error.value      = '';

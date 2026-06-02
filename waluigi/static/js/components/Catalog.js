@@ -263,8 +263,8 @@ export default {
       }
     }, { immediate: true });
 
-    watch(() => nsStore.selected, (ns) => {
-      if (ns) loadFolders(currentFolder.value);
+    watch(() => nsStore.selected, () => {
+      loadFolders(currentFolder.value);
     });
 
     return {

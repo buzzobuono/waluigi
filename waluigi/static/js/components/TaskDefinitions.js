@@ -9,7 +9,7 @@ import BaseModal         from './BaseModal.js';
 import BaseInput         from './BaseInput.js';
 import ConfirmDialog     from './ConfirmDialog.js';
 
-const { ref, computed, watch, onMounted } = Vue;
+const { ref, computed, watch } = Vue;
 
 const COLUMNS = [
   { key: 'id',      label: 'Name' },
@@ -72,8 +72,7 @@ export default {
       }
     }
 
-    watch(() => nsStore.selected, load);
-    onMounted(load);
+    watch(() => nsStore.selected, load, { immediate: true });
 
     // ── create ────────────────────────────────────────────────────────────────
 

@@ -7,7 +7,7 @@ import BaseModal     from './BaseModal.js';
 import BaseInput     from './BaseInput.js';
 import ConfirmDialog from './ConfirmDialog.js';
 
-const { ref, watch, onMounted } = Vue;
+const { ref, watch } = Vue;
 
 export default {
   name: 'Resources',
@@ -26,7 +26,7 @@ export default {
     const form      = ref({ name: '', amount: '' });
 
     async function load() {
-      if (!nsStore.selected) return;
+      if (!nsStore.selected) { resources.value = []; return; }
       loading.value = true;
       error.value   = null;
       try {
@@ -100,8 +100,7 @@ export default {
       );
     }
 
-    watch(() => nsStore.selected, load);
-    onMounted(load);
+    watch(() => nsStore.selected, load, { immediate: true });
 
     return {
       nsStore, resources, loading, saving, error, formError,

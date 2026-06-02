@@ -9,7 +9,7 @@ import BaseModal       from './BaseModal.js';
 import BaseInput       from './BaseInput.js';
 import ConfirmDialog   from './ConfirmDialog.js';
 
-const { ref, computed, onMounted, watch } = Vue;
+const { ref, computed, watch } = Vue;
 
 const EXP_COLUMNS = [
   { key: 'rule_id',   label: 'Rule' },
@@ -137,8 +137,7 @@ export default {
       );
     }
 
-    onMounted(load);
-    watch(() => nsStore.selected, (ns) => { if (ns) load(); });
+    watch(() => nsStore.selected, load, { immediate: true });
 
     return {
       datasetId, expectations, availableRules,

@@ -10,7 +10,7 @@ import BaseButtonGroup from './BaseButtonGroup.js';
 import LogModal from './LogModal.js';
 import ConfirmDialog from './ConfirmDialog.js';
 
-const { ref, computed, watch, onMounted } = Vue;
+const { ref, computed, watch } = Vue;
 const PAGE_SIZE = 10;
 
 export default {
@@ -48,7 +48,7 @@ export default {
       }
     }
 
-    watch(() => nsStore.selected, () => load());
+    watch(() => nsStore.selected, load, { immediate: true });
 
     const counts = computed(() => {
       const c = Object.fromEntries(TASK_STATUSES.map(s => [s.key, 0]));
@@ -109,8 +109,6 @@ export default {
         } catch (e) { error.value = e.message; }
       });
     }
-
-    onMounted(load);
 
     return {
       tasks, pagedTasks, loading, error, columns, TASK_STATUS, TASK_STATUSES, nsStore,

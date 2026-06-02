@@ -9,7 +9,7 @@ import BaseButton from './BaseButton.js';
 import BaseButtonGroup from './BaseButtonGroup.js';
 import ConfirmDialog from './ConfirmDialog.js';
 
-const { ref, computed, watch, onMounted } = Vue;
+const { ref, computed, watch } = Vue;
 
 export default {
   name: 'Jobs',
@@ -49,7 +49,7 @@ export default {
       }
     }
 
-    watch(() => nsStore.selected, () => load());
+    watch(() => nsStore.selected, load, { immediate: true });
 
     const counts = computed(() => {
       const c = Object.fromEntries(JOB_STATUSES.map(s => [s.key, 0]));
@@ -92,8 +92,6 @@ export default {
         catch (e) { error.value = e.message; }
       });
     }
-
-    onMounted(load);
 
     return {
       jobs, pagedJobs, loading, error, columns, JOB_STATUS, JOB_STATUSES, nsStore,

@@ -5,7 +5,7 @@ import BaseButton   from './BaseButton.js';
 import BasePanel    from './BasePanel.js';
 import ChartWidget  from './ChartWidget.js';
 
-const { ref, computed, onMounted, watch } = Vue;
+const { ref, computed, watch } = Vue;
 
 export default {
   name: 'DatasetCharts',
@@ -55,8 +55,7 @@ export default {
 
     function goBack() { router.go(-1); }
 
-    onMounted(loadCharts);
-    watch(() => nsStore.selected, (ns) => { if (ns) loadCharts(); });
+    watch(() => nsStore.selected, loadCharts, { immediate: true });
 
     return { charts, renders, loading, error, datasetId, version, loadCharts, goBack };
   },
