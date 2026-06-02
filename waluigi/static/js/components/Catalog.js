@@ -279,10 +279,11 @@ export default {
   },
 
   template: `
-    <base-page 
-      title="Catalog" 
+    <base-page
+      title="Catalog"
       subtitle="Browse datasets"
-      icon="fas fa-table">
+      icon="fas fa-table"
+      :loading="loading && !items.length">
   
       <template #actions>
          <base-button 
