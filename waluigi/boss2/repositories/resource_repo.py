@@ -24,9 +24,9 @@ class ResourceRepository(BaseRepository):
     def acquire(self, namespace: str, resources: dict) -> bool:
         """
         Check-and-reserve atomically.
-        If a resource pool is not defined in the namespace, it is silently
-        ignored (no throttling applied — the task proceeds freely).
-        Returns False only when a defined pool is exhausted.
+        If a resource pool required by the task is not defined in the namespace,
+        the task is blocked (returns False) until the pool is created.
+        Tasks with no resource requirements (empty dict) always run freely.
         """
         if not resources:
             return True
@@ -39,7 +39,7 @@ class ResourceRepository(BaseRepository):
                         .where(_r.name == name)
                     ).fetchone()
                     if row is None:
-                        continue  # pool not defined → no throttling
+                        return False  # pool not defined → task cannot run
                     if row[1] + float(amount) > row[0]:
                         return False  # pool exhausted
                 for name, amount in resources.items():
