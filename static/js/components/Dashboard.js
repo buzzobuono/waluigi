@@ -8,7 +8,7 @@ import BaseModal      from './BaseModal.js';
 import BaseInput      from './BaseInput.js';
 import ChartWidget    from './ChartWidget.js';
 
-const { ref, onMounted, nextTick } = Vue;
+const { ref, onMounted, nextTick, watch } = Vue;
 
 const LS_KEY = 'waluigi_dashboard_panels_v2';
 
@@ -37,6 +37,7 @@ export default {
     const addError     = ref(null);
 
     async function renderPanel(idx) {
+      if (!nsStore.selected) return;
       const p   = panels.value[idx];
       p.loading = true;
       p.error   = null;
@@ -125,6 +126,7 @@ export default {
     }
 
     onMounted(init);
+    watch(() => nsStore.selected, (ns) => { if (ns) init(); });
 
     return {
       panels, modalRef,
