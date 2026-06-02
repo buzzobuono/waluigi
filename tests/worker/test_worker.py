@@ -7,17 +7,23 @@ import requests
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _execute(worker_url, payload):
-    return requests.post(f"{worker_url}/execute", json=payload, timeout=5)
+    ns = payload.get("namespace", "ns")
+    return requests.post(f"{worker_url}/namespaces/{ns}/dispatch", json=payload, timeout=5)
 
 
-def _wait_for_log(boss_url, task_id, marker, timeout=8):
-    """Poll Boss /logs/{task_id} until marker appears in a log line."""
+def _wait_for_log(boss_url, task_id, marker, namespace="ns", timeout=8):
+    """Poll Boss logs until marker appears in a log line."""
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            r = requests.get(f"{boss_url}/logs/{task_id}", timeout=3)
-            if r.ok and any(marker in e.get("message", "") for e in r.json()):
-                return True
+            r = requests.get(
+                f"{boss_url}/namespaces/{namespace}/tasks/{task_id}/logs",
+                timeout=3,
+            )
+            if r.ok:
+                entries = r.json().get("data", r.json())
+                if any(marker in e.get("message", "") for e in entries):
+                    return True
         except requests.RequestException:
             pass
         time.sleep(0.2)
