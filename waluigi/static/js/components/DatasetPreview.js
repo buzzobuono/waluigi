@@ -84,7 +84,8 @@ export default {
       title="Dataset"
       subtitle="Preview"
       icon="fas fa-table"
-      :loading="loading">
+      :loading="loading"
+      :error="error">
 
       <template #actions>
         <base-button
@@ -135,11 +136,6 @@ export default {
         <div v-if="loading" class="text-center p-5 text-muted card card-outline">
           <i class="fas fa-sync fa-spin fa-3x mb-3"></i>
           <p>Loading page {{ currentPage }}...</p>
-        </div>
-
-        <div v-else-if="error" class="text-center p-5 text-danger card card-outline">
-          <i class="fas fa-exclamation-triangle fa-3x mb-3"></i>
-          <p>{{ error }}</p>
         </div>
 
         <div v-else-if="!rows.length" class="text-center p-5 text-muted card card-outline">
