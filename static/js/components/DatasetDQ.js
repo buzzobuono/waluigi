@@ -7,7 +7,7 @@ import BaseInfoBox  from './BaseInfoBox.js';
 import BaseTable    from './BaseTable.js';
 import ChartWidget  from './ChartWidget.js';
 
-const { ref, computed, onMounted } = Vue;
+const { ref, computed, onMounted, watch } = Vue;
 
 function gaugeOption(score, success) {
   const pct   = +(score * 100).toFixed(1);
@@ -101,6 +101,7 @@ export default {
     const barOpt   = computed(() => result.value?.details?.length ? barOption(result.value.details) : null);
 
     async function load() {
+      if (!nsStore.selected) return;
       loading.value  = true;
       error.value    = null;
       noResult.value = false;
@@ -116,6 +117,7 @@ export default {
     }
 
     onMounted(load);
+    watch(() => nsStore.selected, (ns) => { if (ns) load(); });
 
     return {
       datasetId, version, result,

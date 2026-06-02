@@ -6,7 +6,7 @@ import BaseButton   from './BaseButton.js';
 import BaseTable    from './BaseTable.js';
 import ChartWidget  from './ChartWidget.js';
 
-const { ref, computed, onMounted } = Vue;
+const { ref, computed, onMounted, watch } = Vue;
 
 function trendOption(results) {
   const sorted = [...results].sort((a, b) => a.version.localeCompare(b.version));
@@ -64,7 +64,7 @@ export default {
     const trendOpt = computed(() => history.value.length > 1 ? trendOption(history.value) : null);
 
     async function load() {
-      if (!datasetId.value) return;
+      if (!datasetId.value || !nsStore.selected) return;
       loading.value = true;
       error.value   = null;
       try {
@@ -78,6 +78,7 @@ export default {
     }
 
     onMounted(load);
+    watch(() => nsStore.selected, (ns) => { if (ns) load(); });
 
     return {
       datasetId, history, loading, error, trendOpt,

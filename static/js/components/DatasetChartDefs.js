@@ -9,7 +9,7 @@ import BaseModal       from './BaseModal.js';
 import BaseInput       from './BaseInput.js';
 import ConfirmDialog   from './ConfirmDialog.js';
 
-const { ref, computed, onMounted } = Vue;
+const { ref, computed, onMounted, watch } = Vue;
 
 const CHART_COLUMNS = [
   { key: 'title',   label: 'Title' },
@@ -50,7 +50,7 @@ export default {
     }
 
     async function load() {
-      if (!datasetId.value) return;
+      if (!datasetId.value || !nsStore.selected) return;
       loading.value   = true;
       pageError.value = null;
       try {
@@ -118,6 +118,7 @@ export default {
     }
 
     onMounted(load);
+    watch(() => nsStore.selected, (ns) => { if (ns) load(); });
 
     return {
       datasetId, charts, loading, chartSaving, pageError, chartError,

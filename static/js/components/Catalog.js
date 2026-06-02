@@ -110,8 +110,9 @@ export default {
     }
 
     async function loadFolders(path) {
+      if (!nsStore.selected) { items.value = []; loading.value = false; return; }
       loading.value = true;
-      
+
       try {
         if (!path) {
           path = "/";
@@ -262,7 +263,9 @@ export default {
       }
     }, { immediate: true });
 
-    loadFolders(null);
+    watch(() => nsStore.selected, (ns) => {
+      if (ns) loadFolders(currentFolder.value);
+    });
 
     return {
       columns, items, folderStack, children, datasets, loading,

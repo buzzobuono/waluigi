@@ -36,7 +36,7 @@ export default {
 
     async function loadPreview() {
       const { id, version } = params.value;
-      if (!id || !version) return;
+      if (!id || !version || !nsStore.selected) return;
 
       loading.value = true;
       error.value = null;
@@ -75,6 +75,7 @@ export default {
     }, { deep: true });
 
     Vue.onMounted(loadPreview);
+    Vue.watch(() => nsStore.selected, (ns) => { if (ns) loadPreview(); });
 
     return { columns, rows, loading, error, params, metadata, currentPage, changePage, goBack };
   },

@@ -9,7 +9,7 @@ import BaseModal      from './BaseModal.js';
 import BaseInput      from './BaseInput.js';
 import ConfirmDialog  from './ConfirmDialog.js';
 
-const { ref, computed, onMounted } = Vue;
+const { ref, computed, onMounted, watch } = Vue;
 
 const SOURCE_TYPES = ['local', 's3', 'sql', 'sftp', 'api'];
 
@@ -84,6 +84,7 @@ export default {
     // ── load ──────────────────────────────────────────────────────────────────
 
     async function loadSources() {
+      if (!nsStore.selected) { sources.value = []; return; }
       loading.value   = true;
       pageError.value = null;
       try {
@@ -187,6 +188,7 @@ export default {
     }
 
     onMounted(loadSources);
+    watch(() => nsStore.selected, (ns) => { if (ns) loadSources(); });
 
     return {
       sources, loading, saving, pageError, formError,

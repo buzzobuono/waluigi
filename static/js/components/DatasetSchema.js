@@ -10,7 +10,7 @@ import BaseInput       from './BaseInput.js';
 import BaseInfoBox     from './BaseInfoBox.js';
 import ConfirmDialog   from './ConfirmDialog.js';
 
-const { ref, computed, onMounted } = Vue;
+const { ref, computed, onMounted, watch } = Vue;
 
 const PII_TYPES = ['none', 'direct', 'indirect', 'sensitive'];
 
@@ -68,7 +68,7 @@ export default {
     });
 
     async function load() {
-      if (!datasetId.value) return;
+      if (!datasetId.value || !nsStore.selected) return;
       loading.value   = true;
       pageError.value = null;
       try {
@@ -187,6 +187,7 @@ export default {
     }
 
     onMounted(load);
+    watch(() => nsStore.selected, (ns) => { if (ns) load(); });
 
     return {
       datasetId, schemaData,

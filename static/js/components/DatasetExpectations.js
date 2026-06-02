@@ -69,7 +69,7 @@ export default {
     });
 
     async function load() {
-      if (!datasetId.value) return;
+      if (!datasetId.value || !nsStore.selected) return;
       loading.value   = true;
       pageError.value = null;
       try {
@@ -138,6 +138,7 @@ export default {
     }
 
     onMounted(load);
+    watch(() => nsStore.selected, (ns) => { if (ns) load(); });
 
     return {
       datasetId, expectations, availableRules,

@@ -26,6 +26,10 @@ export default {
       if (route.query.id)  search();
     });
 
+    Vue.watch(() => nsStore.selected, (ns) => {
+      if (ns && idInput.value.trim()) search();
+    });
+
     function stripNs(browsePath) {
       if (!browsePath) return browsePath;
       const prefix = nsStore.selected + '/';
