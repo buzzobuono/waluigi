@@ -137,7 +137,7 @@ export default {
             />
           </div>
         </div>
-        <div class="d-flex mt-2">
+        <div class="d-flex w-100 mt-2">
           <base-button label="Reset NS" icon="fas fa-history" color="outline-warning"
                        class="mr-2" :disabled="!nsStore.selected" @click="resetNs" />
           <base-button label="Delete NS" icon="fas fa-trash-alt" color="outline-danger"
