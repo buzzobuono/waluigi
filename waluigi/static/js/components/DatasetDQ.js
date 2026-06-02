@@ -127,7 +127,7 @@ export default {
   },
 
   template: `
-    <base-page title="Data Quality" :subtitle="datasetId" icon="fas fa-shield-alt" :loading="loading">
+    <base-page title="Data Quality" :subtitle="datasetId" icon="fas fa-shield-alt" :loading="loading" :error="error">
 
       <template #actions>
         <base-button label="Back"    icon="fas fa-arrow-left"  color="outline-secondary" @click="goBack" />
@@ -135,10 +135,6 @@ export default {
                      @click="$router.push('/dq-history/' + datasetId)" />
         <base-button label="Refresh" icon="fas fa-sync-alt"   color="outline-primary"   class="ml-auto" :loading="loading" @click="load" />
       </template>
-
-      <div v-if="error" class="alert alert-danger">
-        <i class="fas fa-exclamation-triangle mr-1"></i>{{ error }}
-      </div>
 
       <div v-if="noResult" class="text-center text-muted p-5">
         <i class="fas fa-shield-alt fa-3x mb-3"></i>
