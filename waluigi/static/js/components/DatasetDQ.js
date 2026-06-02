@@ -131,9 +131,9 @@ export default {
 
       <template #actions>
         <base-button label="Back"    icon="fas fa-arrow-left"  color="outline-secondary" @click="goBack" />
-        <base-button label="Refresh" icon="fas fa-sync-alt"   color="outline-primary"   class="ml-2" :loading="loading" @click="load" />
-        <base-button label="History" icon="fas fa-chart-line" color="outline-secondary" class="ml-auto"
+        <base-button label="History" icon="fas fa-chart-line" color="outline-secondary" class="ml-2"
                      @click="$router.push('/dq-history/' + datasetId)" />
+        <base-button label="Refresh" icon="fas fa-sync-alt"   color="outline-primary"   class="ml-auto" :loading="loading" @click="load" />
       </template>
 
       <div v-if="error" class="alert alert-danger">

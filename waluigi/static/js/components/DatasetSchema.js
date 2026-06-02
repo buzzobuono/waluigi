@@ -227,9 +227,9 @@ export default {
           </div>
         </div>
         <base-button icon="fas fa-arrow-left"   label="Back"        color="outline-secondary" @click="goBack" />
-        <base-button icon="fas fa-sync-alt"     label="Refresh"     color="outline-primary"   class="ml-2" :loading="loading" @click="load" />
-        <base-button icon="fas fa-check-double" label="Publish All" color="outline-success"   class="ml-auto"
+        <base-button icon="fas fa-check-double" label="Publish All" color="outline-success"   class="ml-2"
                      :disabled="saving || !schemaData" @click="askPublishAll" />
+        <base-button icon="fas fa-sync-alt"     label="Refresh"     color="outline-primary"   class="ml-auto" :loading="loading" @click="load" />
       </template>
 
       <base-panel v-if="schemaData" :no-padding="true">

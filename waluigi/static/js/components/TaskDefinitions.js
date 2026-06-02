@@ -169,6 +169,7 @@ export default {
           icon="fas fa-sync-alt"
           color="outline-primary"
           label="Refresh"
+          class="ml-auto"
           :loading="loading"
           @click="load"
         />

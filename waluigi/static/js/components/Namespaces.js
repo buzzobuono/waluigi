@@ -76,6 +76,7 @@ export default {
           label="Refresh"
           icon="fas fa-sync-alt"
           color="outline-primary"
+          class="ml-auto"
           :loading="loading"
           :disabled="!nsStore.selected"
           @click="load"

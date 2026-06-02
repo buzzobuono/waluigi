@@ -79,7 +79,7 @@ export default {
           icon="fas fa-sync-alt"
           label="Refresh"
           color="outline-primary"
-          class="ml-2"
+          class="ml-auto"
           :loading="loading"
           @click="loadCharts"
         />

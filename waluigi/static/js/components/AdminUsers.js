@@ -149,7 +149,7 @@ export default {
           <base-button icon="fas fa-plus" color="primary" label="New User"
                        class="mr-2" :disabled="loading" @click="openCreate" />
           <base-button icon="fas fa-sync-alt" color="outline-primary" label="Refresh"
-                       :loading="loading" @click="loadUsers" />
+                       class="ml-auto" :loading="loading" @click="loadUsers" />
         </template>
       </template>
 
