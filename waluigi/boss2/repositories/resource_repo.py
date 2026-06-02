@@ -71,9 +71,9 @@ class ResourceRepository(BaseRepository):
         """Replace the resource pool for a namespace. Rejects if in-use resources would be violated."""
         with self._lock:
             with self._conn() as conn:
-                rows = conn.execute(
+                rows = self._rows(conn.execute(
                     select(_t_resources).where(_r.namespace == namespace)
-                ).fetchall()
+                ).fetchall())
                 current = {r["name"]: (r["amount"], r["usage"]) for r in rows}
 
                 for name, (_, usage) in current.items():
