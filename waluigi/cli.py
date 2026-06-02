@@ -3,6 +3,7 @@ import json
 import yaml
 import argparse
 import time
+import getpass
 import os
 import base64
 from pathlib import Path
@@ -121,7 +122,9 @@ class WaluigiCLI:
 
     # ── Auth ──────────────────────────────────────────────────────────────────
 
-    def login(self, username, password):
+    def login(self, username, password=None):
+        if not password:
+            password = getpass.getpass(f"Password for '{username}': ")
         try:
             r = self._http.post("/auth/login", json={"username": username, "password": password})
             if r.status_code == 200:
@@ -159,6 +162,22 @@ class WaluigiCLI:
 
             if kind == 'Namespace':
                 r = self._http.post("/boss/namespaces", json=doc, headers=self._headers())
+            elif kind == 'User':
+                meta  = doc.get('metadata', {})
+                spec  = doc.get('spec', {})
+                uid   = meta.get('name', '').strip()
+                if not uid:
+                    print("Error: metadata.name (userid) is required"); return
+                password = spec.get('password') or None
+                if not password:
+                    password = getpass.getpass(f"Password for '{uid}' (leave blank to keep unchanged): ") or None
+                body = {
+                    'username':   meta.get('displayName', ''),
+                    'namespaces': spec.get('namespaces', []),
+                }
+                if password:
+                    body['password'] = password
+                r = self._http.put(f"/auth/users/{uid}", json=body, headers=self._headers())
             elif kind in ('StatefulJob', 'Job'):
                 ns = namespace_override or doc.get('metadata', {}).get('namespace')
                 if not ns:
@@ -272,6 +291,25 @@ class WaluigiCLI:
                 perc = f"{usage / amount * 100:.1f}%" if amount > 0 else "n/a"
                 table.append([res.get("name"), amount, usage, available, perc])
             print(tabulate(table, headers=["NAME", "AMOUNT", "USAGE", "AVAILABLE", "UTIL%"], tablefmt="plain"))
+        except Exception as e:
+            print(f"Error: {e}")
+
+    def get_users(self, output=None):
+        try:
+            r = self._http.get("/auth/users", headers=self._headers())
+            if not _ok(r): return
+            data = r.json().get("data", [])
+            if output == "json":
+                print(json.dumps(data, indent=2)); return
+            if not data:
+                print("No users found."); return
+            table = [
+                [u.get("userid"), u.get("username"),
+                 ", ".join(u.get("namespaces") or []) or "—",
+                 (u.get("createdate") or "")[:19]]
+                for u in data
+            ]
+            print(tabulate(table, headers=["USERID", "DISPLAY NAME", "NAMESPACES", "CREATED"], tablefmt="plain"))
         except Exception as e:
             print(f"Error: {e}")
 
@@ -507,7 +545,7 @@ def main():
     # login / logout
     p = sub.add_parser('login', help='Authenticate and save token')
     p.add_argument('-u', '--username', required=True)
-    p.add_argument('-p', '--password', required=True)
+    p.add_argument('-p', '--password', default=None, help='Password (prompted if omitted)')
     sub.add_parser('logout', help='Remove saved token')
 
     # apply
@@ -517,7 +555,7 @@ def main():
 
     # get
     p = sub.add_parser('get', help='List resources')
-    p.add_argument('type', choices=['namespaces', 'jobs', 'tasks', 'resources', 'workers', 'taskdefinitions'])
+    p.add_argument('type', choices=['namespaces', 'jobs', 'tasks', 'resources', 'workers', 'taskdefinitions', 'users'])
     p.add_argument('-n', '--namespace', help='Namespace (required for jobs/tasks; auto-detected if token has one)')
     p.add_argument('-j', '--job_id',    help='Filter tasks by job ID')
     p.add_argument('-s', '--status',    help='Filter jobs by status (PENDING|RUNNING|SUCCESS|FAILED|CANCELLED|PAUSED)')
@@ -579,6 +617,7 @@ def main():
         elif args.type == 'resources':        cli.get_resources(namespace=ns, output=out)
         elif args.type == 'workers':          cli.get_workers(output=out)
         elif args.type == 'taskdefinitions':  cli.get_task_definitions(namespace=ns, output=out)
+        elif args.type == 'users':            cli.get_users(output=out)
     elif args.command == 'describe':
         if   args.type == 'job':            cli.describe_job(namespace=ns, job_id=args.target, output=out)
         elif args.type == 'task':           cli.describe_task(namespace=ns, task_id=args.target, output=out)

@@ -1,0 +1,9 @@
+kind: User
+metadata:
+  name: mario.rossi
+  displayName: Mario Rossi
+spec:
+  namespaces:
+    - analytics
+    - simulation
+  # password: leave blank to be prompted interactively

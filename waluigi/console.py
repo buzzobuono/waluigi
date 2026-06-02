@@ -184,6 +184,11 @@ class UserUpdateRequest(BaseModel):
     password:   Optional[str] = None
     namespaces: Optional[list[str]] = None
 
+class UserUpsertRequest(BaseModel):
+    username:   Optional[str] = None
+    password:   Optional[str] = None
+    namespaces: list[str] = []
+
 
 @app.post("/auth/login")
 async def login(body: LoginRequest):
@@ -277,6 +282,44 @@ async def delete_user(request: Request, userid: str):
     if cur.rowcount == 0:
         return JSONResponse({"detail": "User not found"}, status_code=404)
     return {"data": {"deleted": userid}}
+
+
+@app.put("/auth/users/{userid}")
+async def upsert_user(request: Request, userid: str, body: UserUpsertRequest):
+    """Create-or-update a user. Password required only when creating a new user."""
+    if not _is_admin(request):
+        return JSONResponse({"detail": "Forbidden"}, status_code=403)
+    if userid == args.admin_user:
+        return JSONResponse({"detail": "Cannot modify the admin user"}, status_code=409)
+    if not userid.strip():
+        return JSONResponse({"detail": "userid is required"}, status_code=400)
+    now = _now()
+    with _get_db() as conn:
+        row = conn.execute("SELECT userid FROM users WHERE userid = ?", (userid,)).fetchone()
+        if row is None:
+            if not body.password:
+                return JSONResponse({"detail": "password is required when creating a new user"},
+                                    status_code=400)
+            display = (body.username or userid).strip()
+            conn.execute(
+                "INSERT INTO users (userid, username, password_hash, namespaces, createdate, updatedate)"
+                " VALUES (?,?,?,?,?,?)",
+                (userid, display, hash_password(body.password),
+                 json.dumps(body.namespaces), now, now),
+            )
+            action = "created"
+        else:
+            updates, params = [], []
+            if body.username is not None:
+                updates.append("username = ?");    params.append(body.username.strip())
+            if body.password:
+                updates.append("password_hash = ?"); params.append(hash_password(body.password))
+            updates.append("namespaces = ?");   params.append(json.dumps(body.namespaces))
+            updates.append("updatedate = ?");   params.append(now)
+            params.append(userid)
+            conn.execute(f"UPDATE users SET {', '.join(updates)} WHERE userid = ?", params)
+            action = "updated"
+    return {"data": {"userid": userid, "action": action}}
 
 
 def _parse_json(response):

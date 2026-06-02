@@ -66,6 +66,15 @@ async function _patchJson(url, data) {
   return _handle(r, url);
 }
 
+async function _putJson(url, data) {
+  const r = await fetch(url, {
+    method: 'PUT',
+    headers: _authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(data),
+  });
+  return _handle(r, url);
+}
+
 async function _delete(url) {
   const r = await fetch(url, { method: 'DELETE', headers: _authHeaders() });
   return _handle(r, url);
@@ -79,6 +88,7 @@ export const api = {
   adminUsers:      ()              => _get('/auth/users'),
   adminCreateUser: (body)          => _postJson('/auth/users', body),
   adminUpdateUser: (userid, body)  => _patchJson(`/auth/users/${_enc(userid)}`, body),
+  adminUpsertUser: (userid, body)  => _putJson(`/auth/users/${_enc(userid)}`, body),
   adminDeleteUser: (userid)        => _delete(`/auth/users/${_enc(userid)}`),
 
   login: async (username, password) => {
