@@ -136,11 +136,11 @@ export default {
   },
 
   template: `
-    <base-page title="Dashboard" icon="fas fa-th-large">
+    <base-page title="Dashboard" subtitle="Pinned charts" icon="fas fa-th-large">
 
       <template #actions>
         <base-button icon="fas fa-plus" label="Add Chart"
-                     color="outline-primary" class="ml-auto" @click="openAdd" />
+                     color="primary" class="ml-auto" @click="openAdd" />
       </template>
 
       <div v-if="!panels.length" class="alert alert-info">
