@@ -142,7 +142,8 @@ export default {
   },
 
   template: `
-    <base-page title="Users" subtitle="Console user management" icon="fas fa-users">
+    <base-page title="Users" subtitle="Console user management" icon="fas fa-users"
+               :loading="loading" :error="pageError">
 
       <template #actions>
         <template v-if="isAdmin">
