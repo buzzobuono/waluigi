@@ -32,7 +32,9 @@ async function _handle(r, url) {
       if (body?.diagnostic?.messages?.length) msg = body.diagnostic.messages[0];
       else if (body?.detail) msg = body.detail;
     } catch {}
-    throw new Error(msg);
+    const err = new Error(msg);
+    err.status = r.status;
+    throw err;
   }
   return r.json();
 }

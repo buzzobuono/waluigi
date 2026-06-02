@@ -108,8 +108,9 @@ export default {
       try {
         const res    = await api.datasetDQResult(nsStore.selected, datasetId.value, version.value);
         result.value = res.data ?? null;
-      } catch {
-        noResult.value = true;
+      } catch (e) {
+        if (e.status === 404) noResult.value = true;
+        else error.value = e.message;
       } finally {
         loading.value = false;
       }
