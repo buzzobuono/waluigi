@@ -157,7 +157,9 @@ class WaluigiCLI:
                 doc = yaml.safe_load(f)
             kind = doc.get('kind')
 
-            if kind in ('StatefulJob', 'Job'):
+            if kind == 'Namespace':
+                r = self._http.post("/boss/namespaces", json=doc, headers=self._headers())
+            elif kind in ('StatefulJob', 'Job'):
                 ns = namespace_override or doc.get('metadata', {}).get('namespace')
                 if not ns:
                     ns = self._resolve_namespace(None)
@@ -509,7 +511,7 @@ def main():
     sub.add_parser('logout', help='Remove saved token')
 
     # apply
-    p = sub.add_parser('apply', help='Submit a Job or ClusterResources YAML descriptor')
+    p = sub.add_parser('apply', help='Submit a Namespace, Job, TaskDefinition, or NamespaceResources YAML descriptor')
     p.add_argument('-f', '--file',      required=True, help='Path to YAML file')
     p.add_argument('-n', '--namespace', help='Override namespace from descriptor metadata')
 

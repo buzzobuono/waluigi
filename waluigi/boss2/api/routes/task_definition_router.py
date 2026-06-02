@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from waluigi.commons.responses import ok, ko
-from waluigi.boss2.config.dependencies import task_definition_service
+from waluigi.boss2.config.dependencies import task_definition_service, namespaces_repository
 
 router = APIRouter(
     prefix="/namespaces/{namespace}/task-definitions",
@@ -23,7 +23,11 @@ async def get_task_definition(namespace: str, id: str, svc=Depends(task_definiti
 
 
 @router.post("", status_code=201)
-async def upsert_task_definition(namespace: str, body: dict, svc=Depends(task_definition_service)):
+async def upsert_task_definition(namespace: str, body: dict,
+                                 svc=Depends(task_definition_service),
+                                 ns_repo=Depends(namespaces_repository)):
+    if not ns_repo.exists(namespace):
+        return ko(f"Namespace '{namespace}' not found", status=404)
     kind     = body.get("kind", "TaskDefinition")
     metadata = body.get("metadata", {})
     spec     = body.get("spec", {})

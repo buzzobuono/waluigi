@@ -59,6 +59,12 @@ _t_task_logs = Table("task_logs", _meta,
 
 Index("idx_logs_ns_task", _t_task_logs.c.namespace, _t_task_logs.c.task_id)
 
+_t_namespaces = Table("namespaces", _meta,
+    Column("name",        Text, primary_key=True),
+    Column("description", Text, nullable=False, default=""),
+    Column("created_at",  DateTime, nullable=False),
+)
+
 _t_task_defnitions = Table("task_definitions", _meta,
     Column("namespace",    Text, nullable=False),
     Column("id",       Text, nullable=False),

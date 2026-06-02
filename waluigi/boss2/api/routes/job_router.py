@@ -2,7 +2,7 @@ import time
 from fastapi import APIRouter, Depends, Request
 
 from waluigi.commons.responses import ok, ko
-from waluigi.boss2.config.dependencies import job_service, boss_engine
+from waluigi.boss2.config.dependencies import job_service, boss_engine, namespaces_repository
 from waluigi.commons.dag import DAGTask, parse_definition
 
 
@@ -31,7 +31,10 @@ async def submit(
     request: Request,
     job_svc=Depends(job_service),
     engine=Depends(boss_engine),
+    ns_repo=Depends(namespaces_repository),
 ):
+    if not ns_repo.exists(namespace):
+        return ko(f"Namespace '{namespace}' not found", status=404)
     data = await request.json()
     kind = data.get("kind")
     timestamp = None

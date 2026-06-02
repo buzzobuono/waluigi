@@ -12,6 +12,7 @@ class BossDB:
         from waluigi.boss2.repositories.resource_repo import ResourceRepository
         from waluigi.boss2.repositories.log_repo import LogRepository
         from waluigi.boss2.repositories.task_definition_repo import TaskDefinitionRepository
+        from waluigi.boss2.repositories.namespace_repo import NamespaceRepository
 
         engine = create_boss_engine(url)
         _set_engine(engine)
@@ -22,3 +23,4 @@ class BossDB:
         self.resources        = ResourceRepository(engine)
         self.logs             = LogRepository(engine)
         self.task_definitions = TaskDefinitionRepository(engine)
+        self.namespaces       = NamespaceRepository(engine)
