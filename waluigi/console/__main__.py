@@ -15,7 +15,7 @@ from waluigi.console.api.routes.proxy_router import router as proxy_router
 
 logger = logging.getLogger("waluigi")
 
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
 app = FastAPI(
     title="Waluigi Console",

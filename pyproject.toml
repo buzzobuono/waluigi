@@ -25,7 +25,7 @@ include = ["waluigi*"]
 namespaces = true
 
 [tool.setuptools.package-data]
-"waluigi" = ["static/**/*", "static/*"]
+"waluigi.console" = ["static/**/*", "static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
