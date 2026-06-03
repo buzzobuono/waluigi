@@ -59,7 +59,7 @@ services:
     environment:
       - WALUIGI_CONSOLE_BOSS_URL=http://boss:8082
       - WALUIGI_CONSOLE_CATALOG_URL=http://catalog:9000
-      - WALUIGI_CONSOLE_DB_PATH=/db/console.db
+      - WALUIGI_CONSOLE_DB_URL=sqlite:////db/console.db
     volumes:
       - ./db:/db
     deploy:
