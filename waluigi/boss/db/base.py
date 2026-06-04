@@ -2,6 +2,7 @@ from __future__ import annotations
 from contextvars import ContextVar
 from contextlib import contextmanager
 from functools import wraps
+from contextlib import nullcontext
 
 _tx: ContextVar = ContextVar("_boss_tx", default=None)
 _engine = None
@@ -48,6 +49,12 @@ class BaseRepository:
     @staticmethod
     def _rows(rows) -> list[dict]:
         return [dict(r._mapping) for r in rows]
+
+    def _select_for_update(self, stmt):
+        """Add FOR UPDATE on PostgreSQL. No-op on SQLite (use a threading.Lock instead)."""
+        if self.engine.dialect.name == "postgresql":
+            return stmt.with_for_update()
+        return stmt
 
     def _upsert_stmt(self, table, values: dict,
                      conflict_cols: list[str], update_cols: list[str]):
