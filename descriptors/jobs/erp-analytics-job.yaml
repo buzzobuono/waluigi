@@ -1,0 +1,9 @@
+kind: Job
+metadata:
+    name: "erp-analytics-run"
+    namespace: "analytics"
+spec:
+    params:
+        date: "2026-06-05"
+    jobRef:
+        name: "erp-analytics-pipeline"

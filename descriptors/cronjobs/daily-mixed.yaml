@@ -1,0 +1,16 @@
+kind: CronJob
+metadata:
+  name: "daily-mixed"
+  namespace: "analytics"
+spec:
+  schedule: "30 6 * * *"       # ogni giorno alle 06:30 UTC
+  timezone: "Europe/Rome"
+  enabled: true
+  jobKind: StatefulJob          # StatefulJob = unica istanza, reset ad ogni fire
+  jobRef:
+    name: "erp-analytics-mixed"
+  inject:
+    - name: date
+      format: "%Y-%m-%d"
+      as: param
+  concurrencyPolicy: Replace    # se ancora attivo, cancella e riavvia

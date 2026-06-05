@@ -1,0 +1,9 @@
+kind: StatefulJob
+metadata:
+    name: "erp-analytics-mixed-run"
+    namespace: "analytics"
+spec:
+    params:
+        date: "2026-06-05"
+    jobRef:
+        name: "erp-analytics-mixed"
