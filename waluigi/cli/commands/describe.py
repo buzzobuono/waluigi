@@ -74,6 +74,51 @@ def describe_task(session: WaluigiSession, namespace=None, task_id=None, output=
         print(f"Error: {e}")
 
 
+def describe_job_definition(session: WaluigiSession, namespace=None,
+                            defn_id=None, output=None) -> None:
+    ns = session.resolve_namespace(namespace)
+    if not ns: return
+    try:
+        r = session.http.get(f"/boss/namespaces/{ns}/job-definitions/{defn_id}",
+                             headers=session.headers())
+        if not ok(r): return
+        defn = data(r)
+        if output == "json":
+            print(json.dumps(defn, indent=2)); return
+        meta = defn.get("metadata") or {}
+        spec = defn.get("spec")     or {}
+        rows = [
+            ["id",        defn.get("id")],
+            ["namespace", ns],
+            ["workdir",   meta.get("workdir") or "-"],
+        ]
+        print(tabulate(rows, tablefmt="plain"))
+        tasks = spec.get("tasks") or []
+        if tasks:
+            print(f"\nTasks ({len(tasks)}):")
+            task_rows = []
+            for t in tasks:
+                task_id = t.get("id", "-")
+                if "taskRef" in t:
+                    kind = f"ref:{t['taskRef'].get('name', '?')}"
+                elif "taskSpec" in t:
+                    kind = "inline"
+                else:
+                    kind = "-"
+                resources = ", ".join(
+                    f"{k}:{v}" for k, v in (t.get("resources") or {}).items()
+                ) or "-"
+                requires = ", ".join(t.get("requires") or []) or "-"
+                task_rows.append([task_id, kind, resources, requires])
+            print(tabulate(task_rows,
+                           headers=["ID", "TYPE", "RESOURCES", "REQUIRES"],
+                           tablefmt="plain"))
+        else:
+            print("\nNo tasks.")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
 def describe_task_definition(session: WaluigiSession, namespace=None,
                              defn_id=None, output=None) -> None:
     ns = session.resolve_namespace(namespace)

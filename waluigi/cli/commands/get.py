@@ -106,6 +106,30 @@ def get_task_definitions(session: WaluigiSession, namespace=None, output=None) -
         print(f"Error: {e}")
 
 
+def get_job_definitions(session: WaluigiSession, namespace=None, output=None) -> None:
+    ns = session.resolve_namespace(namespace)
+    if not ns: return
+    try:
+        r = session.http.get(f"/boss/namespaces/{ns}/job-definitions",
+                             headers=session.headers())
+        if not ok(r): return
+        rows = data(r)
+        table(
+            [
+                [
+                    d.get("id"),
+                    d.get("namespace"),
+                    len((d.get("spec") or {}).get("tasks", [])),
+                ]
+                for d in rows
+            ],
+            headers=["ID", "NAMESPACE", "TASKS"],
+            output_arg=output, raw=rows,
+        )
+    except Exception as e:
+        print(f"Error: {e}")
+
+
 def get_users(session: WaluigiSession, output=None) -> None:
     try:
         r = session.http.get("/auth/users", headers=session.headers())
