@@ -3,14 +3,14 @@ metadata:
   name: "daily-mixed"
   namespace: "analytics"
 spec:
-  schedule: "30 6 * * *"       # ogni giorno alle 06:30 UTC
+  schedule: "*/15 * * * *"
   timezone: "Europe/Rome"
   enabled: true
-  jobKind: StatefulJob          # StatefulJob = unica istanza, reset ad ogni fire
+  params:
+    date: "%Y-%m-%dT%H:%M:%S"
+  attributes:
+    attribute1: "valute_attribute_1"
+  jobKind: Job
   jobRef:
     name: "erp-analytics-mixed"
-  inject:
-    - name: date
-      format: "%Y-%m-%d"
-      as: param
-  concurrencyPolicy: Replace    # se ancora attivo, cancella e riavvia
+  concurrencyPolicy: Replace

@@ -44,7 +44,6 @@ def _maybe_fire(cj, now, cron_svc, job_svc, job_def_svc, engine) -> None:
     tz          = _tz(spec.get("timezone", "UTC"))
     job_kind    = spec.get("jobKind", "Job")
     job_ref_name = (spec.get("jobRef") or {}).get("name")
-    inject      = spec.get("inject") or []
     concurrency = spec.get("concurrencyPolicy", "Forbid")
 
     last_fire_str = cj.get("last_fire")
@@ -83,16 +82,14 @@ def _maybe_fire(cj, now, cron_svc, job_svc, job_def_svc, engine) -> None:
     def_meta   = job_def.get("metadata") or {}
     metadata   = {**def_meta, "namespace": namespace}
 
-    # Build injected params / attributes from fire time
-    params     = {}
-    attributes = {}
+    # Build params/attributes: values starting with "%" are strftime formats
+    # evaluated against the scheduled fire time; everything else is static.
     fire_local = next_fire.astimezone(tz)
-    for inj in inject:
-        val = fire_local.strftime(inj.get("format", "%Y-%m-%d"))
-        if inj.get("as") == "attribute":
-            attributes[inj["name"]] = val
-        else:
-            params[inj["name"]] = val
+    params = {
+        k: fire_local.strftime(v) if isinstance(v, str) and "%" in v else v
+        for k, v in (spec.get("params") or {}).items()
+    }
+    attributes = dict(spec.get("attributes") or {})
 
     timestamp = None
     if job_kind == "Job":

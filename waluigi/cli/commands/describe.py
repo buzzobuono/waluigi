@@ -85,8 +85,9 @@ def describe_cron_job(session: WaluigiSession, namespace=None,
         cj = data(r)
         if output == "json":
             print(json.dumps(cj, indent=2)); return
-        spec = cj.get("spec") or {}
-        inject = spec.get("inject") or []
+        spec   = cj.get("spec") or {}
+        params = spec.get("params") or {}
+        attrs  = spec.get("attributes") or {}
         rows = [
             ["id",          cj.get("id")],
             ["namespace",   ns],
@@ -99,13 +100,14 @@ def describe_cron_job(session: WaluigiSession, namespace=None,
             ["last_fire",   (cj.get("last_fire") or "-")[:19]],
         ]
         print(tabulate(rows, tablefmt="plain"))
-        if inject:
-            print("\nInject:")
-            print(tabulate(
-                [[i.get("name"), i.get("format"), i.get("as", "param")] for i in inject],
-                headers=["NAME", "FORMAT", "AS"],
-                tablefmt="plain",
-            ))
+        if params:
+            print("\nParams:")
+            print(tabulate([[k, v] for k, v in params.items()],
+                           headers=["NAME", "VALUE / FORMAT"], tablefmt="plain"))
+        if attrs:
+            print("\nAttributes:")
+            print(tabulate([[k, v] for k, v in attrs.items()],
+                           headers=["NAME", "VALUE"], tablefmt="plain"))
     except Exception as e:
         print(f"Error: {e}")
 
