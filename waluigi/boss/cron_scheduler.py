@@ -50,7 +50,8 @@ def _maybe_fire(cj, now, cron_svc, job_svc, job_def_svc, engine) -> None:
     last_fire_str = cj.get("last_fire")
     if last_fire_str is None:
         # First registration: start the clock, wait for next schedule.
-        cron_svc.set_last_fire(namespace, cron_id, now.isoformat())
+        # Use try_claim_fire even here so only one Boss initialises the clock.
+        cron_svc.try_claim_fire(namespace, cron_id, None, now.isoformat())
         return
 
     last_fire = datetime.fromisoformat(last_fire_str)
@@ -64,15 +65,18 @@ def _maybe_fire(cj, now, cron_svc, job_svc, job_def_svc, engine) -> None:
     if next_fire.astimezone(timezone.utc) > now:
         return
 
+    # Atomic claim: only the Boss that wins this CAS proceeds.
+    # Any other Boss that read the same last_fire will get rowcount=0 and skip.
+    if not cron_svc.try_claim_fire(namespace, cron_id, last_fire_str, now.isoformat()):
+        return
+
     if not job_ref_name:
         logger.warning(f"CronJob {cron_id}: missing jobRef.name — skipping")
-        cron_svc.set_last_fire(namespace, cron_id, now.isoformat())
         return
 
     job_def = job_def_svc.get(namespace, job_ref_name)
     if job_def is None:
         logger.warning(f"CronJob {cron_id}: JobDefinition '{job_ref_name}' not found — skipping")
-        cron_svc.set_last_fire(namespace, cron_id, now.isoformat())
         return
 
     tasks_list = list(job_def["spec"].get("tasks", []))
@@ -113,7 +117,6 @@ def _maybe_fire(cj, now, cron_svc, job_svc, job_def_svc, engine) -> None:
         if status and status not in ("SUCCESS", "FAILED", "CANCELLED"):
             if concurrency == "Forbid":
                 logger.info(f"CronJob {cron_id}: {job_id} still active — skipping (Forbid)")
-                cron_svc.set_last_fire(namespace, cron_id, now.isoformat())
                 return
             elif concurrency == "Replace":
                 logger.info(f"CronJob {cron_id}: cancelling {job_id} (Replace)")
@@ -133,7 +136,6 @@ def _maybe_fire(cj, now, cron_svc, job_svc, job_def_svc, engine) -> None:
         parsed_spec = parse_definition(resolved)
     except ValueError as e:
         logger.error(f"CronJob {cron_id}: parse error: {e}")
-        cron_svc.set_last_fire(namespace, cron_id, now.isoformat())
         return
 
     dag_task = DAGTask(parsed_spec)
@@ -142,5 +144,4 @@ def _maybe_fire(cj, now, cron_svc, job_svc, job_def_svc, engine) -> None:
         metadata=metadata, spec=parsed_spec,
     )
     engine.register_job(namespace, job_id, dag_task, None)
-    cron_svc.set_last_fire(namespace, cron_id, now.isoformat())
     logger.info(f"🕐 CronJob {cron_id}: fired {namespace}/{job_id}")

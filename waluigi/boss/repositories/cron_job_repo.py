@@ -1,6 +1,6 @@
 from __future__ import annotations
 import json
-from sqlalchemy import select, update, delete, and_
+from sqlalchemy import select, update, delete, and_, or_
 
 from waluigi.boss.db.base import BaseRepository
 from waluigi.boss.db.engine import _t_cron_jobs
@@ -61,6 +61,28 @@ class CronJobRepository(BaseRepository):
                 .values(enabled=1 if enabled else 0)
             )
             return result.rowcount > 0
+
+    def try_claim_fire(self, namespace: str, id: str,
+                       expected_last_fire: str | None, new_last_fire: str) -> bool:
+        """Atomic compare-and-swap on last_fire. Returns True if this caller won the claim."""
+        with self._conn() as conn:
+            result = conn.execute(
+                update(_cj)
+                .where(and_(
+                    _cj.c.namespace == namespace,
+                    _cj.c.id        == id,
+                    (
+                        _cj.c.last_fire == None
+                        if expected_last_fire is None
+                        else or_(
+                            _cj.c.last_fire == None,
+                            _cj.c.last_fire == expected_last_fire,
+                        )
+                    ),
+                ))
+                .values(last_fire=new_last_fire)
+            )
+            return result.rowcount == 1
 
     def set_last_fire(self, namespace: str, id: str, ts: str) -> None:
         with self._conn() as conn:

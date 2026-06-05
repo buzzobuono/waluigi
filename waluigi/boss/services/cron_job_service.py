@@ -25,5 +25,9 @@ class CronJobService:
     def set_enabled(self, namespace: str, id: str, enabled: bool) -> bool:
         return self._repo.set_enabled(namespace, id, enabled)
 
+    def try_claim_fire(self, namespace: str, id: str,
+                       expected_last_fire: str | None, new_last_fire: str) -> bool:
+        return self._repo.try_claim_fire(namespace, id, expected_last_fire, new_last_fire)
+
     def set_last_fire(self, namespace: str, id: str, ts: str) -> None:
         self._repo.set_last_fire(namespace, id, ts)
