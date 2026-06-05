@@ -17,6 +17,7 @@ from waluigi.boss.api.routes.job_router               import router as job_route
 from waluigi.boss.api.routes.worker_router            import router as worker_router
 from waluigi.boss.api.routes.resource_router          import router as resource_router
 from waluigi.boss.api.routes.task_definition_router   import router as task_definition_router
+from waluigi.boss.api.routes.job_definition_router    import router as job_definition_router
 
 logger = logging.getLogger("waluigi")
 
@@ -32,6 +33,7 @@ app.include_router(task_router)
 app.include_router(worker_router)
 app.include_router(resource_router)
 app.include_router(task_definition_router)
+app.include_router(job_definition_router)
 
 
 def main():

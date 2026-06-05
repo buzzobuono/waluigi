@@ -2,7 +2,9 @@ import time
 from fastapi import APIRouter, Depends, Request
 
 from waluigi.commons.responses import ok, ko
-from waluigi.boss.config.dependencies import job_service, boss_engine, namespaces_repository
+from waluigi.boss.config.dependencies import (
+    job_service, boss_engine, namespaces_repository, job_definition_service,
+)
 from waluigi.commons.dag import DAGTask, parse_definition
 
 
@@ -10,6 +12,30 @@ router = APIRouter(
     prefix="/namespaces/{namespace}/jobs",
     tags=["Jobs"]
 )
+
+
+def _resolve_job(data: dict, namespace: str, job_def_svc) -> tuple[list, dict, str | None]:
+    """
+    Resolve jobRef or jobSpec to a flat tasks list.
+    Returns (tasks_list, merged_metadata, error_message_or_None).
+    """
+    spec = data.get("spec", {})
+    metadata = dict(data.get("metadata", {}))
+
+    if "jobRef" in spec:
+        def_name = spec["jobRef"]["name"]
+        job_def = job_def_svc.get(namespace, def_name)
+        if job_def is None:
+            return [], {}, f"JobDefinition '{def_name}' not found in namespace '{namespace}'"
+        tasks_list = job_def["spec"].get("tasks", [])
+        # Definition metadata (e.g. workdir) as base; run metadata overrides.
+        metadata = {**job_def.get("metadata", {}), **metadata}
+    elif "jobSpec" in spec:
+        tasks_list = spec["jobSpec"].get("tasks", [])
+    else:
+        return [], {}, "spec must contain 'jobRef' or 'jobSpec'"
+
+    return tasks_list, metadata, None
 
 
 @router.get("")
@@ -32,42 +58,56 @@ async def submit(
     job_svc=Depends(job_service),
     engine=Depends(boss_engine),
     ns_repo=Depends(namespaces_repository),
+    job_def_svc=Depends(job_definition_service),
 ):
     if not ns_repo.exists(namespace):
         return ko(f"Namespace '{namespace}' not found", status=404)
+
     data = await request.json()
     kind = data.get("kind")
-    timestamp = None
+    spec = data.get("spec", {})
+
+    if kind not in ("Job", "StatefulJob"):
+        return ko("Unsupported kind. Use 'Job' or 'StatefulJob'", status=400)
+
+    tasks_list, metadata, err = _resolve_job(data, namespace, job_def_svc)
+    if err:
+        return ko(err, status=400)
+
+    run_params     = dict(spec.get("params", {}))
+    run_attributes = dict(spec.get("attributes", {}))
+    timestamp      = None
 
     if kind == "Job":
-        timestamp = time.time()
-        data = dict(data)
-        spec_dict = dict(data.get("spec", {}))
-        spec_dict["params"] = {**spec_dict.get("params", {}), "timestamp": timestamp}
-        tasks_list = spec_dict.get("tasks", [])
-        suffixed = {t["id"]: f"{t['id']}@{timestamp}" for t in tasks_list if "id" in t}
-        spec_dict["tasks"] = [
+        timestamp  = time.time()
+        run_params = {**run_params, "timestamp": timestamp}
+        suffixed   = {t["id"]: f"{t['id']}@{timestamp}" for t in tasks_list if "id" in t}
+        tasks_list = [
             {
                 **dict(t),
-                "id": suffixed[t["id"]],
+                "id":       suffixed[t["id"]],
                 "requires": [suffixed.get(r, r) for r in t.get("requires", [])],
             }
             for t in tasks_list
         ]
-        data["spec"] = spec_dict
 
-    elif kind != "StatefulJob":
-        return ko("Unsupported kind. Use 'Job' or 'StatefulJob'", status=400)
+    resolved = {
+        "kind":     kind,
+        "metadata": {**metadata, "namespace": namespace, "timestamp": timestamp},
+        "spec": {
+            "tasks":      tasks_list,
+            "params":     run_params,
+            "attributes": run_attributes,
+        },
+    }
 
     try:
-        spec = parse_definition(data)
+        parsed_spec = parse_definition(resolved)
     except ValueError as e:
         return ko(str(e), status=400)
 
-    metadata = dict(data.get("metadata", {}))
-    metadata["timestamp"] = timestamp
     base_name = metadata.get("name", "unnamed")
-    job_id = f"{base_name}@{timestamp}" if timestamp else base_name
+    job_id    = f"{base_name}@{timestamp}" if timestamp else base_name
 
     if not timestamp:
         status = job_svc.get_status(namespace, job_id)
@@ -75,8 +115,11 @@ async def submit(
             return ko(f"Job '{job_id}' is already active ({status})", status=409)
 
     try:
-        task = DAGTask(spec)
-        job_svc.create(namespace=namespace, job_id=job_id, kind=kind, metadata=metadata, spec=spec)
+        task = DAGTask(parsed_spec)
+        job_svc.create(
+            namespace=namespace, job_id=job_id, kind=kind,
+            metadata=metadata, spec=parsed_spec,
+        )
         engine.register_job(namespace, job_id, task, None)
         return ok({"job_id": job_id, "task_id": task.id}, status=202)
     except Exception as e:

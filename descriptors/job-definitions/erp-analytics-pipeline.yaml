@@ -4,24 +4,16 @@ x-sources:
         type:        "LOCAL"
         description: "Local storage for analytics pipeline"
 
-kind: Pipeline
+kind: JobDefinition
 metadata:
-    name: "erp-analytics-mixed"
+    name: "erp-analytics-pipeline"
+    namespace: "analytics"
     workdir: "work"
 spec:
-    params:
-        date: "2026-05-15"
     tasks:
-        - id: "custom_filter_step"
-          namespace: "analytics"
-          taskSpec:
-              kind: Task
-              metadata:
-                  name: "inline-filter"
-              spec:
-                  type: "FilterDataset"
-                  resources:
-                      coin: 1
+        - id: "filter_high_value"
+          taskRef:
+              name: "FilterDataset"
           config:
               input:
                   dataset: "analytics/erp/clean/clean_erp"
@@ -29,13 +21,17 @@ spec:
               output:
                   dataset:     "analytics/erp/filtered/high_value"
                   format:      "parquet"
-              where: "value > 5000"
+                  description: "ERP metrics with value > 1000"
+                  source:      *local
+              where: "value > 1000"
+          resources:
+              coin: 1
 
         - id: "add_derived"
-          namespace: "analytics"
           taskRef:
               name: "AddDerivedColumns"
-          requires: ["custom_filter_step"]
+          requires:
+              - "filter_high_value"
           config:
               input:
                   dataset: "analytics/erp/filtered/high_value"
@@ -43,17 +39,21 @@ spec:
               output:
                   dataset:     "analytics/erp/enriched/high_value_with_derived"
                   format:      "parquet"
+                  description: "Filtered ERP with value_k and value_pct"
+                  source:      *local
               columns:
                   - name: "value_k"
                     expr: "value / 1000"
+                  - name: "value_pct"
+                    expr: "value_k / 10"
           resources:
               coin: 1
 
         - id: "aggregate_by_category"
-          namespace: "analytics"
           taskRef:
               name: "AggregateDataset"
-          requires: ["add_derived"]
+          requires:
+              - "add_derived"
           config:
               input:
                   dataset: "analytics/erp/enriched/high_value_with_derived"
@@ -61,7 +61,10 @@ spec:
               output:
                   dataset:     "analytics/erp/aggregated/high_value_by_category"
                   format:      "parquet"
-              group_by: ["category"]
+                  description: "High-value ERP summed by category"
+                  source:      *local
+              group_by:
+                  - "category"
               agg:
                   value_k: "sum"
           resources:

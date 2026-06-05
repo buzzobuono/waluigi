@@ -213,7 +213,8 @@ metadata:
 spec:
     params:
         date: "2026-05-16"
-    tasks:
+    jobSpec:
+        tasks:
         - id: "extract_erp"
           taskSpec:
               script: *extract_script

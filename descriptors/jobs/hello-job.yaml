@@ -3,9 +3,10 @@ metadata:
     name: "hello-job"
     workdir: "work"
 spec:
-    tasks:
-        - id: "hello"
-          taskRef:
-              name: "hello-task-definition"
-          resources:
-              coin: 5
+    jobSpec:
+        tasks:
+            - id: "hello"
+              taskRef:
+                  name: "hello-task-definition"
+              resources:
+                  coin: 5

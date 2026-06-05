@@ -9,7 +9,7 @@ def parse_definition(definition):
     pipeline_attributes = spec.get("attributes", {})
 
     if not task_list:
-        raise ValueError("kind: Pipeline requires spec.tasks to be a list of tasks.")
+        raise ValueError("spec.tasks must be a non-empty list of tasks.")
 
     by_id = {}
     for t in task_list:
@@ -19,9 +19,11 @@ def parse_definition(definition):
         if not tid:
             continue
 
+        # Task-specific params win over job-level params (more specific).
         t_flat["params"] = {**pipeline_params, **t_flat.get("params", {})}
-        t_flat["attributes"] = {**pipeline_attributes, **t_flat.get("attributes", {})}
-        
+        # Job-level (run) attributes win over task definition attributes (run context overrides static metadata).
+        t_flat["attributes"] = {**t_flat.get("attributes", {}), **pipeline_attributes}
+
         if "taskSpec" in t_flat:
             inner = t_flat.get("taskSpec", {})
             print(inner)

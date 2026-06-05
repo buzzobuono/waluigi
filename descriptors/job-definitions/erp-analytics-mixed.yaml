@@ -1,0 +1,63 @@
+x-sources:
+    local: &local
+        id:          "analytics-local"
+        type:        "LOCAL"
+        description: "Local storage for analytics pipeline"
+
+kind: JobDefinition
+metadata:
+    name: "erp-analytics-mixed"
+    namespace: "analytics"
+    workdir: "work"
+spec:
+    tasks:
+        - id: "custom_filter_step"
+          taskRef:
+              name: "FilterDataset"
+          config:
+              input:
+                  dataset: "analytics/erp/clean/clean_erp"
+                  source:  *local
+              output:
+                  dataset: "analytics/erp/filtered/high_value"
+                  format:  "parquet"
+              where: "value > 5000"
+          resources:
+              coin: 1
+
+        - id: "add_derived"
+          taskRef:
+              name: "AddDerivedColumns"
+          requires:
+              - "custom_filter_step"
+          config:
+              input:
+                  dataset: "analytics/erp/filtered/high_value"
+                  source:  *local
+              output:
+                  dataset: "analytics/erp/enriched/high_value_with_derived"
+                  format:  "parquet"
+              columns:
+                  - name: "value_k"
+                    expr: "value / 1000"
+          resources:
+              coin: 1
+
+        - id: "aggregate_by_category"
+          taskRef:
+              name: "AggregateDataset"
+          requires:
+              - "add_derived"
+          config:
+              input:
+                  dataset: "analytics/erp/enriched/high_value_with_derived"
+                  source:  *local
+              output:
+                  dataset: "analytics/erp/aggregated/high_value_by_category"
+                  format:  "parquet"
+              group_by:
+                  - "category"
+              agg:
+                  value_k: "sum"
+          resources:
+              coin: 1

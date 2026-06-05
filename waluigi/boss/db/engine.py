@@ -74,6 +74,14 @@ _t_task_defnitions = Table("task_definitions", _meta,
     PrimaryKeyConstraint("namespace", "id"),
 )
 
+_t_job_definitions = Table("job_definitions", _meta,
+    Column("namespace", Text, nullable=False),
+    Column("id",        Text, nullable=False),
+    Column("metadata",  Text),
+    Column("spec",      Text),
+    PrimaryKeyConstraint("namespace", "id"),
+)
+
 
 def create_boss_engine(url: str):
     kwargs = {"pool_pre_ping": True}

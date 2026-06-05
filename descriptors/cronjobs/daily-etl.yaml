@@ -3,10 +3,14 @@ metadata:
   name: "daily-etl"
   namespace: "analytics"
 spec:
-  schedule: "0 6 * * *"        # ogni giorno alle 06:00
-  timezone: "Europe/Rome"       # default UTC se omesso
+  schedule: "0 6 * * *"        # ogni giorno alle 06:00 UTC
+  timezone: "Europe/Rome"
   enabled: true
-  concurrencyPolicy: Forbid     # salta se il run precedente è ancora attivo
-
+  jobKind: Job                  # Job = nuovo record per ogni fire
   jobRef:
-    name: "erp-pipeline"        # referenzia un job esistente nel namespace
+    name: "erp-analytics-pipeline"   # JobDefinition nel namespace analytics
+  inject:
+    - name: date
+      format: "%Y-%m-%d"
+      as: param                 # iniettato come params.date in ogni run
+  concurrencyPolicy: Forbid     # salta se il run precedente è ancora attivo
