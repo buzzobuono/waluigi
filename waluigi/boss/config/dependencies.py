@@ -79,6 +79,10 @@ def job_definition_service(db=Depends(get_db)):
     from waluigi.boss.services.job_definition_service import JobDefinitionService
     return JobDefinitionService(db.job_definitions)
 
+def cron_job_service(db=Depends(get_db)):
+    from waluigi.boss.services.cron_job_service import CronJobService
+    return CronJobService(db.cron_jobs)
+
 def boss_engine(db=Depends(get_db)):
     from waluigi.boss.engine import BossEngine
     return BossEngine(db.tasks, db.workers, db.resources, db.task_definitions)

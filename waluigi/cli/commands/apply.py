@@ -41,6 +41,13 @@ def apply(session: WaluigiSession, descriptor_path: str,
             r = session.http.post(f"/boss/namespaces/{ns}/jobs",
                                   json=doc, headers=session.headers())
 
+        elif kind == "CronJob":
+            ns = namespace_override or doc.get("metadata", {}).get("namespace") \
+                 or session.resolve_namespace(None)
+            if not ns: return
+            r = session.http.post(f"/boss/namespaces/{ns}/cron-jobs",
+                                  json=doc, headers=session.headers())
+
         elif kind == "JobDefinition":
             ns = namespace_override or doc.get("metadata", {}).get("namespace") \
                  or session.resolve_namespace(None)

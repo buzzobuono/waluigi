@@ -106,6 +106,32 @@ def get_task_definitions(session: WaluigiSession, namespace=None, output=None) -
         print(f"Error: {e}")
 
 
+def get_cron_jobs(session: WaluigiSession, namespace=None, output=None) -> None:
+    ns = session.resolve_namespace(namespace)
+    if not ns: return
+    try:
+        r = session.http.get(f"/boss/namespaces/{ns}/cron-jobs", headers=session.headers())
+        if not ok(r): return
+        rows = data(r)
+        table(
+            [
+                [
+                    cj.get("id"),
+                    (cj.get("spec") or {}).get("jobKind", "Job"),
+                    (cj.get("spec") or {}).get("schedule", "-"),
+                    (cj.get("spec") or {}).get("timezone", "UTC"),
+                    "yes" if cj.get("enabled") else "no",
+                    (cj.get("last_fire") or "-")[:19],
+                ]
+                for cj in rows
+            ],
+            headers=["ID", "KIND", "SCHEDULE", "TZ", "ENABLED", "LAST FIRE"],
+            output_arg=output, raw=rows,
+        )
+    except Exception as e:
+        print(f"Error: {e}")
+
+
 def get_job_definitions(session: WaluigiSession, namespace=None, output=None) -> None:
     ns = session.resolve_namespace(namespace)
     if not ns: return

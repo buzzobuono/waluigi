@@ -16,7 +16,9 @@ dependencies = [
     "pyarrow",
     "boto3",
     "sqlalchemy",
-    "psycopg2-binary"
+    "psycopg2-binary",
+    "croniter",
+    "tzdata",
 ]
 
 [tool.setuptools.packages.find]

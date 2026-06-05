@@ -74,6 +74,42 @@ def describe_task(session: WaluigiSession, namespace=None, task_id=None, output=
         print(f"Error: {e}")
 
 
+def describe_cron_job(session: WaluigiSession, namespace=None,
+                      cron_id=None, output=None) -> None:
+    ns = session.resolve_namespace(namespace)
+    if not ns: return
+    try:
+        r = session.http.get(f"/boss/namespaces/{ns}/cron-jobs/{cron_id}",
+                             headers=session.headers())
+        if not ok(r): return
+        cj = data(r)
+        if output == "json":
+            print(json.dumps(cj, indent=2)); return
+        spec = cj.get("spec") or {}
+        inject = spec.get("inject") or []
+        rows = [
+            ["id",          cj.get("id")],
+            ["namespace",   ns],
+            ["enabled",     "yes" if cj.get("enabled") else "no"],
+            ["schedule",    spec.get("schedule", "-")],
+            ["timezone",    spec.get("timezone", "UTC")],
+            ["jobKind",     spec.get("jobKind", "Job")],
+            ["jobRef",      (spec.get("jobRef") or {}).get("name", "-")],
+            ["concurrency", spec.get("concurrencyPolicy", "Forbid")],
+            ["last_fire",   (cj.get("last_fire") or "-")[:19]],
+        ]
+        print(tabulate(rows, tablefmt="plain"))
+        if inject:
+            print("\nInject:")
+            print(tabulate(
+                [[i.get("name"), i.get("format"), i.get("as", "param")] for i in inject],
+                headers=["NAME", "FORMAT", "AS"],
+                tablefmt="plain",
+            ))
+    except Exception as e:
+        print(f"Error: {e}")
+
+
 def describe_job_definition(session: WaluigiSession, namespace=None,
                             defn_id=None, output=None) -> None:
     ns = session.resolve_namespace(namespace)

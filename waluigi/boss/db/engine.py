@@ -82,6 +82,15 @@ _t_job_definitions = Table("job_definitions", _meta,
     PrimaryKeyConstraint("namespace", "id"),
 )
 
+_t_cron_jobs = Table("cron_jobs", _meta,
+    Column("namespace",  Text,    nullable=False),
+    Column("id",         Text,    nullable=False),
+    Column("spec",       Text,    nullable=False, default="{}"),
+    Column("enabled",    Integer, nullable=False, default=1),
+    Column("last_fire",  Text),
+    PrimaryKeyConstraint("namespace", "id"),
+)
+
 
 def create_boss_engine(url: str):
     kwargs = {"pool_pre_ping": True}
