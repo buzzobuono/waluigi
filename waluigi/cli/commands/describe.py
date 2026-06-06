@@ -5,6 +5,31 @@ from waluigi.cli.services.session import WaluigiSession
 from waluigi.cli.output import ok, data, color
 
 
+def _spec_deps(node, acc=None):
+    """Flatten nested spec tree → {task_id: [required_task_ids]}."""
+    if acc is None:
+        acc = {}
+    acc[node["id"]] = [c["id"] for c in node.get("requires", [])]
+    for child in node.get("requires", []):
+        _spec_deps(child, acc)
+    return acc
+
+
+def _topo_sort(deps):
+    """Topological order: dependencies before dependents (leaves first)."""
+    order, visited = [], set()
+    def visit(nid):
+        if nid in visited:
+            return
+        visited.add(nid)
+        for dep in deps.get(nid, []):
+            visit(dep)
+        order.append(nid)
+    for nid in deps:
+        visit(nid)
+    return order
+
+
 def describe_job(session: WaluigiSession, namespace=None, job_id=None, output=None) -> None:
     ns = session.resolve_namespace(namespace)
     if not ns: return
@@ -24,25 +49,34 @@ def describe_job(session: WaluigiSession, namespace=None, job_id=None, output=No
         spec = job.get("spec")     or {}
         print(f"\nJob: {job_id}  (namespace: {ns})")
         summary = [
-            ["kind",       job.get("kind", "Job")],
-            ["status",     color(job.get("status", ""))],
-            ["started_at", job.get("started_at") or "-"],
-            ["locked_by",  job.get("locked_by")  or "-"],
-            ["root_task",  spec.get("id", "-")],
+            ["execution_policy",   job.get("execution_policy",  "Ephemeral")],
+            ["concurrency_policy", job.get("concurrency_policy", "Forbid")],
+            ["status",             color(job.get("status", ""))],
+            ["started_at",         job.get("started_at") or "-"],
+            ["locked_by",          job.get("locked_by")  or "-"],
+            ["root_task",          spec.get("id", "-")],
         ]
         for k, v in meta.items():
-            if k not in ("namespace", "timestamp"):
+            if k not in ("namespace", "timestamp", "executionPolicy"):
                 summary.append([k, v])
         print(tabulate(summary, tablefmt="plain"))
 
         if tasks:
+            deps  = _spec_deps(spec) if spec else {}
+            topo  = _topo_sort(deps)
+            by_id = {t.get("id"): t for t in tasks}
+            seen, rows = set(), []
+            for tid in topo + [t.get("id") for t in tasks if t.get("id") not in deps]:
+                if tid in seen:
+                    continue
+                seen.add(tid)
+                t        = by_id.get(tid, {})
+                requires = ", ".join(deps.get(tid, [])) or "—"
+                rows.append([tid, color(t.get("status", "—")), requires,
+                             t.get("last_update") or "—"])
             print(f"\nTasks ({len(tasks)}):")
-            print(tabulate(
-                [[t.get("id"), t.get("params"), color(t.get("status", "")), t.get("last_update")]
-                 for t in tasks],
-                headers=["ID", "PARAMS", "STATUS", "LAST UPDATE"],
-                tablefmt="plain",
-            ))
+            print(tabulate(rows, headers=["ID", "STATUS", "REQUIRES", "LAST UPDATE"],
+                           tablefmt="plain"))
         else:
             print("\nNo tasks.")
     except Exception as e:

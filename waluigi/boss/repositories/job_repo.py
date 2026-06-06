@@ -9,7 +9,9 @@ from waluigi.boss.db.engine import _t_jobs, _t_tasks
 
 class JobRepository(BaseRepository):
 
-    def create(self, namespace: str, job_id: str, kind: str, metadata: dict, spec: dict) -> None:
+    def create(self, namespace: str, job_id: str,
+               execution_policy: str, concurrency_policy: str,
+               metadata: dict, spec: dict) -> None:
         with self._conn() as conn:
             existing = conn.execute(
                 select(_t_jobs.c.status).where(and_(
@@ -21,7 +23,8 @@ class JobRepository(BaseRepository):
                 conn.execute(_t_jobs.insert().values(
                     namespace=namespace,
                     job_id=job_id,
-                    kind=kind,
+                    execution_policy=execution_policy,
+                    concurrency_policy=concurrency_policy,
                     metadata=json.dumps(metadata),
                     spec=json.dumps(spec),
                     status="PENDING",
@@ -31,7 +34,8 @@ class JobRepository(BaseRepository):
                     update(_t_jobs)
                     .where(and_(_t_jobs.c.namespace == namespace, _t_jobs.c.job_id == job_id))
                     .values(
-                        kind=kind,
+                        execution_policy=execution_policy,
+                        concurrency_policy=concurrency_policy,
                         metadata=json.dumps(metadata),
                         spec=json.dumps(spec),
                         status="PENDING",

@@ -125,7 +125,8 @@ async def submit(
     try:
         task = DAGTask(parsed_spec)
         job_svc.create(
-            namespace=namespace, job_id=job_id, kind=execution_policy,
+            namespace=namespace, job_id=job_id,
+            execution_policy=execution_policy, concurrency_policy=concurrency,
             metadata=metadata, spec=parsed_spec,
         )
         engine.register_job(namespace, job_id, task, None)

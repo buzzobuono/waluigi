@@ -27,12 +27,13 @@ export default {
     const PAGE_SIZE   = 10;
 
     const columns = [
-      { key: 'job_id',     label: 'Job ID' },
-      { key: 'kind',       label: 'Type' },
-      { key: 'status',     label: 'Status' },
-      { key: 'started_at', label: 'Started At' },
-      { key: 'locked_by',  label: 'Locked By' },
-      { key: 'actions',    label: 'Actions', class: 'text-right pr-3' }
+      { key: 'job_id',            label: 'Job ID' },
+      { key: 'execution_policy',  label: 'Exec' },
+      { key: 'concurrency_policy', label: 'Concurrency' },
+      { key: 'status',            label: 'Status' },
+      { key: 'started_at',        label: 'Started At' },
+      { key: 'locked_by',         label: 'Locked By' },
+      { key: 'actions',           label: 'Actions', class: 'text-right pr-3' }
     ];
 
     async function load() {
@@ -160,10 +161,14 @@ export default {
             </div>
           </template>
 
-          <template #cell(kind)="{ item }">
-            <span :class="['badge', item.kind === 'StatefulJob' ? 'badge-primary' : 'badge-light border']">
-              {{ item.kind || 'Job' }}
+          <template #cell(execution_policy)="{ item }">
+            <span :class="['badge', item.execution_policy === 'Stateful' ? 'badge-primary' : 'badge-secondary']">
+              {{ item.execution_policy || 'Ephemeral' }}
             </span>
+          </template>
+
+          <template #cell(concurrency_policy)="{ item }">
+            <span class="text-muted small">{{ item.concurrency_policy || 'Forbid' }}</span>
           </template>
 
           <template #cell(status)="{ item }">

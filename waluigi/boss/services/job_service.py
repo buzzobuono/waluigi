@@ -7,8 +7,10 @@ class JobService:
     def __init__(self, repo: JobRepository):
         self.repo = repo
 
-    def create(self, namespace: str, job_id: str, kind: str, metadata: dict, spec: dict) -> None:
-        self.repo.create(namespace, job_id, kind, metadata, spec)
+    def create(self, namespace: str, job_id: str,
+               execution_policy: str, concurrency_policy: str,
+               metadata: dict, spec: dict) -> None:
+        self.repo.create(namespace, job_id, execution_policy, concurrency_policy, metadata, spec)
 
     def get(self, namespace: str, job_id: str) -> dict | None:
         return self.repo.get(namespace, job_id)
