@@ -42,7 +42,6 @@ def _maybe_fire(cj, now, cron_svc, job_svc, job_def_svc, engine) -> None:
     spec        = cj["spec"]
     schedule    = spec.get("schedule", "0 0 * * *")
     tz          = _tz(spec.get("timezone", "UTC"))
-    job_kind    = spec.get("jobKind", "Job")
     job_ref_name     = (spec.get("jobRef") or {}).get("name")
     execution_policy = spec.get("executionPolicy", "Ephemeral")
     concurrency      = spec.get("concurrencyPolicy", "Forbid")

@@ -117,7 +117,7 @@ def get_cron_jobs(session: WaluigiSession, namespace=None, output=None) -> None:
             [
                 [
                     cj.get("id"),
-                    (cj.get("spec") or {}).get("jobKind", "Job"),
+                    (cj.get("spec") or {}).get("executionPolicy", "Ephemeral"),
                     (cj.get("spec") or {}).get("schedule", "-"),
                     (cj.get("spec") or {}).get("timezone", "UTC"),
                     "yes" if cj.get("enabled") else "no",
@@ -125,7 +125,7 @@ def get_cron_jobs(session: WaluigiSession, namespace=None, output=None) -> None:
                 ]
                 for cj in rows
             ],
-            headers=["ID", "KIND", "SCHEDULE", "TZ", "ENABLED", "LAST FIRE"],
+            headers=["ID", "POLICY", "SCHEDULE", "TZ", "ENABLED", "LAST FIRE"],
             output_arg=output, raw=rows,
         )
     except Exception as e:
