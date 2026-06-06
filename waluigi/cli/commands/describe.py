@@ -251,7 +251,7 @@ def describe_namespace(session: WaluigiSession, namespace=None, output=None) -> 
     ns = session.resolve_namespace(namespace)
     if not ns: return
     try:
-        r = session.http.get(f"/boss/namespaces/{ns}/overview", headers=session.headers())
+        r = session.http.get(f"/boss/namespaces/{ns}", headers=session.headers())
         if not ok(r): return
         ov = data(r)
 

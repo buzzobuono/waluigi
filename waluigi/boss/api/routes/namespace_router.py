@@ -17,7 +17,7 @@ async def list_namespaces(svc=Depends(namespace_service)):
     return ok(svc.list_namespaces())
 
 
-@router.get("/{namespace}/overview")
+@router.get("/{namespace}")
 async def namespace_overview(
     namespace: str,
     ns_svc=Depends(namespace_service),

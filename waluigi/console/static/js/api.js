@@ -105,7 +105,7 @@ export const api = {
 
   // ── Boss — Namespaces ─────────────────────────────────────────────────────
   namespaces:        ()   => _get('/boss/namespaces').then(_unwrap),
-  namespaceOverview: (ns) => _get(`/boss/namespaces/${_enc(ns)}/overview`).then(_unwrap),
+  namespaceOverview: (ns) => _get(`/boss/namespaces/${_enc(ns)}`).then(_unwrap),
   resetNamespace:    (ns) => _post(`/boss/namespaces/${_enc(ns)}/_reset`).then(_unwrap),
   deleteNamespace:   (ns) => _delete(`/boss/namespaces/${_enc(ns)}`).then(_unwrap),
 
