@@ -19,6 +19,7 @@ import DatasetDQHistory    from './components/DatasetDQHistory.js';
 import DatasetCharts   from './components/DatasetCharts.js';
 import Dashboard         from './components/Dashboard.js';
 import TaskDefinitions   from './components/TaskDefinitions.js';
+import JobDefinitions    from './components/JobDefinitions.js';
 
 const AUTH_KEY = 'waluigi_auth_token';
 
@@ -44,6 +45,7 @@ const routes = [
   { path: '/dq/rules',  component: Expectations, meta: { title: 'DQ Rules', requiresAuth: true } },
   { path: '/lineage',   component: Lineage,   meta: { title: 'Lineage',    requiresAuth: true } },
   { path: '/task-definitions', component: TaskDefinitions, meta: { title: 'Task Definitions', requiresAuth: true } },
+  { path: '/job-definitions',  component: JobDefinitions,  meta: { title: 'Job Definitions',  requiresAuth: true } },
   { path: '/jobs/:namespace/:jobId', component: JobDag, meta: { title: 'Job DAG', requiresAuth: true } },
   { path: '/admin/users',   component: AdminUsers, meta: { title: 'Users',      requiresAuth: true } },
 ];

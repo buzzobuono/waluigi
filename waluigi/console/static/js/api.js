@@ -130,6 +130,10 @@ export const api = {
   upsertTaskDefinition: (ns, body) => _postJson(`/boss/namespaces/${_enc(ns)}/task-definitions`, body).then(_unwrap),
   deleteTaskDefinition: (ns, id)   => _delete(`/boss/namespaces/${_enc(ns)}/task-definitions/${_enc(id)}`).then(_unwrap),
 
+  // ── Boss — Job Definitions (namespace-scoped) ────────────────────────────
+  jobDefinitions:      (ns)       => _get(`/boss/namespaces/${_enc(ns)}/job-definitions`).then(_unwrap),
+  deleteJobDefinition: (ns, id)   => _delete(`/boss/namespaces/${_enc(ns)}/job-definitions/${_enc(id)}`).then(_unwrap),
+
   // ── Boss — Cluster ────────────────────────────────────────────────────────
   workers:        ()          => _get('/boss/workers').then(_unwrap),
   resources:      (ns)        => _get(`/boss/namespaces/${_enc(ns)}/resources`).then(_unwrap),

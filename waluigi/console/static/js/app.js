@@ -67,6 +67,7 @@ const App = {
           { path: '/jobs',             label: 'Jobs',             icon: 'fa-briefcase' },
           { path: '/tasks',            label: 'Tasks',            icon: 'fa-tasks' },
           { path: '/task-definitions', label: 'Task Definitions', icon: 'fa-cubes' },
+          { path: '/job-definitions',  label: 'Job Definitions',  icon: 'fa-list-alt' },
           { path: '/resources',        label: 'Resources',        icon: 'fa-chart-bar' },
         ]
       },
