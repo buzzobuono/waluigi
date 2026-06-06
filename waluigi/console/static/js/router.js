@@ -28,7 +28,7 @@ const routes = [
   { path: '/login', component: Login, meta: { title: 'Login', public: true } },
   { path: '/',          redirect: '/dashboard' },
   { path: '/jobs',      component: Jobs,      meta: { title: 'Jobs',       requiresAuth: true } },
-  { path: '/namespaces', component: Namespaces, meta: { title: 'Namespaces', requiresAuth: true } },
+  { path: '/namespaces', component: Namespaces, meta: { title: 'Namespace', requiresAuth: true } },
   { path: '/tasks',     component: Tasks,     meta: { title: 'Tasks',      requiresAuth: true } },
   { path: '/tasks/:namespace+', component: Tasks, meta: { title: 'Tasks', requiresAuth: true } },
   { path: '/workers',   component: Workers,   meta: { title: 'Workers',    requiresAuth: true } },

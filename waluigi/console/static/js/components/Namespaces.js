@@ -13,23 +13,36 @@ export default {
   components: { BasePage, BasePanel, BaseInfoBox, BaseButton },
 
   setup() {
-    const tasks   = ref([]);
-    const jobs    = ref([]);
-    const loading = ref(false);
-    const error   = ref(null);
+    const tasks       = ref([]);
+    const jobs        = ref([]);
+    const cronJobs    = ref([]);
+    const jobDefs     = ref([]);
+    const taskDefs    = ref([]);
+    const loading     = ref(false);
+    const error       = ref(null);
     const lastUpdated = ref(null);
 
     async function load() {
-      if (!nsStore.selected) { tasks.value = []; jobs.value = []; return; }
+      if (!nsStore.selected) {
+        tasks.value = []; jobs.value = []; cronJobs.value = [];
+        jobDefs.value = []; taskDefs.value = [];
+        return;
+      }
       loading.value = true;
       error.value   = null;
       try {
-        const [t, j] = await Promise.all([
+        const [t, j, cj, jd, td] = await Promise.all([
           api.tasks(nsStore.selected),
           api.jobs(nsStore.selected),
+          api.cronJobs(nsStore.selected),
+          api.jobDefinitions(nsStore.selected),
+          api.taskDefinitions(nsStore.selected),
         ]);
-        tasks.value      = Array.isArray(t) ? t : [];
-        jobs.value       = Array.isArray(j) ? j : [];
+        tasks.value    = Array.isArray(t)  ? t  : [];
+        jobs.value     = Array.isArray(j)  ? j  : [];
+        cronJobs.value = Array.isArray(cj) ? cj : [];
+        jobDefs.value  = Array.isArray(jd) ? jd : [];
+        taskDefs.value = Array.isArray(td) ? td : [];
         lastUpdated.value = new Date().toLocaleTimeString();
       } catch (e) {
         error.value = e.message;
@@ -52,9 +65,13 @@ export default {
       return c;
     });
 
+    const cronEnabled  = computed(() => cronJobs.value.filter(c => c.enabled).length);
+    const cronDisabled = computed(() => cronJobs.value.filter(c => !c.enabled).length);
+
     return {
       nsStore, loading, error, lastUpdated,
-      tasks, jobs, taskCounts, jobCounts,
+      tasks, jobs, cronJobs, jobDefs, taskDefs,
+      taskCounts, jobCounts, cronEnabled, cronDisabled,
       TASK_STATUSES, JOB_STATUSES,
       load,
     };
@@ -62,7 +79,7 @@ export default {
 
   template: `
     <base-page
-      title="Namespace Overview"
+      title="Namespace"
       :subtitle="nsStore.selected || 'Select a namespace from the header'"
       icon="fas fa-layer-group"
       :loading="loading"
@@ -85,7 +102,7 @@ export default {
 
       <div v-if="!nsStore.selected" class="text-center py-5 text-muted">
         <i class="fas fa-layer-group fa-3x mb-3 opacity-75"></i>
-        <p>Select a namespace from the header to view its statistics.</p>
+        <p>Select a namespace from the header to view its contents.</p>
       </div>
 
       <div v-else>
@@ -97,42 +114,75 @@ export default {
             Tasks
             <span class="badge badge-secondary ml-2">{{ tasks.length }} total</span>
           </template>
-
           <div class="row">
-            <div
-              v-for="s in TASK_STATUSES" :key="s.key"
-              class="col-6 col-sm-4 col-lg-2 mb-3">
-              <base-info-box
-                :label="s.key"
-                :value="taskCounts[s.key]"
-                :icon="s.icon"
-                :color="s.color"
-              />
+            <div v-for="s in TASK_STATUSES" :key="s.key" class="col-6 col-sm-4 col-lg-2 mb-3">
+              <base-info-box :label="s.key" :value="taskCounts[s.key]" :icon="s.icon" :color="s.color" />
             </div>
           </div>
         </base-panel>
 
         <!-- Job statistics -->
-        <base-panel>
+        <base-panel class="mb-4">
           <template #title>
             <i class="fas fa-briefcase mr-2 text-primary"></i>
             Jobs
             <span class="badge badge-secondary ml-2">{{ jobs.length }} total</span>
           </template>
-
           <div class="row">
-            <div
-              v-for="s in JOB_STATUSES" :key="s.key"
-              class="col-6 col-sm-4 col-lg-2 mb-3">
-              <base-info-box
-                :label="s.key"
-                :value="jobCounts[s.key]"
-                :icon="s.icon"
-                :color="s.color"
-              />
+            <div v-for="s in JOB_STATUSES" :key="s.key" class="col-6 col-sm-4 col-lg-2 mb-3">
+              <base-info-box :label="s.key" :value="jobCounts[s.key]" :icon="s.icon" :color="s.color" />
             </div>
           </div>
         </base-panel>
+
+        <!-- Definitions & CronJobs -->
+        <div class="row">
+
+          <div class="col-md-4 mb-4">
+            <base-panel>
+              <template #title>
+                <i class="fas fa-clock mr-2 text-primary"></i>
+                Cron Jobs
+                <span class="badge badge-secondary ml-2">{{ cronJobs.length }} total</span>
+              </template>
+              <div class="row">
+                <div class="col-6 mb-2">
+                  <base-info-box label="Enabled"  :value="cronEnabled"  icon="fas fa-check-circle" color="success" />
+                </div>
+                <div class="col-6 mb-2">
+                  <base-info-box label="Disabled" :value="cronDisabled" icon="fas fa-pause-circle"  color="secondary" />
+                </div>
+              </div>
+            </base-panel>
+          </div>
+
+          <div class="col-md-4 mb-4">
+            <base-panel>
+              <template #title>
+                <i class="fas fa-list-alt mr-2 text-primary"></i>
+                Job Definitions
+              </template>
+              <div class="text-center py-3">
+                <span class="display-4 font-weight-bold">{{ jobDefs.length }}</span>
+                <div class="text-muted small mt-1">definitions</div>
+              </div>
+            </base-panel>
+          </div>
+
+          <div class="col-md-4 mb-4">
+            <base-panel>
+              <template #title>
+                <i class="fas fa-cubes mr-2 text-primary"></i>
+                Task Definitions
+              </template>
+              <div class="text-center py-3">
+                <span class="display-4 font-weight-bold">{{ taskDefs.length }}</span>
+                <div class="text-muted small mt-1">definitions</div>
+              </div>
+            </base-panel>
+          </div>
+
+        </div>
 
       </div>
 

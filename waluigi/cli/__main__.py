@@ -10,7 +10,7 @@ from waluigi.cli.commands.get       import (
 )
 from waluigi.cli.commands.describe  import (
     describe_job, describe_task, describe_task_definition,
-    describe_job_definition, describe_cron_job,
+    describe_job_definition, describe_cron_job, describe_namespace,
 )
 from waluigi.cli.commands.lifecycle import (
     pause, resume, cancel, reset, delete, enable_cron_job, disable_cron_job,
@@ -49,9 +49,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("-o", "--output",    choices=["json"])
 
     # describe
-    p = sub.add_parser("describe", help="Show full details of a job, task, or task definition")
-    p.add_argument("type",   choices=["job", "task", "taskdefinition", "jobdefinition", "cronjob"])
-    p.add_argument("target", help="Resource ID or name")
+    p = sub.add_parser("describe", help="Show full details of a resource")
+    p.add_argument("type",   choices=["namespace", "job", "task", "taskdefinition", "jobdefinition", "cronjob"])
+    p.add_argument("target", help="Resource ID or name (namespace name for 'namespace')")
     p.add_argument("-n", "--namespace", help="Namespace (auto-detected if token has one)")
     p.add_argument("-o", "--output",    choices=["json"])
 
@@ -121,6 +121,7 @@ def main() -> None:
         }[args.type]()
     elif args.command == "describe":
         {
+            "namespace":      lambda: describe_namespace(session, namespace=args.target, output=out),
             "job":            lambda: describe_job(session, namespace=ns, job_id=args.target, output=out),
             "task":           lambda: describe_task(session, namespace=ns, task_id=args.target, output=out),
             "taskdefinition": lambda: describe_task_definition(session, namespace=ns, defn_id=args.target, output=out),

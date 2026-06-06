@@ -8,8 +8,8 @@ def get_namespaces(session: WaluigiSession, output=None) -> None:
         if not ok(r): return
         rows = data(r)
         table(
-            [[ns.get("namespace"), ns.get("task_count")] for ns in rows],
-            headers=["NAMESPACE", "TASKS"],
+            [[ns.get("namespace")] for ns in rows],
+            headers=["NAMESPACE"],
             output_arg=output, raw=rows,
         )
     except Exception as e:

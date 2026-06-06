@@ -245,3 +245,83 @@ def describe_task_definition(session: WaluigiSession, namespace=None,
         print(tabulate(rows, tablefmt="plain"))
     except Exception as e:
         print(f"Error: {e}")
+
+
+def describe_namespace(session: WaluigiSession, namespace=None, output=None) -> None:
+    ns = session.resolve_namespace(namespace)
+    if not ns: return
+    try:
+        import concurrent.futures
+        urls = {
+            "jobs":             f"/boss/namespaces/{ns}/jobs",
+            "tasks":            f"/boss/namespaces/{ns}/tasks",
+            "cronjobs":         f"/boss/namespaces/{ns}/cron-jobs",
+            "jobdefinitions":   f"/boss/namespaces/{ns}/job-definitions",
+            "taskdefinitions":  f"/boss/namespaces/{ns}/task-definitions",
+        }
+        results = {}
+        for key, url in urls.items():
+            r = session.http.get(url, headers=session.headers())
+            results[key] = data(r) if ok(r) else []
+
+        if output == "json":
+            print(json.dumps({"namespace": ns, **results}, indent=2)); return
+
+        print(f"\nNamespace: {ns}\n")
+
+        # Tasks by status
+        task_counts: dict[str, int] = {}
+        for t in results["tasks"]:
+            s = t.get("status", "-")
+            task_counts[s] = task_counts.get(s, 0) + 1
+        print(f"Tasks ({len(results['tasks'])}):")
+        if task_counts:
+            print(tabulate([[color(s), c] for s, c in sorted(task_counts.items())],
+                           headers=["STATUS", "COUNT"], tablefmt="plain"))
+        else:
+            print("  none")
+
+        # Jobs by status
+        job_counts: dict[str, int] = {}
+        for j in results["jobs"]:
+            s = j.get("status", "-")
+            job_counts[s] = job_counts.get(s, 0) + 1
+        print(f"\nJobs ({len(results['jobs'])}):")
+        if job_counts:
+            print(tabulate([[color(s), c] for s, c in sorted(job_counts.items())],
+                           headers=["STATUS", "COUNT"], tablefmt="plain"))
+        else:
+            print("  none")
+
+        # CronJobs
+        cron = results["cronjobs"]
+        print(f"\nCron Jobs ({len(cron)}):")
+        if cron:
+            print(tabulate(
+                [[cj.get("id", "-"), "yes" if cj.get("enabled") else "no",
+                  (cj.get("spec") or {}).get("schedule", "-")] for cj in cron],
+                headers=["NAME", "ENABLED", "SCHEDULE"], tablefmt="plain",
+            ))
+        else:
+            print("  none")
+
+        # Job Definitions
+        jd = results["jobdefinitions"]
+        print(f"\nJob Definitions ({len(jd)}):")
+        if jd:
+            print(tabulate([[d.get("id", "-")] for d in jd],
+                           headers=["NAME"], tablefmt="plain"))
+        else:
+            print("  none")
+
+        # Task Definitions
+        td = results["taskdefinitions"]
+        print(f"\nTask Definitions ({len(td)}):")
+        if td:
+            print(tabulate([[d.get("id", "-")] for d in td],
+                           headers=["NAME"], tablefmt="plain"))
+        else:
+            print("  none")
+
+    except Exception as e:
+        print(f"Error: {e}")
