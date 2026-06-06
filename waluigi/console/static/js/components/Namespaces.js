@@ -31,18 +31,12 @@ export default {
       loading.value = true;
       error.value   = null;
       try {
-        const [t, j, cj, jd, td] = await Promise.all([
-          api.tasks(nsStore.selected),
-          api.jobs(nsStore.selected),
-          api.cronJobs(nsStore.selected),
-          api.jobDefinitions(nsStore.selected),
-          api.taskDefinitions(nsStore.selected),
-        ]);
-        tasks.value    = Array.isArray(t)  ? t  : [];
-        jobs.value     = Array.isArray(j)  ? j  : [];
-        cronJobs.value = Array.isArray(cj) ? cj : [];
-        jobDefs.value  = Array.isArray(jd) ? jd : [];
-        taskDefs.value = Array.isArray(td) ? td : [];
+        const ov = await api.namespaceOverview(nsStore.selected);
+        tasks.value    = Array.isArray(ov.tasks)            ? ov.tasks            : [];
+        jobs.value     = Array.isArray(ov.jobs)             ? ov.jobs             : [];
+        cronJobs.value = Array.isArray(ov.cron_jobs)        ? ov.cron_jobs        : [];
+        jobDefs.value  = Array.isArray(ov.job_definitions)  ? ov.job_definitions  : [];
+        taskDefs.value = Array.isArray(ov.task_definitions) ? ov.task_definitions : [];
         lastUpdated.value = new Date().toLocaleTimeString();
       } catch (e) {
         error.value = e.message;

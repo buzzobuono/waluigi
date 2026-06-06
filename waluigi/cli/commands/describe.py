@@ -251,30 +251,22 @@ def describe_namespace(session: WaluigiSession, namespace=None, output=None) -> 
     ns = session.resolve_namespace(namespace)
     if not ns: return
     try:
-        import concurrent.futures
-        urls = {
-            "jobs":             f"/boss/namespaces/{ns}/jobs",
-            "tasks":            f"/boss/namespaces/{ns}/tasks",
-            "cronjobs":         f"/boss/namespaces/{ns}/cron-jobs",
-            "jobdefinitions":   f"/boss/namespaces/{ns}/job-definitions",
-            "taskdefinitions":  f"/boss/namespaces/{ns}/task-definitions",
-        }
-        results = {}
-        for key, url in urls.items():
-            r = session.http.get(url, headers=session.headers())
-            results[key] = data(r) if ok(r) else []
+        r = session.http.get(f"/boss/namespaces/{ns}/overview", headers=session.headers())
+        if not ok(r): return
+        ov = data(r)
 
         if output == "json":
-            print(json.dumps({"namespace": ns, **results}, indent=2)); return
+            print(json.dumps(ov, indent=2)); return
 
         print(f"\nNamespace: {ns}\n")
 
         # Tasks by status
+        tasks = ov.get("tasks") or []
         task_counts: dict[str, int] = {}
-        for t in results["tasks"]:
+        for t in tasks:
             s = t.get("status", "-")
             task_counts[s] = task_counts.get(s, 0) + 1
-        print(f"Tasks ({len(results['tasks'])}):")
+        print(f"Tasks ({len(tasks)}):")
         if task_counts:
             print(tabulate([[color(s), c] for s, c in sorted(task_counts.items())],
                            headers=["STATUS", "COUNT"], tablefmt="plain"))
@@ -282,11 +274,12 @@ def describe_namespace(session: WaluigiSession, namespace=None, output=None) -> 
             print("  none")
 
         # Jobs by status
+        jobs = ov.get("jobs") or []
         job_counts: dict[str, int] = {}
-        for j in results["jobs"]:
+        for j in jobs:
             s = j.get("status", "-")
             job_counts[s] = job_counts.get(s, 0) + 1
-        print(f"\nJobs ({len(results['jobs'])}):")
+        print(f"\nJobs ({len(jobs)}):")
         if job_counts:
             print(tabulate([[color(s), c] for s, c in sorted(job_counts.items())],
                            headers=["STATUS", "COUNT"], tablefmt="plain"))
@@ -294,7 +287,7 @@ def describe_namespace(session: WaluigiSession, namespace=None, output=None) -> 
             print("  none")
 
         # CronJobs
-        cron = results["cronjobs"]
+        cron = ov.get("cron_jobs") or []
         print(f"\nCron Jobs ({len(cron)}):")
         if cron:
             print(tabulate(
@@ -306,7 +299,7 @@ def describe_namespace(session: WaluigiSession, namespace=None, output=None) -> 
             print("  none")
 
         # Job Definitions
-        jd = results["jobdefinitions"]
+        jd = ov.get("job_definitions") or []
         print(f"\nJob Definitions ({len(jd)}):")
         if jd:
             print(tabulate([[d.get("id", "-")] for d in jd],
@@ -315,7 +308,7 @@ def describe_namespace(session: WaluigiSession, namespace=None, output=None) -> 
             print("  none")
 
         # Task Definitions
-        td = results["taskdefinitions"]
+        td = ov.get("task_definitions") or []
         print(f"\nTask Definitions ({len(td)}):")
         if td:
             print(tabulate([[d.get("id", "-")] for d in td],

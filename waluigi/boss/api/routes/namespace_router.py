@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Depends, Request
 
 from waluigi.commons.responses import ok, ko
-from waluigi.boss.config.dependencies import namespace_service
+from waluigi.boss.config.dependencies import (
+    namespace_service, task_service, job_service,
+    cron_job_service, job_definition_service, task_definition_service,
+)
 
 router = APIRouter(
     prefix="/namespaces",
@@ -12,6 +15,28 @@ router = APIRouter(
 @router.get("")
 async def list_namespaces(svc=Depends(namespace_service)):
     return ok(svc.list_namespaces())
+
+
+@router.get("/{namespace}/overview")
+async def namespace_overview(
+    namespace: str,
+    ns_svc=Depends(namespace_service),
+    task_svc=Depends(task_service),
+    job_svc=Depends(job_service),
+    cron_svc=Depends(cron_job_service),
+    jd_svc=Depends(job_definition_service),
+    td_svc=Depends(task_definition_service),
+):
+    if not ns_svc.exists(namespace):
+        return ko(f"Namespace '{namespace}' not found", status=404)
+    return ok({
+        "namespace":        namespace,
+        "tasks":            task_svc.list_tasks(namespace=namespace),
+        "jobs":             job_svc.list(namespace=namespace),
+        "cron_jobs":        cron_svc.list(namespace=namespace),
+        "job_definitions":  jd_svc.list(namespace=namespace),
+        "task_definitions": td_svc.list(namespace=namespace),
+    })
 
 
 @router.post("")
