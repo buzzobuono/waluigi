@@ -18,10 +18,9 @@ const COLUMNS = [
 ];
 
 const TASK_COLUMNS = [
-  { key: 'id',        label: 'ID' },
+  { key: 'id',        label: 'Task ID' },
   { key: 'type',      label: 'Type' },
   { key: 'resources', label: 'Resources' },
-  { key: 'requires',  label: 'Requires' },
 ];
 
 function taskType(t) {
@@ -36,6 +35,30 @@ function taskResources(t) {
   return pairs.length ? pairs.map(([k, v]) => `${k}:${v}`).join(', ') : '-';
 }
 
+function flattenDefnTasks(tasks) {
+  const byId = Object.fromEntries(tasks.map(t => [t.id, t]));
+  const allRequired = new Set(tasks.flatMap(t => t.requires || []));
+  const roots = tasks.filter(t => t.id && !allRequired.has(t.id));
+  const result = [];
+  const visited = new Set();
+  function traverse(id, level) {
+    if (visited.has(id)) return;
+    visited.add(id);
+    const t = byId[id];
+    if (!t) return;
+    result.push({ ...t, _level: level });
+    for (const reqId of (t.requires || [])) {
+      traverse(reqId, level + 1);
+    }
+  }
+  if (roots.length) {
+    traverse(roots[0].id, 0);
+  } else {
+    tasks.forEach(t => t.id && traverse(t.id, 0));
+  }
+  return result;
+}
+
 export default {
   name: 'JobDefinitions',
   components: { BasePage, BasePanel, BaseTable, BaseButton, BaseButtonGroup, BaseModal, ConfirmDialog },
@@ -47,8 +70,6 @@ export default {
     const modalRef   = ref(null);
     const confirmRef = ref(null);
     const selected   = ref(null);
-
-    // ── load ──────────────────────────────────────────────────────────────────
 
     async function load() {
       if (!nsStore.selected) { items.value = []; return; }
@@ -65,14 +86,10 @@ export default {
 
     watch(() => nsStore.selected, load, { immediate: true });
 
-    // ── detail modal ──────────────────────────────────────────────────────────
-
     function openDetail(item) {
       selected.value = item;
       modalRef.value?.open();
     }
-
-    // ── delete ────────────────────────────────────────────────────────────────
 
     function deleteItem(item) {
       confirmRef.value.ask(
@@ -89,13 +106,17 @@ export default {
       );
     }
 
-    const hasNs       = computed(() => !!nsStore.selected);
-    const detailTasks = computed(() => (selected.value?.spec?.tasks || []).map(t => ({
-      id:        t.id || '-',
-      type:      taskType(t),
-      resources: taskResources(t),
-      requires:  (t.requires || []).join(', ') || '-',
-    })));
+    const hasNs = computed(() => !!nsStore.selected);
+
+    const detailTasks = computed(() => {
+      const raw = selected.value?.spec?.tasks || [];
+      return flattenDefnTasks(raw).map(t => ({
+        _level:    t._level,
+        id:        t.id || '-',
+        type:      taskType(t),
+        resources: taskResources(t),
+      }));
+    });
 
     return {
       items, loading, pageError,
@@ -188,20 +209,24 @@ export default {
         <div v-if="detailTasks.length === 0" class="text-muted small">No tasks defined.</div>
 
         <base-table v-else :columns="taskColumns" :items="detailTasks">
+
           <template #cell(id)="{ item }">
-            <code class="text-dark">{{ item.id }}</code>
+            <div :style="'padding-left:' + (item._level * 20) + 'px'" class="py-1 text-nowrap">
+              <span v-if="item._level > 0" class="text-muted mr-1" style="font-family:monospace;">└─</span>
+              <code class="text-dark">{{ item.id }}</code>
+            </div>
           </template>
+
           <template #cell(type)="{ item }">
             <span :class="['badge', item.type.startsWith('ref:') ? 'badge-primary' : item.type === 'inline' ? 'badge-info' : 'badge-secondary']">
               {{ item.type }}
             </span>
           </template>
+
           <template #cell(resources)="{ item }">
             <code class="text-muted small">{{ item.resources }}</code>
           </template>
-          <template #cell(requires)="{ item }">
-            <code class="text-muted small">{{ item.requires }}</code>
-          </template>
+
         </base-table>
 
         <template #footer>
