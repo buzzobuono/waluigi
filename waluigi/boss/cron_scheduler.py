@@ -43,8 +43,9 @@ def _maybe_fire(cj, now, cron_svc, job_svc, job_def_svc, engine) -> None:
     schedule    = spec.get("schedule", "0 0 * * *")
     tz          = _tz(spec.get("timezone", "UTC"))
     job_kind    = spec.get("jobKind", "Job")
-    job_ref_name = (spec.get("jobRef") or {}).get("name")
-    concurrency = spec.get("concurrencyPolicy", "Forbid")
+    job_ref_name     = (spec.get("jobRef") or {}).get("name")
+    execution_policy = spec.get("executionPolicy", "Ephemeral")
+    concurrency      = spec.get("concurrencyPolicy", "Forbid")
 
     last_fire_str = cj.get("last_fire")
     if last_fire_str is None:
@@ -92,8 +93,10 @@ def _maybe_fire(cj, now, cron_svc, job_svc, job_def_svc, engine) -> None:
     attributes = dict(spec.get("attributes") or {})
 
     timestamp = None
-    if job_kind == "Job":
-        timestamp = time.time()
+    base_name = def_meta.get("name", job_ref_name)
+
+    if execution_policy == "Ephemeral":
+        timestamp  = time.time()
         params["timestamp"] = timestamp
         suffixed   = {t["id"]: f"{t['id']}@{timestamp}" for t in tasks_list if "id" in t}
         tasks_list = [
@@ -104,12 +107,8 @@ def _maybe_fire(cj, now, cron_svc, job_svc, job_def_svc, engine) -> None:
             }
             for t in tasks_list
         ]
-
-    base_name = def_meta.get("name", job_ref_name)
-    job_id    = f"{base_name}@{timestamp}" if timestamp else base_name
-
-    # Concurrency policy (only matters for StatefulJob — same job_id across runs)
-    if job_kind == "StatefulJob":
+    else:  # Stateful
+        job_id = base_name
         status = job_svc.get_status(namespace, job_id)
         if status and status not in ("SUCCESS", "FAILED", "CANCELLED"):
             if concurrency == "Forbid":
@@ -119,8 +118,10 @@ def _maybe_fire(cj, now, cron_svc, job_svc, job_def_svc, engine) -> None:
                 logger.info(f"CronJob {cron_id}: cancelling {job_id} (Replace)")
                 job_svc.cancel(namespace, job_id)
 
+    job_id = f"{base_name}@{timestamp}" if timestamp else base_name
+
     resolved = {
-        "kind":     job_kind,
+        "kind":     "Job",
         "metadata": {**metadata, "namespace": namespace, "timestamp": timestamp},
         "spec": {
             "tasks":      tasks_list,
@@ -137,7 +138,7 @@ def _maybe_fire(cj, now, cron_svc, job_svc, job_def_svc, engine) -> None:
 
     dag_task = DAGTask(parsed_spec)
     job_svc.create(
-        namespace=namespace, job_id=job_id, kind=job_kind,
+        namespace=namespace, job_id=job_id, kind=execution_policy,
         metadata=metadata, spec=parsed_spec,
     )
     engine.register_job(namespace, job_id, dag_task, None)

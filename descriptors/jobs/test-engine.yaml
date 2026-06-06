@@ -1,12 +1,14 @@
 x-config: &config
     sleep_duration: 10
 
-kind: StatefulJob
+kind: Job
 metadata:
     name: "orchestration-test-job"
     namespace: "simulation"
     workdir: "work"
 spec:
+    executionPolicy: Stateful
+    concurrencyPolicy: Forbid
     params:
         date: "2026-05-16"
     attributes:

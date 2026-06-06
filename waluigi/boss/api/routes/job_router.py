@@ -67,18 +67,22 @@ async def submit(
     kind = data.get("kind")
     spec = data.get("spec", {})
 
-    if kind not in ("Job", "StatefulJob"):
-        return ko("Unsupported kind. Use 'Job' or 'StatefulJob'", status=400)
+    if kind != "Job":
+        return ko("Unsupported kind. Use 'Job'", status=400)
 
     tasks_list, metadata, err = _resolve_job(data, namespace, job_def_svc)
     if err:
         return ko(err, status=400)
 
-    run_params     = dict(spec.get("params", {}))
-    run_attributes = dict(spec.get("attributes", {}))
-    timestamp      = None
+    run_params       = dict(spec.get("params", {}))
+    run_attributes   = dict(spec.get("attributes", {}))
+    execution_policy = spec.get("executionPolicy", "Ephemeral")
+    concurrency      = spec.get("concurrencyPolicy", "Forbid")
 
-    if kind == "Job":
+    base_name = metadata.get("name", "unnamed")
+    timestamp = None
+
+    if execution_policy == "Ephemeral":
         timestamp  = time.time()
         run_params = {**run_params, "timestamp": timestamp}
         suffixed   = {t["id"]: f"{t['id']}@{timestamp}" for t in tasks_list if "id" in t}
@@ -90,10 +94,22 @@ async def submit(
             }
             for t in tasks_list
         ]
+    else:  # Stateful
+        job_id = base_name
+        status = job_svc.get_status(namespace, job_id)
+        if status and status not in ("SUCCESS", "FAILED", "CANCELLED"):
+            if concurrency == "Forbid":
+                return ko(f"Job '{job_id}' is already active ({status})", status=409)
+            elif concurrency == "Replace":
+                job_svc.cancel(namespace, job_id)
+            # Allow: proceed regardless
+
+    job_id = f"{base_name}@{timestamp}" if timestamp else base_name
 
     resolved = {
-        "kind":     kind,
-        "metadata": {**metadata, "namespace": namespace, "timestamp": timestamp},
+        "kind":     "Job",
+        "metadata": {**metadata, "namespace": namespace, "timestamp": timestamp,
+                     "executionPolicy": execution_policy},
         "spec": {
             "tasks":      tasks_list,
             "params":     run_params,
@@ -106,18 +122,10 @@ async def submit(
     except ValueError as e:
         return ko(str(e), status=400)
 
-    base_name = metadata.get("name", "unnamed")
-    job_id    = f"{base_name}@{timestamp}" if timestamp else base_name
-
-    if not timestamp:
-        status = job_svc.get_status(namespace, job_id)
-        if status and status not in ("SUCCESS", "FAILED"):
-            return ko(f"Job '{job_id}' is already active ({status})", status=409)
-
     try:
         task = DAGTask(parsed_spec)
         job_svc.create(
-            namespace=namespace, job_id=job_id, kind=kind,
+            namespace=namespace, job_id=job_id, kind=execution_policy,
             metadata=metadata, spec=parsed_spec,
         )
         engine.register_job(namespace, job_id, task, None)

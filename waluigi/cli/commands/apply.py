@@ -34,7 +34,7 @@ def apply(session: WaluigiSession, descriptor_path: str,
                 body["password"] = password
             r = session.http.put(f"/auth/users/{uid}", json=body, headers=session.headers())
 
-        elif kind in ("StatefulJob", "Job"):
+        elif kind == "Job":
             ns = namespace_override or doc.get("metadata", {}).get("namespace") \
                  or session.resolve_namespace(None)
             if not ns: return

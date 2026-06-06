@@ -6,9 +6,9 @@ spec:
   schedule: "0 6 * * *"
   timezone: "Europe/Rome"
   enabled: true
+  executionPolicy: Ephemeral
+  concurrencyPolicy: Forbid
   params:
     date: "%Y-%m-%d"
-  jobKind: Job
   jobRef:
     name: "erp-analytics-pipeline"
-  concurrencyPolicy: Forbid

@@ -26,9 +26,9 @@ def get_jobs(session: WaluigiSession, namespace=None, status=None, output=None) 
         if status:
             rows = [j for j in rows if j.get("status", "").upper() == status.upper()]
         table(
-            [[j.get("job_id"), j.get("kind", "Job"), color(j.get("status", "")),
+            [[j.get("job_id"), j.get("kind", "Ephemeral"), color(j.get("status", "")),
               j.get("namespace", "-"), j.get("started_at", "-")] for j in rows],
-            headers=["JOB_ID", "KIND", "STATUS", "NAMESPACE", "STARTED"],
+            headers=["JOB_ID", "POLICY", "STATUS", "NAMESPACE", "STARTED"],
             output_arg=output, raw=rows,
         )
     except Exception as e:

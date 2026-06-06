@@ -6,11 +6,11 @@ spec:
   schedule: "*/15 * * * *"
   timezone: "Europe/Rome"
   enabled: true
+  executionPolicy: Ephemeral
+  concurrencyPolicy: Replace
   params:
     date: "%Y-%m-%dT%H:%M:%S"
   attributes:
     attribute1: "valute_attribute_1"
-  jobKind: Job
   jobRef:
     name: "erp-analytics-mixed"
-  concurrencyPolicy: Replace

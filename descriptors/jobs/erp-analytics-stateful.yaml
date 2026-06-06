@@ -1,8 +1,10 @@
-kind: StatefulJob
+kind: Job
 metadata:
     name: "erp-analytics-mixed-run"
     namespace: "analytics"
 spec:
+    executionPolicy: Stateful
+    concurrencyPolicy: Forbid
     params:
         date: "2026-06-05"
     jobRef:
