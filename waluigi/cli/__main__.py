@@ -34,7 +34,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("logout", help="Remove saved token")
 
     # apply
-    p = sub.add_parser("apply", help="Submit a Namespace, Job, TaskDefinition, or NamespaceResources YAML descriptor")
+    p = sub.add_parser("apply", help="Apply a YAML descriptor (Namespace, Job, CronJob, JobDefinition, TaskDefinition, NamespaceResources, User)")
     p.add_argument("-f", "--file",      required=True, help="Path to YAML file")
     p.add_argument("-n", "--namespace", help="Override namespace from descriptor metadata")
 
@@ -76,9 +76,9 @@ def _build_parser() -> argparse.ArgumentParser:
         p.add_argument("-n", "--namespace")
 
     # delete
-    p = sub.add_parser("delete", help="Delete a task, job, cronjob, or namespace")
-    p.add_argument("type",   choices=["task", "job", "cronjob", "namespace"])
-    p.add_argument("target", help="Task/job ID, or namespace name")
+    p = sub.add_parser("delete", help="Delete a resource")
+    p.add_argument("type",   choices=["task", "job", "cronjob", "taskdefinition", "jobdefinition", "namespace"])
+    p.add_argument("target", help="Resource ID or namespace name")
     p.add_argument("-n", "--namespace", help="Namespace for task/job")
 
     # logs

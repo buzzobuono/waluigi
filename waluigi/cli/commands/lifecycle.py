@@ -94,6 +94,16 @@ def delete(session: WaluigiSession, scope: str, target: str, namespace=None) -> 
             if not ns: return
             r = session.http.delete(f"/boss/namespaces/{ns}/cron-jobs/{target}",
                                     headers=session.headers())
+        elif scope == "taskdefinition":
+            ns = session.resolve_namespace(namespace)
+            if not ns: return
+            r = session.http.delete(f"/boss/namespaces/{ns}/task-definitions/{target}",
+                                    headers=session.headers())
+        elif scope == "jobdefinition":
+            ns = session.resolve_namespace(namespace)
+            if not ns: return
+            r = session.http.delete(f"/boss/namespaces/{ns}/job-definitions/{target}",
+                                    headers=session.headers())
         else:
             r = session.http.delete(f"/boss/namespaces/{target}",
                                     headers=session.headers())
