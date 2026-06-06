@@ -4,6 +4,10 @@ from tabulate import tabulate
 from waluigi.cli.services.session import WaluigiSession
 from waluigi.cli.output import ok, data, color
 
+# Zero-width space: invisible, not stripped by str.strip(), lets tabulate
+# preserve any leading ASCII spaces that follow it.
+_ZWS = '​'
+
 
 # ── tree rendering helpers ────────────────────────────────────────────────────
 
@@ -20,26 +24,12 @@ def _fmt_params(params):
     return str(params)
 
 
-def _plain_table(rows, headers):
-    """Like tabulate plain but preserves leading whitespace in cells."""
-    all_rows = [list(headers)] + [list(r) for r in rows]
-    widths = [max(len(str(r[i])) for r in all_rows) for i in range(len(headers))]
-    for ri, row in enumerate(all_rows):
-        parts = []
-        for i, cell in enumerate(row):
-            s = str(cell)
-            parts.append(s + " " * (widths[i] - len(s)))
-        print("  ".join(parts).rstrip())
-        if ri == 0:
-            print()
-
-
 def _tree_rows_job(node, by_id, rows, prefix="", is_last=True):
     """Collect rows from a nested job spec tree (root at top, deps below)."""
     tid        = node.get("id", "?")
     t          = by_id.get(tid, {})
     connector  = ("└─ " if is_last else "├─ ") if prefix else ""
-    display_id = prefix + connector + tid
+    display_id = _ZWS + prefix + connector + tid
     rows.append([
         display_id,
         color(t.get("status", "-")),
@@ -56,7 +46,7 @@ def _tree_rows_defn(by_id, tid, rows, prefix="", is_last=True):
     """Collect rows from a flat job-definition task list (requires by id)."""
     t          = by_id.get(tid, {})
     connector  = ("└─ " if is_last else "├─ ") if prefix else ""
-    display_id = prefix + connector + tid
+    display_id = _ZWS + prefix + connector + tid
     if "taskRef" in t:
         kind = f"ref:{t['taskRef'].get('name', '?')}"
     elif "taskSpec" in t:
@@ -120,7 +110,8 @@ def describe_job(session: WaluigiSession, namespace=None, job_id=None, output=No
             rows  = []
             _tree_rows_job(spec, by_id, rows)
             print(f"\nTasks ({len(tasks)}):")
-            _plain_table(rows, ["TASK ID", "STATUS", "PARAMETERS", "UPDATED"])
+            print(tabulate(rows, headers=["TASK ID", "STATUS", "PARAMETERS", "UPDATED"],
+                           tablefmt="plain"))
         else:
             print("\nNo tasks.")
     except Exception as e:
@@ -219,7 +210,8 @@ def describe_job_definition(session: WaluigiSession, namespace=None,
                     if "id" in t:
                         _tree_rows_defn(by_id, t["id"], rows)
             print(f"\nTasks ({len(tasks_list)}):")
-            _plain_table(rows, ["TASK ID", "TYPE", "RESOURCES"])
+            print(tabulate(rows, headers=["TASK ID", "TYPE", "RESOURCES"],
+                           tablefmt="plain"))
         else:
             print("\nNo tasks.")
     except Exception as e:
