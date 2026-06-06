@@ -31,7 +31,7 @@ export default {
       loading.value = true;
       error.value   = null;
       try {
-        const ov = await api.namespaceOverview(nsStore.selected);
+        const ov = await api.namespace(nsStore.selected);
         tasks.value    = Array.isArray(ov.tasks)            ? ov.tasks            : [];
         jobs.value     = Array.isArray(ov.jobs)             ? ov.jobs             : [];
         cronJobs.value = Array.isArray(ov.cron_jobs)        ? ov.cron_jobs        : [];
