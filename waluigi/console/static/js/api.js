@@ -134,6 +134,13 @@ export const api = {
   jobDefinitions:      (ns)       => _get(`/boss/namespaces/${_enc(ns)}/job-definitions`).then(_unwrap),
   deleteJobDefinition: (ns, id)   => _delete(`/boss/namespaces/${_enc(ns)}/job-definitions/${_enc(id)}`).then(_unwrap),
 
+  // ── Boss — Cron Jobs (namespace-scoped) ──────────────────────────────────
+  cronJobs:       (ns)        => _get(`/boss/namespaces/${_enc(ns)}/cron-jobs`).then(_unwrap),
+  upsertCronJob:  (ns, body)  => _postJson(`/boss/namespaces/${_enc(ns)}/cron-jobs`, body).then(_unwrap),
+  deleteCronJob:  (ns, id)    => _delete(`/boss/namespaces/${_enc(ns)}/cron-jobs/${_enc(id)}`).then(_unwrap),
+  enableCronJob:  (ns, id)    => _post(`/boss/namespaces/${_enc(ns)}/cron-jobs/${_enc(id)}/_enable`).then(_unwrap),
+  disableCronJob: (ns, id)    => _post(`/boss/namespaces/${_enc(ns)}/cron-jobs/${_enc(id)}/_disable`).then(_unwrap),
+
   // ── Boss — Cluster ────────────────────────────────────────────────────────
   workers:        ()          => _get('/boss/workers').then(_unwrap),
   resources:      (ns)        => _get(`/boss/namespaces/${_enc(ns)}/resources`).then(_unwrap),

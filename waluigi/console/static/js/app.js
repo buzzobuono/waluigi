@@ -68,6 +68,7 @@ const App = {
           { path: '/tasks',            label: 'Tasks',            icon: 'fa-tasks' },
           { path: '/task-definitions', label: 'Task Definitions', icon: 'fa-cubes' },
           { path: '/job-definitions',  label: 'Job Definitions',  icon: 'fa-list-alt' },
+          { path: '/cron-jobs',        label: 'Cron Jobs',        icon: 'fa-clock' },
           { path: '/resources',        label: 'Resources',        icon: 'fa-chart-bar' },
         ]
       },
