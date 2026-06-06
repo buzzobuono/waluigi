@@ -5,30 +5,84 @@ from waluigi.cli.services.session import WaluigiSession
 from waluigi.cli.output import ok, data, color
 
 
-def _spec_deps(node, acc=None):
-    """Flatten nested spec tree → {task_id: [required_task_ids]}."""
-    if acc is None:
-        acc = {}
-    acc[node["id"]] = [c["id"] for c in node.get("requires", [])]
-    for child in node.get("requires", []):
-        _spec_deps(child, acc)
-    return acc
+# ── tree rendering helpers ────────────────────────────────────────────────────
+
+def _fmt_params(params):
+    if not params:
+        return "-"
+    if isinstance(params, str):
+        try:
+            params = json.loads(params)
+        except Exception:
+            return params
+    if isinstance(params, dict):
+        return ", ".join(f"{k}:{v}" for k, v in params.items()) or "-"
+    return str(params)
 
 
-def _topo_sort(deps):
-    """Topological order: dependencies before dependents (leaves first)."""
-    order, visited = [], set()
-    def visit(nid):
-        if nid in visited:
-            return
-        visited.add(nid)
-        for dep in deps.get(nid, []):
-            visit(dep)
-        order.append(nid)
-    for nid in deps:
-        visit(nid)
-    return order
+def _plain_table(rows, headers):
+    """Like tabulate plain but preserves leading whitespace in cells."""
+    all_rows = [list(headers)] + [list(r) for r in rows]
+    widths = [max(len(str(r[i])) for r in all_rows) for i in range(len(headers))]
+    for ri, row in enumerate(all_rows):
+        parts = []
+        for i, cell in enumerate(row):
+            s = str(cell)
+            parts.append(s + " " * (widths[i] - len(s)))
+        print("  ".join(parts).rstrip())
+        if ri == 0:
+            print()
 
+
+def _tree_rows_job(node, by_id, rows, prefix="", is_last=True):
+    """Collect rows from a nested job spec tree (root at top, deps below)."""
+    tid        = node.get("id", "?")
+    t          = by_id.get(tid, {})
+    connector  = ("└─ " if is_last else "├─ ") if prefix else ""
+    display_id = prefix + connector + tid
+    rows.append([
+        display_id,
+        color(t.get("status", "-")),
+        _fmt_params(t.get("params")),
+        t.get("last_update") or "-",
+    ])
+    children = node.get("requires", [])
+    for i, child in enumerate(children):
+        child_prefix = prefix + ("   " if is_last else "│  ")
+        _tree_rows_job(child, by_id, rows, child_prefix, i == len(children) - 1)
+
+
+def _tree_rows_defn(by_id, tid, rows, prefix="", is_last=True):
+    """Collect rows from a flat job-definition task list (requires by id)."""
+    t          = by_id.get(tid, {})
+    connector  = ("└─ " if is_last else "├─ ") if prefix else ""
+    display_id = prefix + connector + tid
+    if "taskRef" in t:
+        kind = f"ref:{t['taskRef'].get('name', '?')}"
+    elif "taskSpec" in t:
+        kind = "inline"
+    else:
+        kind = "-"
+    resources = ", ".join(
+        f"{k}:{v}" for k, v in (t.get("resources") or {}).items()
+    ) or "-"
+    rows.append([display_id, kind, resources])
+    children = t.get("requires") or []
+    for i, child_id in enumerate(children):
+        if child_id in by_id:
+            child_prefix = prefix + ("   " if is_last else "│  ")
+            _tree_rows_defn(by_id, child_id, rows, child_prefix, i == len(children) - 1)
+
+
+def _defn_root(tasks_list):
+    """Return (by_id, root_id) for a flat task list with requires-by-id."""
+    by_id        = {t["id"]: t for t in tasks_list if "id" in t}
+    all_required = {dep for t in by_id.values() for dep in (t.get("requires") or [])}
+    roots        = [tid for tid in by_id if tid not in all_required]
+    return by_id, (roots[0] if len(roots) == 1 else None)
+
+
+# ── describe functions ────────────────────────────────────────────────────────
 
 def describe_job(session: WaluigiSession, namespace=None, job_id=None, output=None) -> None:
     ns = session.resolve_namespace(namespace)
@@ -62,21 +116,11 @@ def describe_job(session: WaluigiSession, namespace=None, job_id=None, output=No
         print(tabulate(summary, tablefmt="plain"))
 
         if tasks:
-            deps  = _spec_deps(spec) if spec else {}
-            topo  = _topo_sort(deps)
             by_id = {t.get("id"): t for t in tasks}
-            seen, rows = set(), []
-            for tid in topo + [t.get("id") for t in tasks if t.get("id") not in deps]:
-                if tid in seen:
-                    continue
-                seen.add(tid)
-                t        = by_id.get(tid, {})
-                requires = ", ".join(deps.get(tid, [])) or "—"
-                rows.append([tid, color(t.get("status", "—")), requires,
-                             t.get("last_update") or "—"])
+            rows  = []
+            _tree_rows_job(spec, by_id, rows)
             print(f"\nTasks ({len(tasks)}):")
-            print(tabulate(rows, headers=["ID", "STATUS", "REQUIRES", "LAST UPDATE"],
-                           tablefmt="plain"))
+            _plain_table(rows, ["TASK ID", "STATUS", "PARAMETERS", "UPDATED"])
         else:
             print("\nNo tasks.")
     except Exception as e:
@@ -123,15 +167,15 @@ def describe_cron_job(session: WaluigiSession, namespace=None,
         params = spec.get("params") or {}
         attrs  = spec.get("attributes") or {}
         rows = [
-            ["id",          cj.get("id")],
-            ["namespace",   ns],
-            ["enabled",     "yes" if cj.get("enabled") else "no"],
-            ["schedule",    spec.get("schedule", "-")],
-            ["timezone",    spec.get("timezone", "UTC")],
-            ["executionPolicy", spec.get("executionPolicy", "Ephemeral")],
-            ["jobRef",      (spec.get("jobRef") or {}).get("name", "-")],
-            ["concurrency", spec.get("concurrencyPolicy", "Forbid")],
-            ["last_fire",   (cj.get("last_fire") or "-")[:19]],
+            ["id",                cj.get("id")],
+            ["namespace",         ns],
+            ["enabled",           "yes" if cj.get("enabled") else "no"],
+            ["schedule",          spec.get("schedule", "-")],
+            ["timezone",          spec.get("timezone", "UTC")],
+            ["executionPolicy",   spec.get("executionPolicy", "Ephemeral")],
+            ["concurrencyPolicy", spec.get("concurrencyPolicy", "Forbid")],
+            ["jobRef",            (spec.get("jobRef") or {}).get("name", "-")],
+            ["last_fire",         (cj.get("last_fire") or "-")[:19]],
         ]
         print(tabulate(rows, tablefmt="plain"))
         if params:
@@ -159,32 +203,23 @@ def describe_job_definition(session: WaluigiSession, namespace=None,
             print(json.dumps(defn, indent=2)); return
         meta = defn.get("metadata") or {}
         spec = defn.get("spec")     or {}
-        rows = [
+        print(tabulate([
             ["id",        defn.get("id")],
             ["namespace", ns],
             ["workdir",   meta.get("workdir") or "-"],
-        ]
-        print(tabulate(rows, tablefmt="plain"))
-        tasks = spec.get("tasks") or []
-        if tasks:
-            print(f"\nTasks ({len(tasks)}):")
-            task_rows = []
-            for t in tasks:
-                task_id = t.get("id", "-")
-                if "taskRef" in t:
-                    kind = f"ref:{t['taskRef'].get('name', '?')}"
-                elif "taskSpec" in t:
-                    kind = "inline"
-                else:
-                    kind = "-"
-                resources = ", ".join(
-                    f"{k}:{v}" for k, v in (t.get("resources") or {}).items()
-                ) or "-"
-                requires = ", ".join(t.get("requires") or []) or "-"
-                task_rows.append([task_id, kind, resources, requires])
-            print(tabulate(task_rows,
-                           headers=["ID", "TYPE", "RESOURCES", "REQUIRES"],
-                           tablefmt="plain"))
+        ], tablefmt="plain"))
+        tasks_list = spec.get("tasks") or []
+        if tasks_list:
+            by_id, root_id = _defn_root(tasks_list)
+            rows = []
+            if root_id:
+                _tree_rows_defn(by_id, root_id, rows)
+            else:
+                for t in tasks_list:
+                    if "id" in t:
+                        _tree_rows_defn(by_id, t["id"], rows)
+            print(f"\nTasks ({len(tasks_list)}):")
+            _plain_table(rows, ["TASK ID", "TYPE", "RESOURCES"])
         else:
             print("\nNo tasks.")
     except Exception as e:
