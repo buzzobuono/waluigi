@@ -30,6 +30,15 @@ export default {
 
     function closeMenu() { menu.value.visible = false; }
 
+    function fitHeight() {
+      if (!containerRef.value) return;
+      const top = containerRef.value.getBoundingClientRect().top + window.scrollY;
+      containerRef.value.style.height = `calc(100vh - ${Math.round(top) + 12}px)`;
+    }
+
+    Vue.onMounted(() => { Vue.nextTick(fitHeight); window.addEventListener('resize', fitHeight); });
+    Vue.onUnmounted(() => { window.removeEventListener('resize', fitHeight); });
+
     // Reposition if the menu overflows the container edges
     Vue.watch(() => menu.value.visible, (v) => {
       if (!v) return;
@@ -213,7 +222,7 @@ export default {
   template: `
     <div ref="containerRef"
          @click="closeMenu"
-         style="background:#f4f6f9; border:1px solid #007bff; border-top:3px solid #007bff; border-radius:4px; overflow:hidden; position:relative; user-select:none; height:calc(100vh - 210px); min-height:300px;">
+         style="background:#f4f6f9; border:1px solid #007bff; border-top:3px solid #007bff; border-radius:4px; overflow:hidden; position:relative; user-select:none; min-height:300px;">
 
       <svg ref="svgRef" style="width:100%; height:100%; display:block;"></svg>
 
