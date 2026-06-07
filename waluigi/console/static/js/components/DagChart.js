@@ -103,8 +103,6 @@ export default {
       const totalW = padX * 2 + nodeW + maxLevel * levelW;
       const totalH = padY * 2 + maxColSize * nodeH + (maxColSize - 1) * gapY;
 
-      svg.attr('viewBox', `0 0 ${totalW} ${totalH}`)
-         .attr('preserveAspectRatio', 'xMinYMid slice');
 
       const pos = {};
       levels.forEach(l => {
@@ -196,7 +194,12 @@ export default {
         .attr('pointer-events', 'none')
         .text('⋮');
 
-      svg.call(d3.zoom().scaleExtent([0.05, 4]).on('zoom', e => g.attr('transform', e.transform)));
+      const zoom = d3.zoom().scaleExtent([0.05, 4]).on('zoom', e => g.attr('transform', e.transform));
+      svg.call(zoom);
+      // Initial scale: fit exactly 5 nodes + gaps + padding vertically; align left
+      const ch = containerRef.value.offsetHeight;
+      const k  = ch / (5 * nodeH + 4 * gapY + 2 * padY);
+      svg.call(zoom.transform, d3.zoomIdentity.scale(k));
     };
 
     Vue.onMounted(renderDag);
