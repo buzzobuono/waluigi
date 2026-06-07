@@ -100,7 +100,7 @@ export default {
       const totalH = padY * 2 + maxColSize * nodeH + (maxColSize - 1) * gapY;
 
       svg.attr('viewBox', `0 0 ${totalW} ${totalH}`)
-         .style('height', Math.max(280, totalH) + 'px');
+         .attr('preserveAspectRatio', 'xMidYMid meet');
 
       const pos = {};
       levels.forEach(l => {
@@ -213,16 +213,9 @@ export default {
   template: `
     <div ref="containerRef"
          @click="closeMenu"
-         style="background:#f4f6f9; border:1px solid #007bff; border-top:3px solid #007bff; border-radius:4px; overflow:hidden; position:relative; user-select:none;">
+         style="background:#f4f6f9; border:1px solid #007bff; border-top:3px solid #007bff; border-radius:4px; overflow:hidden; position:relative; user-select:none; height:calc(100vh - 210px); min-height:300px;">
 
-      <svg ref="svgRef" style="width:100%; display:block;"></svg>
-
-      <!-- Legend -->
-      <div style="position:absolute; bottom:10px; left:10px; display:flex; flex-wrap:wrap; gap:10px; pointer-events:none; background:rgba(255,255,255,0.9); padding:5px 10px; border-radius:4px; border:1px solid #dee2e6;">
-        <span v-for="(color, status) in colors" :key="status" style="font-size:0.75rem; color:#495057; font-weight:600; white-space:nowrap;">
-          <i class="fas fa-circle" :style="'color:'+color"></i> {{ status }}
-        </span>
-      </div>
+      <svg ref="svgRef" style="width:100%; height:100%; display:block;"></svg>
 
       <!-- Hint -->
       <div style="position:absolute; bottom:10px; right:10px; pointer-events:none; background:rgba(255,255,255,0.85); padding:3px 8px; border-radius:4px; border:1px solid #dee2e6; font-size:0.72rem; color:#888;">
