@@ -1,6 +1,7 @@
 import { api } from '../api.js';
 import { nsStore } from '../store.js';
 import { JOB_STATUS, JOB_STATUSES } from '../config.js';
+import { fmtDt } from '../utils.js';
 import BasePage from './BasePage.js';
 import BasePanel from './BasePanel.js';
 import BaseTable from './BaseTable.js';
@@ -97,7 +98,7 @@ export default {
     return {
       jobs, pagedJobs, loading, error, columns, JOB_STATUS, JOB_STATUSES, nsStore,
       counts, confirmRef, currentPage, totalPages, rangeStart, rangeEnd,
-      changePage, load, pauseJob, resumeJob, cancelJob, deleteJob,
+      changePage, load, pauseJob, resumeJob, cancelJob, deleteJob, fmtDt,
     };
   },
 
@@ -179,7 +180,7 @@ export default {
 
           <template #cell(started_at)="{ item }">
             <span class="text-muted small">
-              {{ item.started_at ? new Date(item.started_at).toLocaleString() : '—' }}
+              {{ fmtDt(item.started_at) }}
             </span>
           </template>
 
