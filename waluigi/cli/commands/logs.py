@@ -1,7 +1,7 @@
 import time
 
 from waluigi.cli.services.session import WaluigiSession
-from waluigi.cli.output import data
+from waluigi.cli.output import data, fmt_dt
 
 
 def get_logs(session: WaluigiSession, namespace=None, task_id=None,
@@ -19,10 +19,10 @@ def get_logs(session: WaluigiSession, namespace=None, task_id=None,
             logs     = data(r) or []
             new_logs = [entry for entry in logs if entry.get("id", 0) > last_seen_id]
             for entry in new_logs:
-                ts        = entry.get("timestamp", "N/A")
+                ts        = fmt_dt(entry.get("timestamp", ""))
                 worker_id = entry.get("worker_id", "???")
                 message   = entry.get("message", "")
-                print(f"[{ts}] [{worker_id}] {message}")
+                print(f"{ts}  [{worker_id}]  {message}")
                 last_seen_id = max(last_seen_id, entry.get("id", 0))
             if not follow:
                 break
