@@ -104,7 +104,7 @@ export default {
       const totalH = padY * 2 + maxColSize * nodeH + (maxColSize - 1) * gapY;
 
       svg.attr('viewBox', `0 0 ${totalW} ${totalH}`)
-         .attr('preserveAspectRatio', 'xMidYMid meet');
+         .attr('preserveAspectRatio', 'xMinYMid slice');
 
       const pos = {};
       levels.forEach(l => {
