@@ -199,10 +199,11 @@ export default {
 
       const zoom = d3.zoom().scaleExtent([0.05, 4]).on('zoom', e => g.attr('transform', e.transform));
       svg.call(zoom);
-      // Initial scale: fit exactly 5 nodes + gaps + padding vertically; align left
+      // Initial scale: fit exactly 5 nodes + gaps + padding vertically; center vertically
       const ch = containerRef.value.offsetHeight;
       const k  = ch / (5 * nodeH + 4 * gapY + 2 * padY);
-      svg.call(zoom.transform, d3.zoomIdentity.scale(k));
+      const ty = (ch - totalH * k) / 2;
+      svg.call(zoom.transform, d3.zoomIdentity.translate(0, ty).scale(k));
     };
 
     Vue.watch(() => props.tasks, () => Vue.nextTick(renderDag), { deep: true });
