@@ -2,7 +2,7 @@ import json
 from tabulate import tabulate
 
 from waluigi.cli.services.session import WaluigiSession
-from waluigi.cli.output import ok, data, color
+from waluigi.cli.output import ok, data, color, fmt_dt
 
 # Zero-width space: invisible, not stripped by str.strip(), lets tabulate
 # preserve any leading ASCII spaces that follow it.
@@ -34,7 +34,7 @@ def _tree_rows_job(node, by_id, rows, prefix="", is_last=True):
         display_id,
         color(t.get("status", "-")),
         _fmt_params(t.get("params")),
-        t.get("last_update") or "-",
+        fmt_dt(t.get("last_update")),
     ])
     children = node.get("requires", [])
     for i, child in enumerate(children):
@@ -96,7 +96,7 @@ def describe_job(session: WaluigiSession, namespace=None, job_id=None, output=No
             ["execution_policy",   job.get("execution_policy",  "Ephemeral")],
             ["concurrency_policy", job.get("concurrency_policy", "Forbid")],
             ["status",             color(job.get("status", ""))],
-            ["started_at",         job.get("started_at") or "-"],
+            ["started_at",         fmt_dt(job.get("started_at"))],
             ["locked_by",          job.get("locked_by")  or "-"],
             ["root_task",          spec.get("id", "-")],
         ]
@@ -137,7 +137,7 @@ def describe_task(session: WaluigiSession, namespace=None, task_id=None, output=
             ["parent_id",   task.get("parent_id")  or "-"],
             ["params",      task.get("params",     "-")],
             ["attributes",  task.get("attributes") or "-"],
-            ["last_update", task.get("last_update", "-")],
+            ["last_update", fmt_dt(task.get("last_update"))],
         ], tablefmt="plain"))
     except Exception as e:
         print(f"Error: {e}")
@@ -166,7 +166,7 @@ def describe_cron_job(session: WaluigiSession, namespace=None,
             ["executionPolicy",   spec.get("executionPolicy", "Ephemeral")],
             ["concurrencyPolicy", spec.get("concurrencyPolicy", "Forbid")],
             ["jobRef",            (spec.get("jobRef") or {}).get("name", "-")],
-            ["last_fire",         (cj.get("last_fire") or "-")[:19]],
+            ["last_fire",         fmt_dt(cj.get("last_fire"))],
         ]
         print(tabulate(rows, tablefmt="plain"))
         if params:

@@ -1,5 +1,5 @@
 from waluigi.cli.services.session import WaluigiSession
-from waluigi.cli.output import ok, data, color, table
+from waluigi.cli.output import ok, data, color, table, fmt_dt
 
 
 def get_namespaces(session: WaluigiSession, output=None) -> None:
@@ -31,7 +31,7 @@ def get_jobs(session: WaluigiSession, namespace=None, status=None, output=None) 
               j.get("concurrency_policy", "Forbid"),
               color(j.get("status", "")),
               j.get("namespace", "-"),
-              j.get("started_at", "-")] for j in rows],
+              fmt_dt(j.get("started_at"))] for j in rows],
             headers=["JOB_ID", "EXEC", "CONCURRENCY", "STATUS", "NAMESPACE", "STARTED"],
             output_arg=output, raw=rows,
         )
@@ -50,7 +50,7 @@ def get_tasks(session: WaluigiSession, namespace=None, job_id=None, output=None)
         rows = data(r)
         table(
             [[t.get("id"), t.get("job_id"), t.get("params"),
-              color(t.get("status", "")), t.get("last_update")] for t in rows],
+              color(t.get("status", "")), fmt_dt(t.get("last_update"))] for t in rows],
             headers=["ID", "JOB_ID", "PARAMS", "STATUS", "LAST UPDATE"],
             output_arg=output, raw=rows,
         )
@@ -85,7 +85,7 @@ def get_workers(session: WaluigiSession, output=None) -> None:
         rows = data(r)
         table(
             [[w.get("url"), color(w.get("status", "")),
-              w.get("max_slots"), w.get("free_slots"), w.get("last_seen")] for w in rows],
+              w.get("max_slots"), w.get("free_slots"), fmt_dt(w.get("last_seen"))] for w in rows],
             headers=["URL", "STATUS", "MAX_SLOTS", "FREE_SLOTS", "LAST_SEEN"],
             output_arg=output, raw=rows,
         )
@@ -125,7 +125,7 @@ def get_cron_jobs(session: WaluigiSession, namespace=None, output=None) -> None:
                     (cj.get("spec") or {}).get("schedule", "-"),
                     (cj.get("spec") or {}).get("timezone", "UTC"),
                     "yes" if cj.get("enabled") else "no",
-                    (cj.get("last_fire") or "-")[:19],
+                    fmt_dt(cj.get("last_fire")),
                 ]
                 for cj in rows
             ],
@@ -168,7 +168,7 @@ def get_users(session: WaluigiSession, output=None) -> None:
         table(
             [[u.get("userid"), u.get("username"),
               ", ".join(u.get("namespaces") or []) or "—",
-              (u.get("createdate") or "")[:19]] for u in rows],
+              fmt_dt(u.get("createdate"))] for u in rows],
             headers=["USERID", "DISPLAY NAME", "NAMESPACES", "CREATED"],
             output_arg=output, raw=rows,
         )

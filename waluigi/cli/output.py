@@ -1,5 +1,6 @@
 import sys
 import json
+from datetime import datetime, timezone
 from tabulate import tabulate
 
 _COLORS = {
@@ -38,6 +39,19 @@ def ok(r) -> bool:
 def data(r):
     body = r.json()
     return body.get("data", body)
+
+
+def fmt_dt(value) -> str:
+    """Convert an ISO UTC timestamp to local time — same as new Date(v).toLocaleString()."""
+    if not value or value == "-":
+        return "-"
+    try:
+        dt = datetime.fromisoformat(str(value))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return str(value)
 
 
 def table(rows, headers, output_arg=None, raw=None):
