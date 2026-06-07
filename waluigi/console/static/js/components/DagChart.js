@@ -196,7 +196,7 @@ export default {
         .attr('pointer-events', 'none')
         .text('⋮');
 
-      svg.call(d3.zoom().scaleExtent([0.2, 4]).on('zoom', e => g.attr('transform', e.transform)));
+      svg.call(d3.zoom().scaleExtent([0.05, 4]).on('zoom', e => g.attr('transform', e.transform)));
     };
 
     Vue.onMounted(renderDag);
