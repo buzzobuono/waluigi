@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import time
 import os
 import hashlib
 import numpy as np
@@ -10,7 +11,7 @@ def _now() -> str:
 
 
 def _version_id() -> str:
-    return _now()
+    return str(time.time())
 
 
 _TYPE_MAP = {
