@@ -20,9 +20,6 @@ export default {
     const containerRef = Vue.ref(null);
     const menuRef      = Vue.ref(null);
     const menu         = Vue.ref({ visible: false, x: 0, y: 0, task: null });
-    let longPressTimer = null;
-    let touchOrigin    = null;
-
     function openMenu(clientX, clientY, t) {
       const rect = containerRef.value.getBoundingClientRect();
       menu.value = { visible: true, x: clientX - rect.left, y: clientY - rect.top, task: t };
@@ -152,27 +149,6 @@ export default {
         .attr('transform', t => {
           const p = pos[t.id] || { x: 0, y: 0 };
           return `translate(${p.x - nodeW / 2},${p.y - nodeH / 2})`;
-        })
-        .style('cursor', 'pointer');
-
-      node
-        .on('click', (ev, t) => { ev.stopPropagation(); openMenu(ev.clientX, ev.clientY, t); })
-        .on('contextmenu', (ev, t) => { ev.preventDefault(); ev.stopPropagation(); openMenu(ev.clientX, ev.clientY, t); });
-
-      node
-        .on('touchstart', (ev, t) => {
-          ev.stopPropagation();
-          const touch = ev.touches[0];
-          touchOrigin = { x: touch.clientX, y: touch.clientY };
-          longPressTimer = setTimeout(() => { openMenu(touch.clientX, touch.clientY, t); touchOrigin = null; }, 500);
-        })
-        .on('touchend',  ()    => { clearTimeout(longPressTimer); touchOrigin = null; })
-        .on('touchmove', (ev)  => {
-          if (!touchOrigin) return;
-          const t = ev.touches[0];
-          if (Math.hypot(t.clientX - touchOrigin.x, t.clientY - touchOrigin.y) > 8) {
-            clearTimeout(longPressTimer); touchOrigin = null;
-          }
         });
 
       node.append('rect')
@@ -200,6 +176,29 @@ export default {
         .attr('font-size', '10px').attr('font-weight', 'bold')
         .text(t => t.status);
 
+      const btnW   = 22;
+      const moreBtn = node.append('g')
+        .style('cursor', 'pointer')
+        .on('click',       (ev, t) => { ev.stopPropagation(); openMenu(ev.clientX, ev.clientY, t); })
+        .on('contextmenu', (ev, t) => { ev.preventDefault(); ev.stopPropagation(); openMenu(ev.clientX, ev.clientY, t); })
+        .on('touchstart',  (ev, t) => { ev.stopPropagation(); const touch = ev.touches[0]; openMenu(touch.clientX, touch.clientY, t); });
+
+      moreBtn.append('rect')
+        .attr('class', 'more-bg')
+        .attr('x', nodeW - btnW).attr('y', 0)
+        .attr('width', btnW).attr('height', nodeH).attr('rx', 4)
+        .attr('fill', 'transparent')
+        .on('mouseenter', function() { d3.select(this).attr('fill', 'rgba(0,0,0,0.07)'); })
+        .on('mouseleave', function() { d3.select(this).attr('fill', 'transparent'); });
+
+      moreBtn.append('text')
+        .attr('x', nodeW - btnW / 2).attr('y', nodeH / 2)
+        .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+        .attr('fill', '#adb5bd')
+        .attr('font-size', '15px').attr('font-weight', 'bold')
+        .attr('pointer-events', 'none')
+        .text('⋮');
+
       svg.call(d3.zoom().scaleExtent([0.2, 4]).on('zoom', e => g.attr('transform', e.transform)));
     };
 
@@ -215,11 +214,6 @@ export default {
          style="background:#f4f6f9; border:1px solid #007bff; border-top:3px solid #007bff; border-radius:4px; overflow:hidden; position:relative; user-select:none; min-height:300px;">
 
       <svg ref="svgRef" style="width:100%; height:100%; display:block;"></svg>
-
-      <!-- Hint -->
-      <div style="position:absolute; bottom:10px; right:10px; pointer-events:none; background:rgba(255,255,255,0.85); padding:3px 8px; border-radius:4px; border:1px solid #dee2e6; font-size:0.72rem; color:#888;">
-        <i class="fas fa-hand-pointer mr-1"></i>tap node for actions
-      </div>
 
       <!-- Context menu -->
       <div v-if="menu.visible"
