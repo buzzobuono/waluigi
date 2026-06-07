@@ -3,11 +3,12 @@ import BasePage from './BasePage.js';
 import BaseButton from './BaseButton.js';
 import DagChart from './DagChart.js';
 import LogModal from './LogModal.js';
+import TaskInfoModal from './TaskInfoModal.js';
 import ConfirmDialog from './ConfirmDialog.js';
 
 export default {
   name: 'JobDag',
-  components: { BasePage, BaseButton, DagChart, LogModal, ConfirmDialog },
+  components: { BasePage, BaseButton, DagChart, LogModal, TaskInfoModal, ConfirmDialog },
 
   setup() {
     const route       = VueRouter.useRoute();
@@ -16,8 +17,9 @@ export default {
     const tasks       = Vue.ref([]);
     const job         = Vue.ref(null);
     const loading     = Vue.ref(false);
-    const logModalRef = Vue.ref(null);
-    const confirmRef  = Vue.ref(null);
+    const logModalRef  = Vue.ref(null);
+    const infoModalRef = Vue.ref(null);
+    const confirmRef   = Vue.ref(null);
 
     const STATUS_COLOR = {
       SUCCESS: '#28a745',
@@ -55,7 +57,8 @@ export default {
       });
     };
 
-    const openLogs = (id) => logModalRef.value?.show(namespace.value, id);
+    const openLogs  = (id)   => logModalRef.value?.show(namespace.value, id);
+    const openInfo  = (task) => infoModalRef.value?.show(task);
 
     Vue.onMounted(load);
     Vue.watch(() => [route.params.namespace, route.params.jobId], ([ns, jid]) => {
@@ -66,8 +69,8 @@ export default {
 
     return {
       namespace, jobId, job, tasks, loading,
-      logModalRef, confirmRef, STATUS_COLOR,
-      resetTask, deleteTask, openLogs, load
+      logModalRef, infoModalRef, confirmRef, STATUS_COLOR,
+      resetTask, deleteTask, openLogs, openInfo, load
     };
   },
 
@@ -106,6 +109,7 @@ export default {
         v-if="tasks.length"
         :tasks="tasks"
         :colors="STATUS_COLOR"
+        @show-info="openInfo"
         @show-logs="openLogs"
         @reset="resetTask"
         @delete="deleteTask"
@@ -117,6 +121,7 @@ export default {
       </div>
 
       <log-modal ref="logModalRef" />
+      <task-info-modal ref="infoModalRef" />
       <confirm-dialog title="Confirm" ref="confirmRef" />
     </base-page>
   `

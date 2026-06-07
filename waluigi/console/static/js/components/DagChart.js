@@ -1,8 +1,6 @@
-import { fmtDt } from '../utils.js';
-
 export default {
   name: 'DagChart',
-  emits: ['show-logs', 'reset', 'delete'],
+  emits: ['show-logs', 'reset', 'delete', 'show-info'],
   props: {
     tasks: { type: Array, required: true },
     colors: {
@@ -17,23 +15,13 @@ export default {
     }
   },
 
-  setup(props) {
+  setup(props, { emit }) {
     const svgRef       = Vue.ref(null);
     const containerRef = Vue.ref(null);
     const menuRef      = Vue.ref(null);
     const menu         = Vue.ref({ visible: false, x: 0, y: 0, task: null });
-    const infoTask     = Vue.ref(null);
     let longPressTimer = null;
     let touchOrigin    = null;
-
-    function parseKV(str) {
-      if (!str) return {};
-      try {
-        const v = JSON.parse(str);
-        if (v && typeof v === 'object' && !Array.isArray(v)) return v;
-      } catch {}
-      return str ? { value: str } : {};
-    }
 
     function openMenu(clientX, clientY, t) {
       const rect = containerRef.value.getBoundingClientRect();
@@ -42,7 +30,7 @@ export default {
 
     function closeMenu() { menu.value.visible = false; }
 
-    function showInfo(t) { infoTask.value = t; closeMenu(); }
+    function showInfo(t) { emit('show-info', t); closeMenu(); }
 
     function fitHeight() {
       if (!containerRef.value) return;
@@ -218,7 +206,7 @@ export default {
     Vue.onMounted(renderDag);
     Vue.watch(() => props.tasks, () => Vue.nextTick(renderDag), { deep: true });
 
-    return { svgRef, containerRef, menuRef, menu, infoTask, closeMenu, showInfo, parseKV, fmtDt };
+    return { svgRef, containerRef, menuRef, menu, closeMenu, showInfo };
   },
 
   template: `
@@ -231,62 +219,6 @@ export default {
       <!-- Hint -->
       <div style="position:absolute; bottom:10px; right:10px; pointer-events:none; background:rgba(255,255,255,0.85); padding:3px 8px; border-radius:4px; border:1px solid #dee2e6; font-size:0.72rem; color:#888;">
         <i class="fas fa-hand-pointer mr-1"></i>tap node for actions
-      </div>
-
-      <!-- Info panel -->
-      <div v-if="infoTask"
-           @click.stop
-           style="position:absolute; top:10px; right:10px; width:260px; max-height:65%; display:flex; flex-direction:column; background:#fff; border:1px solid rgba(0,0,0,.15); border-radius:4px; box-shadow:0 6px 16px rgba(0,0,0,.18); z-index:1040; overflow:hidden;">
-
-        <!-- Header -->
-        <div style="flex-shrink:0; padding:8px 10px 6px; background:#f8f9fa; border-bottom:1px solid #dee2e6; display:flex; align-items:flex-start; justify-content:space-between; gap:6px;">
-          <div style="min-width:0;">
-            <div style="font-size:0.78rem; font-weight:700; color:#343a40; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-              <i class="fas fa-project-diagram mr-1 text-primary"></i>{{ infoTask.id }}
-            </div>
-            <div style="margin-top:3px; display:flex; align-items:center; gap:6px;">
-              <span class="badge" :style="{ background: colors[infoTask.status]||'#6c757d', color:'#fff', fontSize:'0.68rem' }">
-                {{ infoTask.status }}
-              </span>
-              <span style="font-size:0.72rem; color:#888;">{{ fmtDt(infoTask.last_update) }}</span>
-            </div>
-          </div>
-          <button @click="infoTask = null"
-                  style="flex-shrink:0; background:none; border:none; font-size:1.1rem; line-height:1; color:#6c757d; cursor:pointer; padding:0 2px;">&times;</button>
-        </div>
-
-        <!-- Scrollable body -->
-        <div style="overflow-y:auto; flex:1;">
-
-          <!-- Params -->
-          <template v-if="Object.keys(parseKV(infoTask.params)).length">
-            <div style="padding:6px 10px 2px; font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#6c757d;">
-              Parameters
-            </div>
-            <table style="width:100%; border-collapse:collapse; font-size:0.78rem; padding-bottom:4px;">
-              <tr v-for="(v, k) in parseKV(infoTask.params)" :key="k"
-                  style="border-bottom:1px solid #f0f0f0;">
-                <td style="padding:3px 6px 3px 10px; color:#6c757d; white-space:nowrap; width:40%;">{{ k }}</td>
-                <td style="padding:3px 10px 3px 4px; word-break:break-all; color:#343a40;">{{ v }}</td>
-              </tr>
-            </table>
-          </template>
-
-          <!-- Attributes -->
-          <template v-if="Object.keys(parseKV(infoTask.attributes)).length">
-            <div style="padding:6px 10px 2px; font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#6c757d; border-top:1px solid #dee2e6;">
-              Attributes
-            </div>
-            <table style="width:100%; border-collapse:collapse; font-size:0.78rem; padding-bottom:4px;">
-              <tr v-for="(v, k) in parseKV(infoTask.attributes)" :key="k"
-                  style="border-bottom:1px solid #f0f0f0;">
-                <td style="padding:3px 6px 3px 10px; color:#6c757d; white-space:nowrap; width:40%;">{{ k }}</td>
-                <td style="padding:3px 10px 3px 4px; word-break:break-all; color:#343a40;">{{ v }}</td>
-              </tr>
-            </table>
-          </template>
-
-        </div>
       </div>
 
       <!-- Context menu -->
