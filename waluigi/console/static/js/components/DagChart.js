@@ -238,17 +238,6 @@ export default {
              overflow:     'hidden',
            }">
 
-        <div style="padding:8px 12px 6px; background:#f8f9fa; border-bottom:1px solid #dee2e6;">
-          <div style="font-size:0.75rem; font-weight:700; color:#343a40; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:190px;">
-            <i class="fas fa-project-diagram mr-1 text-primary"></i>{{ menu.task && menu.task.id }}
-          </div>
-          <div v-if="menu.task" style="margin-top:2px;">
-            <span class="badge badge-sm" :style="{ background: colors[menu.task.status] || '#6c757d', color:'#fff', fontSize:'0.68rem' }">
-              {{ menu.task.status }}
-            </span>
-          </div>
-        </div>
-
         <div style="padding:3px 0;">
           <button class="dropdown-item d-flex align-items-center"
                   style="gap:8px; font-size:0.83rem; padding:7px 14px;"
