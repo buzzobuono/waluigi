@@ -82,11 +82,12 @@ export default {
           color="outline-secondary"
           @click="$router.push('/jobs')"
         />
-        <span class="ml-3 badge badge-secondary align-self-center">
-          <i class="fas fa-layer-group mr-1"></i>{{ namespace }}
+        <span class="ml-3 badge align-self-center"
+              :class="job && job.execution_policy === 'Stateful' ? 'badge-primary' : 'badge-secondary'">
+          {{ job ? (job.execution_policy || 'Ephemeral') : '…' }}
         </span>
-        <span v-if="job" :class="['ml-2 badge align-self-center', job.kind === 'StatefulJob' ? 'badge-primary' : 'badge-light border']">
-          {{ job.kind || 'Job' }}
+        <span class="ml-2 align-self-center text-muted small">
+          {{ job ? (job.concurrency_policy || 'Forbid') : '' }}
         </span>
         <base-button
           label="Refresh"
