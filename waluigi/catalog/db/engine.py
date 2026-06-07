@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     create_engine, event,
-    MetaData, Table, Column, Text, Integer, Float, DateTime,
+    MetaData, Table, Column, Text, Integer, Float,
     PrimaryKeyConstraint, UniqueConstraint, ForeignKeyConstraint,
 )
 
