@@ -21,8 +21,18 @@ export default {
     const menuRef      = Vue.ref(null);
     const menu         = Vue.ref({ visible: false, x: 0, y: 0, task: null });
     function openMenu(clientX, clientY, t) {
-      const rect = containerRef.value.getBoundingClientRect();
-      menu.value = { visible: true, x: clientX - rect.left, y: clientY - rect.top, task: t };
+      const cRect = containerRef.value.getBoundingClientRect();
+      // Use actual menu dimensions if already rendered, otherwise approximate
+      const mw = menuRef.value ? menuRef.value.offsetWidth  || 185 : 185;
+      const mh = menuRef.value ? menuRef.value.offsetHeight || 155 : 155;
+      const cw = cRect.width;
+      const ch = cRect.height;
+      let x = clientX - cRect.left;
+      let y = clientY - cRect.top;
+      // Prefer opening to the left of the click (button is on node's right edge)
+      if (x + mw > cw) x = Math.max(4, x - mw);
+      if (y + mh > ch) y = Math.max(4, ch - mh - 4);
+      menu.value = { visible: true, x, y, task: t };
     }
 
     function closeMenu() { menu.value.visible = false; }
@@ -37,19 +47,6 @@ export default {
 
     Vue.onMounted(() => { Vue.nextTick(fitHeight); window.addEventListener('resize', fitHeight); });
     Vue.onUnmounted(() => { window.removeEventListener('resize', fitHeight); });
-
-    Vue.watch(() => menu.value.visible, (v) => {
-      if (!v) return;
-      Vue.nextTick(() => {
-        if (!menuRef.value || !containerRef.value) return;
-        const mw = menuRef.value.offsetWidth;
-        const mh = menuRef.value.offsetHeight;
-        const cw = containerRef.value.offsetWidth;
-        const ch = containerRef.value.offsetHeight;
-        if (menu.value.x + mw > cw) menu.value.x = Math.max(4, cw - mw - 4);
-        if (menu.value.y + mh > ch) menu.value.y = Math.max(4, ch - mh - 4);
-      });
-    });
 
     const renderDag = () => {
       if (!svgRef.value || !props.tasks.length) return;
