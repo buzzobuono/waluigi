@@ -16,7 +16,7 @@ class WorkerRepository(BaseRepository):
                 "max_slots":  max_slots,
                 "free_slots": free_slots,
                 "status":     "ALIVE",
-                "last_seen":  datetime.now(timezone.utc),
+                "last_seen":  datetime.now(timezone.utc).isoformat(),
             },
             conflict_cols=["url"],
             update_cols=["max_slots", "free_slots", "status", "last_seen"],

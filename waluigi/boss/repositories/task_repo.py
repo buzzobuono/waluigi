@@ -31,7 +31,7 @@ class TaskRepository(BaseRepository):
                 "params":      params,
                 "attributes":  attributes,
                 "status":      "PENDING",
-                "last_update": datetime.now(timezone.utc),
+                "last_update": datetime.now(timezone.utc).isoformat(),
                 "job_id":      job_id,
             },
             conflict_cols=["namespace", "id"],
@@ -49,7 +49,7 @@ class TaskRepository(BaseRepository):
                     _t_tasks.c.id == task_id,
                     _t_tasks.c.status != "RUNNING",
                 ))
-                .values(status="RUNNING", last_update=datetime.now(timezone.utc))
+                .values(status="RUNNING", last_update=datetime.now(timezone.utc).isoformat())
             )
             return result.rowcount > 0
 
@@ -64,7 +64,7 @@ class TaskRepository(BaseRepository):
                 ))
                 .values(
                     status=status,
-                    last_update=datetime.now(timezone.utc),
+                    last_update=datetime.now(timezone.utc).isoformat(),
                     params=params,
                     attributes=attributes,
                 )

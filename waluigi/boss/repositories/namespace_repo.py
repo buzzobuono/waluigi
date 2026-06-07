@@ -35,7 +35,7 @@ class NamespaceRepository(BaseRepository):
         stmt = self._upsert_stmt(
             _t_namespaces,
             values={"name": name, "description": description,
-                    "created_at": datetime.now(timezone.utc)},
+                    "created_at": datetime.now(timezone.utc).isoformat()},
             conflict_cols=["name"],
             update_cols=["description"],
         )

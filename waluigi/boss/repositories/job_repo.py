@@ -45,7 +45,7 @@ class JobRepository(BaseRepository):
                 )
 
     def list_runnable_ids(self) -> list[tuple[str, str]]:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).isoformat()
         with self._conn() as conn:
             rows = conn.execute(
                 select(_t_jobs.c.namespace, _t_jobs.c.job_id).where(and_(
@@ -56,8 +56,9 @@ class JobRepository(BaseRepository):
             return [(r[0], r[1]) for r in rows]
 
     def claim(self, boss_id: str, namespace: str, job_id: str) -> dict | None:
-        now = datetime.now(timezone.utc)
-        lock_until = now + timedelta(seconds=60)
+        _now = datetime.now(timezone.utc)
+        now = _now.isoformat()
+        lock_until = (_now + timedelta(seconds=60)).isoformat()
         with self._conn() as conn:
             result = conn.execute(
                 update(_t_jobs)

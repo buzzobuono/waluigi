@@ -9,7 +9,7 @@ from waluigi.boss.db.engine import _t_task_logs
 class LogRepository(BaseRepository):
 
     def insert_many(self, namespace: str, task_id: str, lines: list[str], worker_id: str) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).isoformat()
         with self._conn() as conn:
             conn.execute(
                 insert(_t_task_logs),
