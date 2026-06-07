@@ -1,4 +1,5 @@
 import { api, getToken } from '../api.js';
+import { fmtDt } from '../utils.js';
 import BasePage       from './BasePage.js';
 import BasePanel      from './BasePanel.js';
 import BaseTable      from './BaseTable.js';
@@ -43,9 +44,7 @@ export default {
     const form     = ref({ userid: '', username: '', password: '', namespaces: '' });
     const editForm = ref({ userid: '', namespaces: '' });
 
-    function fmtDate(d) {
-      return d ? d.slice(0, 19).replace('T', ' ') : '—';
-    }
+
 
     function parseNs(raw) {
       return raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
@@ -137,7 +136,7 @@ export default {
     return {
       isAdmin, users, loading, saving, pageError, formError, editError,
       form, editForm, modalRef, editRef, confirmRef, columns: COLUMNS,
-      fmtDate, loadUsers, openCreate, submitCreate, openEdit, submitEdit, deleteUser,
+      fmtDt, loadUsers, openCreate, submitCreate, openEdit, submitEdit, deleteUser,
     };
   },
 
@@ -174,7 +173,7 @@ export default {
             </template>
 
             <template #cell(createdate)="{ item }">
-              <span class="text-muted small">{{ fmtDate(item.createdate) }}</span>
+              <span class="text-muted small">{{ fmtDt(item.createdate) }}</span>
             </template>
 
             <template #cell(actions)="{ item }">

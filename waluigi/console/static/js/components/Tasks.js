@@ -1,6 +1,7 @@
 import { api } from '../api.js';
 import { nsStore } from '../store.js';
 import { TASK_STATUS, TASK_STATUSES } from '../config.js';
+import { fmtDt } from '../utils.js';
 import BasePage from './BasePage.js';
 import BasePanel from './BasePanel.js';
 import BaseTable from './BaseTable.js';
@@ -113,7 +114,7 @@ export default {
     return {
       tasks, pagedTasks, loading, error, columns, TASK_STATUS, TASK_STATUSES, nsStore,
       counts, currentPage, totalPages, rangeStart, rangeEnd,
-      logModalRef, confirmRef,
+      logModalRef, confirmRef, fmtDt,
       changePage, load, openLogs, resetTask, deleteTask, resetNs, deleteNs,
     };
   },
@@ -188,7 +189,7 @@ export default {
 
           <template #cell(update)="{ item }">
             <span class="text-muted small">
-              <i class="far fa-clock mr-1"></i>{{ item.last_update || '—' }}
+              <i class="far fa-clock mr-1"></i>{{ fmtDt(item.last_update) }}
             </span>
           </template>
 

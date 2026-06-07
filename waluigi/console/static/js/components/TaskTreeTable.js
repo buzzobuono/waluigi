@@ -1,6 +1,7 @@
 import BaseTable from './BaseTable.js';
 import BaseButton from './BaseButton.js';
 import BaseButtonGroup from './BaseButtonGroup.js';
+import { fmtDt } from '../utils.js';
 
 export default {
   name: 'TaskTreeTable',
@@ -36,7 +37,7 @@ export default {
 
     const flatTasks = Vue.computed(() => flatten(props.tasks));
 
-    return { columns, flatTasks };
+    return { columns, flatTasks, fmtDt };
   },
 
   template: `
@@ -58,6 +59,10 @@ export default {
               :style="{ background: (colors && colors[item.status]) || '#6c757d', color: '#fff', minWidth: '70px' }">
           {{ item.status }}
         </span>
+      </template>
+
+      <template #cell(last_update)="{ item }">
+        <span class="text-muted small">{{ fmtDt(item.last_update) }}</span>
       </template>
 
       <template #cell(actions)="{ item }">

@@ -1,4 +1,5 @@
 import { api, getToken } from '../api.js';
+import { fmtDt } from '../utils.js';
 import BasePage from './BasePage.js';
 import BasePanel from './BasePanel.js';
 import BaseTable from './BaseTable.js';
@@ -47,7 +48,7 @@ export default {
 
     onMounted(() => { if (isAdmin) load(); });
 
-    return { isAdmin, workers, loading, error, columns, totalSlots, freeSlots, busySlots, load };
+    return { isAdmin, workers, loading, error, columns, totalSlots, freeSlots, busySlots, load, fmtDt };
   },
 
   template: `
@@ -101,7 +102,7 @@ export default {
           </template>
 
           <template #cell(last_seen)="{ item }">
-            <i class="far fa-clock mr-1"></i>{{ item.last_seen || '—' }}
+            <i class="far fa-clock mr-1"></i>{{ fmtDt(item.last_seen) }}
           </template>
 
         </base-table>

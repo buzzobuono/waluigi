@@ -1,4 +1,5 @@
 import { api }        from '../api.js';
+import { fmtDt }     from '../utils.js';
 import { nsStore }    from '../store.js';
 import BasePage        from './BasePage.js';
 import BasePanel       from './BasePanel.js';
@@ -200,7 +201,7 @@ export default {
     return {
       items, jobDefs, loading, saving, toggling, pageError, formError,
       editMode, modalTitle, form, columns: COLUMNS,
-      modalRef, confirmRef, hasNs,
+      modalRef, confirmRef, hasNs, fmtDt,
       execPolicies: EXEC_POLICIES, concurrPolicies: CONCURR_POLICIES,
       load, openCreate, openEdit, submitForm, toggleEnabled, deleteItem,
       addParam, removeParam, addAttr, removeAttr,
@@ -272,7 +273,7 @@ export default {
           </template>
 
           <template #cell(last_fire)="{ item }">
-            <span class="small text-muted">{{ item.last_fire ? item.last_fire.substring(0,19) : '—' }}</span>
+            <span class="small text-muted">{{ fmtDt(item.last_fire) }}</span>
           </template>
 
           <template #cell(actions)="{ item }">
