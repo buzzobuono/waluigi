@@ -96,7 +96,6 @@ def _maybe_fire(cj, now, cron_svc, job_svc, job_def_svc, engine) -> None:
 
     if execution_policy == "Ephemeral":
         timestamp  = time.time()
-        params["timestamp"] = timestamp
         suffixed   = {t["id"]: f"{t['id']}@{timestamp}" for t in tasks_list if "id" in t}
         tasks_list = [
             {
