@@ -179,7 +179,7 @@ export default {
 
           <template #cell(started_at)="{ item }">
             <span class="text-muted small">
-              {{ item.started_at ? new Date(item.started_at + 'Z').toLocaleString() : '—' }}
+              {{ item.started_at ? new Date(item.started_at).toLocaleString() : '—' }}
             </span>
           </template>
 

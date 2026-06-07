@@ -14,7 +14,7 @@ _t_tasks = Table("tasks", _meta,
     Column("params",      Text),
     Column("attributes",  Text),
     Column("status",      Text, nullable=False, default="PENDING"),
-    Column("last_update", DateTime),
+    Column("last_update", DateTime(timezone=True)),
     Column("job_id",      Text),
     PrimaryKeyConstraint("namespace", "id"),
 )
@@ -27,9 +27,9 @@ _t_jobs = Table("jobs", _meta,
     Column("metadata",          Text),
     Column("spec",              Text),
     Column("status",            Text, nullable=False, default="PENDING"),
-    Column("started_at",        DateTime),
+    Column("started_at",        DateTime(timezone=True)),
     Column("locked_by",         Text),
-    Column("locked_until",      DateTime),
+    Column("locked_until",      DateTime(timezone=True)),
     PrimaryKeyConstraint("namespace", "job_id"),
 )
 
@@ -38,7 +38,7 @@ _t_workers = Table("workers", _meta,
     Column("status",     Text, nullable=False, default="ALIVE"),
     Column("max_slots",  Integer),
     Column("free_slots", Integer),
-    Column("last_seen",  DateTime),
+    Column("last_seen",  DateTime(timezone=True)),
 )
 
 _t_resources = Table("resources", _meta,
@@ -53,7 +53,7 @@ _t_task_logs = Table("task_logs", _meta,
     Column("id",        Integer, primary_key=True, autoincrement=True),
     Column("namespace", Text, nullable=False),
     Column("task_id",   Text, nullable=False),
-    Column("timestamp", DateTime),
+    Column("timestamp", DateTime(timezone=True)),
     Column("message",   Text),
     Column("boss_id",   Text),
 )
@@ -63,7 +63,7 @@ Index("idx_logs_ns_task", _t_task_logs.c.namespace, _t_task_logs.c.task_id)
 _t_namespaces = Table("namespaces", _meta,
     Column("name",        Text, primary_key=True),
     Column("description", Text, nullable=False, default=""),
-    Column("created_at",  DateTime, nullable=False),
+    Column("created_at",  DateTime(timezone=True), nullable=False),
 )
 
 _t_task_defnitions = Table("task_definitions", _meta,
