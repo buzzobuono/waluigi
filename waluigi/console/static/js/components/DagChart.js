@@ -45,7 +45,10 @@ export default {
       containerRef.value.style.height = `calc(100vh - ${Math.round(top) + 12}px)`;
     }
 
-    Vue.onMounted(() => { Vue.nextTick(fitHeight); window.addEventListener('resize', fitHeight); });
+    Vue.onMounted(() => {
+      Vue.nextTick(() => { fitHeight(); renderDag(); });
+      window.addEventListener('resize', fitHeight);
+    });
     Vue.onUnmounted(() => { window.removeEventListener('resize', fitHeight); });
 
     const renderDag = () => {
@@ -202,7 +205,6 @@ export default {
       svg.call(zoom.transform, d3.zoomIdentity.scale(k));
     };
 
-    Vue.onMounted(renderDag);
     Vue.watch(() => props.tasks, () => Vue.nextTick(renderDag), { deep: true });
 
     return { svgRef, containerRef, menuRef, menu, closeMenu, showInfo };
