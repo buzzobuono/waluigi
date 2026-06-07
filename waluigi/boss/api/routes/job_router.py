@@ -84,7 +84,6 @@ async def submit(
 
     if execution_policy == "Ephemeral":
         timestamp  = time.time()
-        run_params = {**run_params, "timestamp": timestamp}
         suffixed   = {t["id"]: f"{t['id']}@{timestamp}" for t in tasks_list if "id" in t}
         tasks_list = [
             {
