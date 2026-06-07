@@ -1,4 +1,5 @@
 import { api } from '../api.js';
+import { fmtDt } from '../utils.js';
 import BaseModal from './BaseModal.js';
 
 export default {
@@ -30,7 +31,7 @@ export default {
       }
     };
 
-    return { taskId, logs, loading, error, show, logModal };
+    return { taskId, logs, loading, error, show, logModal, fmtDt };
   },
 
   template: `
@@ -49,7 +50,7 @@ export default {
 
       <div v-else style="padding: 8px 0;">
         <div v-for="e in logs" :key="e.id" style=" padding: 1px 15px; border-bottom: 1px solid #0a0a0a; font-family: 'Courier New', Courier, monospace; font-size: 0.82rem; line-height: 1.5;">
-          <span style="color:#555; margin-right:10px;">{{ e.timestamp }}</span>
+          <span style="color:#555; margin-right:10px;">{{ fmtDt(e.timestamp) }}</span>
           <span style="color:#00cc00; margin-right:10px;">[{{ e.worker_id || '?' }}]</span>
           <span style="color:#e0e0e0; white-space:pre-wrap; word-break:break-all;">{{ e.message }}</span>
         </div>
