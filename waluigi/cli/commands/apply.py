@@ -9,9 +9,19 @@ def apply(session: WaluigiSession, descriptor_path: str,
           namespace_override: str | None = None) -> None:
     try:
         with open(descriptor_path) as f:
-            doc = yaml.safe_load(f)
-        kind = doc.get("kind")
+            docs = [d for d in yaml.safe_load_all(f) if d is not None]
+    except Exception as e:
+        print(f"Error: {e}")
+        return
 
+    for doc in docs:
+        _apply_one(session, doc, namespace_override)
+
+
+def _apply_one(session: WaluigiSession, doc: dict,
+               namespace_override: str | None) -> None:
+    kind = doc.get("kind")
+    try:
         if kind == "Namespace":
             r = session.http.post("/boss/namespaces", json=doc, headers=session.headers())
 
@@ -75,4 +85,4 @@ def apply(session: WaluigiSession, descriptor_path: str,
         print(json.dumps(r.json(), indent=2))
 
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error applying {kind}: {e}")
