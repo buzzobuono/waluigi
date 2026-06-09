@@ -7,6 +7,7 @@ class BossDB:
 
     def __init__(self, url: str):
         from waluigi.boss.repositories.task_repo import TaskRepository
+        from waluigi.boss.repositories.task_deps_repo import TaskDepsRepository
         from waluigi.boss.repositories.job_repo import JobRepository
         from waluigi.boss.repositories.worker_repo import WorkerRepository
         from waluigi.boss.repositories.resource_repo import ResourceRepository
@@ -20,6 +21,7 @@ class BossDB:
         _set_engine(engine)
 
         self.tasks            = TaskRepository(engine)
+        self.task_deps        = TaskDepsRepository(engine)
         self.jobs             = JobRepository(engine)
         self.workers          = WorkerRepository(engine)
         self.resources        = ResourceRepository(engine)

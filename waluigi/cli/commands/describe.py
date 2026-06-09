@@ -24,9 +24,8 @@ def _fmt_params(params):
     return str(params)
 
 
-def _tree_rows_job(node, by_id, rows, prefix="", is_last=True):
-    """Collect rows from a nested job spec tree (root at top, deps below)."""
-    tid        = node.get("id", "?")
+def _tree_rows_flat(spec_by_id, by_id, rows, tid, prefix="", is_last=True):
+    """Collect rows from a flat spec list (dep_ids) + live task status."""
     t          = by_id.get(tid, {})
     connector  = ("└─ " if is_last else "├─ ") if prefix else ""
     display_id = _ZWS + prefix + connector + tid
@@ -36,10 +35,10 @@ def _tree_rows_job(node, by_id, rows, prefix="", is_last=True):
         _fmt_params(t.get("params")),
         fmt_dt(t.get("last_update")),
     ])
-    children = node.get("requires", [])
-    for i, child in enumerate(children):
+    dep_ids = (spec_by_id.get(tid) or {}).get("dep_ids") or []
+    for i, dep_id in enumerate(dep_ids):
         child_prefix = prefix + ("   " if is_last else "│  ")
-        _tree_rows_job(child, by_id, rows, child_prefix, i == len(children) - 1)
+        _tree_rows_flat(spec_by_id, by_id, rows, dep_id, child_prefix, i == len(dep_ids) - 1)
 
 
 def _tree_rows_defn(by_id, tid, rows, prefix="", is_last=True):
@@ -89,8 +88,15 @@ def describe_job(session: WaluigiSession, namespace=None, job_id=None, output=No
         if output == "json":
             print(json.dumps({"job": job, "tasks": tasks}, indent=2)); return
 
-        meta = job.get("metadata") or {}
-        spec = job.get("spec")     or {}
+        meta      = job.get("metadata") or {}
+        spec_list = job.get("spec") or []
+        if not isinstance(spec_list, list):
+            spec_list = []
+        spec_by_id = {t["id"]: t for t in spec_list if "id" in t}
+        all_deps   = {d for t in spec_list for d in (t.get("dep_ids") or [])}
+        terminals  = [t["id"] for t in spec_list if t["id"] not in all_deps]
+        terminal   = terminals[0] if terminals else (spec_list[0]["id"] if spec_list else "-")
+
         print(f"\nJob: {job_id}  (namespace: {ns})")
         summary = [
             ["execution_policy",   job.get("execution_policy",  "Ephemeral")],
@@ -98,7 +104,7 @@ def describe_job(session: WaluigiSession, namespace=None, job_id=None, output=No
             ["status",             color(job.get("status", ""))],
             ["started_at",         fmt_dt(job.get("started_at"))],
             ["locked_by",          job.get("locked_by")  or "-"],
-            ["root_task",          spec.get("id", "-")],
+            ["root_task",          terminal],
         ]
         for k, v in meta.items():
             if k not in ("namespace", "timestamp", "executionPolicy"):
@@ -108,7 +114,7 @@ def describe_job(session: WaluigiSession, namespace=None, job_id=None, output=No
         if tasks:
             by_id = {t.get("id"): t for t in tasks}
             rows  = []
-            _tree_rows_job(spec, by_id, rows)
+            _tree_rows_flat(spec_by_id, by_id, rows, terminal)
             print(f"\nTasks ({len(tasks)}):")
             print(tabulate(rows, headers=["TASK ID", "STATUS", "PARAMETERS", "UPDATED"],
                            tablefmt="plain"))
@@ -134,7 +140,7 @@ def describe_task(session: WaluigiSession, namespace=None, task_id=None, output=
             ["namespace",   ns],
             ["status",      color(task.get("status", ""))],
             ["job_id",      task.get("job_id",     "-")],
-            ["parent_id",   task.get("parent_id")  or "-"],
+            ["dep_ids",     ", ".join(task.get("dep_ids") or []) or "-"],
             ["params",      task.get("params",     "-")],
             ["attributes",  task.get("attributes") or "-"],
             ["last_update", fmt_dt(task.get("last_update"))],

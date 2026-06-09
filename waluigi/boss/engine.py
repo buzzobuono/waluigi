@@ -1,12 +1,13 @@
 from __future__ import annotations
-import json
 import logging
 import httpx
 
 from waluigi.boss.repositories.task_repo import TaskRepository
+from waluigi.boss.repositories.task_deps_repo import TaskDepsRepository
 from waluigi.boss.repositories.worker_repo import WorkerRepository
 from waluigi.boss.repositories.resource_repo import ResourceRepository
 from waluigi.boss.repositories.task_definition_repo import TaskDefinitionRepository
+from waluigi.commons.dag import DAGSpec
 
 logger = logging.getLogger("waluigi")
 
@@ -15,74 +16,99 @@ _DEFAULT_RESOURCES = {}
 
 class BossEngine:
 
-    def __init__(self, task_repo: TaskRepository, worker_repo: WorkerRepository,
+    def __init__(self, task_repo: TaskRepository,
+                 worker_repo: WorkerRepository,
                  resource_repo: ResourceRepository,
-                 task_definition_repo: TaskDefinitionRepository | None = None):
+                 task_definition_repo: TaskDefinitionRepository | None = None,
+                 task_deps_repo: TaskDepsRepository | None = None):
         self.tasks            = task_repo
+        self.task_deps        = task_deps_repo
         self.workers          = worker_repo
         self.resources        = resource_repo
         self.task_definitions = task_definition_repo
 
-    # ── Registration (called at submit time) ──────────────────────────────────
+    # ── Registration ─────────────────────────────────────────────────────────
 
-    def register_job(self, namespace: str, job_id: str, task, parent_id: str | None) -> None:
-        self.tasks.register(
-            namespace=namespace,
-            task_id=task.id,
-            parent_id=parent_id,
-            params=task.hash(task.params),
-            attributes=task.hash(task.attributes),
-            job_id=job_id,
-        )
-        for dep in task.requires():
-            self.register_job(namespace, job_id, dep, task.id)
+    def register_job(self, namespace: str, job_id: str, spec: DAGSpec) -> None:
+        """Register all tasks from a flat DAGSpec. Each task is registered once."""
+        for task in spec.all_tasks():
+            self.tasks.register(
+                namespace=namespace,
+                task_id=task.id,
+                parent_id=None,
+                params=task.hash(task.params),
+                attributes=task.hash(task.attributes),
+                job_id=job_id,
+            )
+            if self.task_deps:
+                for dep_id in task.dep_ids:
+                    self.task_deps.add(namespace, task.id, dep_id)
 
     def register_worker(self, url: str, max_slots: int, free_slots: int) -> None:
         self.workers.register(url, max_slots, free_slots)
 
     # ── Planner ───────────────────────────────────────────────────────────────
 
-    def build(self, namespace: str, job_metadata: dict, task, parent_id) -> bool | None | str:
+    def build(self, namespace: str, job_metadata: dict,
+              spec: DAGSpec, task_id: str | None = None,
+              _memo: dict | None = None) -> bool | None | str:
         """
-        Recursively plan and dispatch a task and its dependencies.
+        Recursively plan and dispatch tasks starting from the terminal task.
+
+        Uses a memo dict to deduplicate shared dependencies (diamond patterns):
+        each task is evaluated at most once per planning cycle.
 
         Returns:
-          True        — task (and all deps) are SUCCESS
-          False       — task is blocked; retry on next tick
-          None        — task or dep FAILED; propagate failure upward
-          "PAUSE"     — all workers saturated; stop this planning cycle
+          True    — task (and all deps) are SUCCESS
+          False   — task is blocked; retry on next tick
+          None    — task or dep FAILED
+          "PAUSE" — all workers saturated
         """
+        if task_id is None:
+            task_id = spec.terminal().id
+        if _memo is None:
+            _memo = {}
+        if task_id in _memo:
+            return _memo[task_id]
+
+        task = spec.task(task_id)
         params_hash = task.hash(task.params)
-        status = self.tasks.get_status(namespace, task.id, params_hash)
+        status = self.tasks.get_status(namespace, task_id, params_hash)
 
         if status == "FAILED":
-            logger.info(f"🛑 {task.id} failed — propagating.")
+            logger.info(f"🛑 {task_id} failed — propagating.")
+            _memo[task_id] = None
             return None
         if status == "RUNNING":
+            _memo[task_id] = False
             return False
         if status == "SUCCESS":
+            _memo[task_id] = True
             return True
 
         all_deps_ready = True
-        for dep in task.requires():
-            res = self.build(namespace=namespace, job_metadata=job_metadata, task=dep, parent_id=task.id)
+        for dep in spec.deps_of(task_id):
+            res = self.build(namespace, job_metadata, spec, dep.id, _memo)
             if res == "PAUSE":
                 return "PAUSE"
             if res is None:
+                _memo[task_id] = None
                 return None
             if res is False:
                 all_deps_ready = False
 
         if not all_deps_ready:
             self._set_status(namespace, task, "PENDING")
+            _memo[task_id] = False
             return False
 
-        # Re-check: another boss may have moved the task forward in the meantime
-        status = self.tasks.get_status(namespace, task.id, params_hash)
+        # Re-check: another boss may have moved the task forward
+        status = self.tasks.get_status(namespace, task_id, params_hash)
         if status in ("RUNNING", "READY"):
+            _memo[task_id] = False
             return False
 
-        # Resolve taskRef against DB-defined TaskDefinitions if not a built-in type
+        # Resolve taskRef against DB-defined TaskDefinitions if needed
         if task.type and self.task_definitions is not None:
             from waluigi.tasks import REGISTRY
             if task.type not in REGISTRY:
@@ -90,24 +116,24 @@ class BossEngine:
                 if defn is None:
                     logger.error(f"❌ Unknown task type '{task.type}' — no built-in or TaskDefinition found")
                     self._set_status(namespace, task, "FAILED")
+                    _memo[task_id] = None
                     return None
-                spec = defn["spec"]
-                task.command   = spec.get("command", "")
-                task.script    = spec.get("script")
-                if "resources" in spec:
-                    task.resources = spec["resources"]
-                task.type = None  # resolved: let worker use command/script directly
+                spec_def = defn["spec"]
+                task.command = spec_def.get("command", "")
+                task.script  = spec_def.get("script")
+                if "resources" in spec_def:
+                    task.resources = spec_def["resources"]
+                task.type = None
 
         task_resources = getattr(task, "resources", _DEFAULT_RESOURCES)
 
         try:
             if not self.resources.acquire(namespace, task_resources):
-                logger.info(f"⏳ {task.id} — not enough resources, will retry")
+                logger.info(f"⏳ {task_id} — not enough resources, will retry")
+                _memo[task_id] = False
                 return False
 
-            # Mark as READY before dispatching
             self._set_status(namespace, task, "READY")
-
             dispatch_result = self._dispatch(namespace, job_metadata, task)
 
             if dispatch_result == "WORKERS_SATURATED":
@@ -118,20 +144,23 @@ class BossEngine:
             if dispatch_result == "FATAL_ERROR":
                 self.resources.release(namespace, task_resources)
                 self._set_status(namespace, task, "FAILED")
+                _memo[task_id] = None
                 return None
 
             if dispatch_result == "RETRY":
                 self.resources.release(namespace, task_resources)
                 self._set_status(namespace, task, "PENDING")
+                _memo[task_id] = False
                 return False
 
-            logger.info(f"🚀 {task.id} dispatched")
+            logger.info(f"🚀 {task_id} dispatched")
 
         except Exception as e:
             self.resources.release(namespace, task_resources)
-            logger.error(f"❌ {task.id} error: {e}")
+            logger.error(f"❌ {task_id} error: {e}")
             self._set_status(namespace, task, "PENDING")
 
+        _memo[task_id] = False
         return False
 
     # ── Internals ─────────────────────────────────────────────────────────────

@@ -1,16 +1,19 @@
 from __future__ import annotations
 from waluigi.boss.repositories.namespace_repo import NamespaceRepository
 from waluigi.boss.repositories.task_repo import TaskRepository
+from waluigi.boss.repositories.task_deps_repo import TaskDepsRepository
 from waluigi.boss.repositories.job_repo import JobRepository
 
 
 class NamespaceService:
 
     def __init__(self, ns_repo: NamespaceRepository,
-                 task_repo: TaskRepository, job_repo: JobRepository):
+                 task_repo: TaskRepository, job_repo: JobRepository,
+                 task_deps_repo: TaskDepsRepository | None = None):
         self.namespaces = ns_repo
         self.tasks      = task_repo
         self.jobs       = job_repo
+        self.task_deps  = task_deps_repo
 
     def list_namespaces(self) -> list[dict]:
         rows = self.namespaces.list()
@@ -38,6 +41,8 @@ class NamespaceService:
         self.jobs.reset_namespace(namespace)
 
     def delete_namespace(self, namespace: str) -> None:
+        if self.task_deps:
+            self.task_deps.delete_by_namespace(namespace)
         self.tasks.delete_namespace(namespace)
         self.jobs.delete_namespace(namespace)
         self.namespaces.delete(namespace)

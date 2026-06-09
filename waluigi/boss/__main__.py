@@ -59,7 +59,7 @@ def main():
     init_db(args.db_url)
     db = get_db()
 
-    engine      = BossEngine(db.tasks, db.workers, db.resources, db.task_definitions)
+    engine      = BossEngine(db.tasks, db.workers, db.resources, db.task_definitions, db.task_deps)
     job_svc     = JobService(db.jobs)
     cron_svc    = CronJobService(db.cron_jobs)
     job_def_svc = JobDefinitionService(db.job_definitions)

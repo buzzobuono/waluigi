@@ -35,7 +35,7 @@ class TaskRepository(BaseRepository):
                 "job_id":      job_id,
             },
             conflict_cols=["namespace", "id"],
-            update_cols=["parent_id", "job_id", "last_update"],
+            update_cols=["job_id", "last_update"],
         )
         with self._conn() as conn:
             conn.execute(stmt)

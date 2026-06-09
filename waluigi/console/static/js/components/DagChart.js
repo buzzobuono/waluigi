@@ -3,7 +3,6 @@ export default {
   emits: ['show-logs', 'reset', 'delete', 'show-info'],
   props: {
     tasks: { type: Array, required: true },
-    spec:  { type: Object, default: null },
     colors: {
       type: Object,
       default: () => ({
@@ -72,43 +71,34 @@ export default {
       const nodeMap = {};
       props.tasks.forEach(t => { nodeMap[t.id] = t; });
 
-      // Build level map and edge list from spec (full multi-parent graph)
-      // or fall back to parent_id when spec is not available.
+      // Build level map and edge list from dep_ids (proper DAG, multi-parent aware)
       const levelMap   = {};
       const visitOrder = {};
       const edgeList   = [];  // [{task: dependentId, dep: dependencyId}]
       let seq = 0;
 
-      if (props.spec) {
-        const seenEdges = new Set();
-        const walkSpec  = (node, depth) => {
-          const id  = node.id;
-          levelMap[id] = Math.max(levelMap[id] ?? 0, depth);
-          if (visitOrder[id] === undefined) visitOrder[id] = seq++;
-          for (const dep of (node.requires || [])) {
-            const key = `${id}→${dep.id}`;
-            if (!seenEdges.has(key)) { seenEdges.add(key); edgeList.push({ task: id, dep: dep.id }); }
-            walkSpec(dep, depth + 1);
-          }
-        };
-        walkSpec(props.spec, 0);
-      } else {
-        const childrenOf = {};
-        props.tasks.forEach(t => {
-          if (t.parent_id && nodeMap[t.parent_id]) {
-            if (!childrenOf[t.parent_id]) childrenOf[t.parent_id] = [];
-            childrenOf[t.parent_id].push(t.id);
-            edgeList.push({ task: t.parent_id, dep: t.id });
-          }
+      // Build childrenOf map from dep_ids (who depends on me)
+      const childrenOf = {};
+      props.tasks.forEach(t => {
+        (t.dep_ids || []).filter(d => nodeMap[d]).forEach(depId => {
+          edgeList.push({ task: t.id, dep: depId });
+          if (!childrenOf[depId]) childrenOf[depId] = [];
+          childrenOf[depId].push(t.id);
         });
-        const roots = props.tasks.filter(t => !t.parent_id || !nodeMap[t.parent_id]);
-        const traverse = (id, l) => {
-          if (levelMap[id] !== undefined && levelMap[id] >= l) return;
-          levelMap[id] = l; visitOrder[id] = seq++;
-          (childrenOf[id] || []).sort().forEach(cid => traverse(cid, l + 1));
-        };
-        roots.forEach(r => traverse(r.id, 0));
-      }
+      });
+
+      // Level = max depth from any dependent; roots are tasks nobody depends on
+      const roots = props.tasks.filter(t =>
+        !props.tasks.some(other => (other.dep_ids || []).includes(t.id))
+      );
+      const traverse = (id, l) => {
+        if (levelMap[id] !== undefined && levelMap[id] >= l) return;
+        levelMap[id] = l;
+        if (visitOrder[id] === undefined) visitOrder[id] = seq++;
+        (t => (t.dep_ids || []).filter(d => nodeMap[d]))(nodeMap[id])
+          .forEach(depId => traverse(depId, l + 1));
+      };
+      roots.forEach(r => traverse(r.id, 0));
 
       const byLevel = {};
       props.tasks.forEach(t => {

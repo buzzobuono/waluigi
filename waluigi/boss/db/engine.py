@@ -82,6 +82,13 @@ _t_job_definitions = Table("job_definitions", _meta,
     PrimaryKeyConstraint("namespace", "id"),
 )
 
+_t_task_deps = Table("task_deps", _meta,
+    Column("namespace", Text, nullable=False),
+    Column("task_id",   Text, nullable=False),
+    Column("dep_id",    Text, nullable=False),
+    PrimaryKeyConstraint("namespace", "task_id", "dep_id"),
+)
+
 _t_cron_jobs = Table("cron_jobs", _meta,
     Column("namespace",  Text,    nullable=False),
     Column("id",         Text,    nullable=False),

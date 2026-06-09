@@ -5,7 +5,7 @@ from waluigi.commons.responses import ok, ko
 from waluigi.boss.config.dependencies import (
     job_service, boss_engine, namespaces_repository, job_definition_service,
 )
-from waluigi.commons.dag import DAGTask, parse_definition
+from waluigi.commons.dag import DAGSpec, parse_definition
 
 
 router = APIRouter(
@@ -117,19 +117,19 @@ async def submit(
     }
 
     try:
-        parsed_spec = parse_definition(resolved)
+        flat_tasks = parse_definition(resolved)
     except ValueError as e:
         return ko(str(e), status=400)
 
     try:
-        task = DAGTask(parsed_spec)
+        spec = DAGSpec(flat_tasks)
         job_svc.create(
             namespace=namespace, job_id=job_id,
             execution_policy=execution_policy, concurrency_policy=concurrency,
-            metadata=metadata, spec=parsed_spec,
+            metadata=metadata, spec=flat_tasks,
         )
-        engine.register_job(namespace, job_id, task, None)
-        return ok({"job_id": job_id, "task_id": task.id}, status=202)
+        engine.register_job(namespace, job_id, spec)
+        return ok({"job_id": job_id, "task_id": spec.terminal().id}, status=202)
     except Exception as e:
         return ko(str(e), status=500)
 

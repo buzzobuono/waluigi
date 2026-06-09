@@ -2,7 +2,7 @@ from __future__ import annotations
 import time
 import logging
 
-from waluigi.commons.dag import DAGTask
+from waluigi.commons.dag import DAGSpec
 from waluigi.boss.engine import BossEngine
 from waluigi.boss.services.job_service import JobService
 
@@ -26,8 +26,8 @@ def planner_loop(boss_id: str, tick: int, job_service: JobService, engine: BossE
 
                 logger.info(f"🧠 Claimed job: {namespace}/{job_id}")
                 try:
-                    task = DAGTask(job["spec"])
-                    result = engine.build(namespace=namespace, job_metadata=job["metadata"], task=task, parent_id=None)
+                    spec   = DAGSpec(job["spec"])
+                    result = engine.build(namespace=namespace, job_metadata=job["metadata"], spec=spec)
 
                     if result is True:
                         logger.info(f"🏁 Job completed: {namespace}/{job_id}")

@@ -41,14 +41,14 @@ def logs_repository(db=Depends(get_db)):
 
 def task_service(db=Depends(get_db)):
     from waluigi.boss.services.task_service import TaskService
-    return TaskService(db.tasks)
+    return TaskService(db.tasks, db.task_deps)
 
 def namespaces_repository(db=Depends(get_db)):
     return db.namespaces
 
 def namespace_service(db=Depends(get_db)):
     from waluigi.boss.services.namespace_service import NamespaceService
-    return NamespaceService(db.namespaces, db.tasks, db.jobs)
+    return NamespaceService(db.namespaces, db.tasks, db.jobs, db.task_deps)
 
 
 def job_service(db=Depends(get_db)):
@@ -85,4 +85,4 @@ def cron_job_service(db=Depends(get_db)):
 
 def boss_engine(db=Depends(get_db)):
     from waluigi.boss.engine import BossEngine
-    return BossEngine(db.tasks, db.workers, db.resources, db.task_definitions)
+    return BossEngine(db.tasks, db.workers, db.resources, db.task_definitions, db.task_deps)

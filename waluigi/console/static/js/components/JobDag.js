@@ -108,7 +108,6 @@ export default {
       <dag-chart
         v-if="tasks.length"
         :tasks="tasks"
-        :spec="job && job.spec"
         :colors="STATUS_COLOR"
         @show-info="openInfo"
         @show-logs="openLogs"
