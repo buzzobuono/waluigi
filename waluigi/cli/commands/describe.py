@@ -25,7 +25,7 @@ def _fmt_params(params):
 
 
 def _tree_rows_flat(spec_by_id, by_id, rows, tid, prefix="", is_last=True):
-    """Collect rows from a flat spec list (dep_ids) + live task status."""
+    """Collect rows from a flat spec list (requires) + live task status."""
     t          = by_id.get(tid, {})
     connector  = ("└─ " if is_last else "├─ ") if prefix else ""
     display_id = _ZWS + prefix + connector + tid
@@ -35,10 +35,10 @@ def _tree_rows_flat(spec_by_id, by_id, rows, tid, prefix="", is_last=True):
         _fmt_params(t.get("params")),
         fmt_dt(t.get("last_update")),
     ])
-    dep_ids = (spec_by_id.get(tid) or {}).get("dep_ids") or []
-    for i, dep_id in enumerate(dep_ids):
+    requires = (spec_by_id.get(tid) or {}).get("requires") or []
+    for i, dep_id in enumerate(requires):
         child_prefix = prefix + ("   " if is_last else "│  ")
-        _tree_rows_flat(spec_by_id, by_id, rows, dep_id, child_prefix, i == len(dep_ids) - 1)
+        _tree_rows_flat(spec_by_id, by_id, rows, dep_id, child_prefix, i == len(requires) - 1)
 
 
 def _tree_rows_defn(by_id, tid, rows, prefix="", is_last=True):
@@ -93,7 +93,7 @@ def describe_job(session: WaluigiSession, namespace=None, job_id=None, output=No
         if not isinstance(spec_list, list):
             spec_list = []
         spec_by_id = {t["id"]: t for t in spec_list if "id" in t}
-        all_deps   = {d for t in spec_list for d in (t.get("dep_ids") or [])}
+        all_deps   = {d for t in spec_list for d in (t.get("requires") or [])}
         terminals  = [t["id"] for t in spec_list if t["id"] not in all_deps]
         terminal   = terminals[0] if terminals else (spec_list[0]["id"] if spec_list else "-")
 
@@ -140,7 +140,7 @@ def describe_task(session: WaluigiSession, namespace=None, task_id=None, output=
             ["namespace",   ns],
             ["status",      color(task.get("status", ""))],
             ["job_id",      task.get("job_id",     "-")],
-            ["dep_ids",     ", ".join(task.get("dep_ids") or []) or "-"],
+            ["requires",     ", ".join(task.get("requires") or []) or "-"],
             ["params",      task.get("params",     "-")],
             ["attributes",  task.get("attributes") or "-"],
             ["last_update", fmt_dt(task.get("last_update"))],

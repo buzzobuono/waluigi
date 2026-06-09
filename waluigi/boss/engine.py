@@ -41,8 +41,8 @@ class BossEngine:
                 job_id=job_id,
             )
             if self.task_deps:
-                for dep_id in task.dep_ids:
-                    self.task_deps.add(namespace, task.id, dep_id)
+                for req_id in task.requires:
+                    self.task_deps.add(namespace, task.id, req_id)
 
     def register_worker(self, url: str, max_slots: int, free_slots: int) -> None:
         self.workers.register(url, max_slots, free_slots)

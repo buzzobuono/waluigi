@@ -71,16 +71,16 @@ export default {
       const nodeMap = {};
       props.tasks.forEach(t => { nodeMap[t.id] = t; });
 
-      // Build level map and edge list from dep_ids (proper DAG, multi-parent aware)
+      // Build level map and edge list from requires (proper DAG, multi-parent aware)
       const levelMap   = {};
       const visitOrder = {};
       const edgeList   = [];  // [{task: dependentId, dep: dependencyId}]
       let seq = 0;
 
-      // Build childrenOf map from dep_ids (who depends on me)
+      // Build childrenOf map from requires (who depends on me)
       const childrenOf = {};
       props.tasks.forEach(t => {
-        (t.dep_ids || []).filter(d => nodeMap[d]).forEach(depId => {
+        (t.requires || []).filter(d => nodeMap[d]).forEach(depId => {
           edgeList.push({ task: t.id, dep: depId });
           if (!childrenOf[depId]) childrenOf[depId] = [];
           childrenOf[depId].push(t.id);
@@ -89,13 +89,13 @@ export default {
 
       // Level = max depth from any dependent; roots are tasks nobody depends on
       const roots = props.tasks.filter(t =>
-        !props.tasks.some(other => (other.dep_ids || []).includes(t.id))
+        !props.tasks.some(other => (other.requires || []).includes(t.id))
       );
       const traverse = (id, l) => {
         if (levelMap[id] !== undefined && levelMap[id] >= l) return;
         levelMap[id] = l;
         if (visitOrder[id] === undefined) visitOrder[id] = seq++;
-        (t => (t.dep_ids || []).filter(d => nodeMap[d]))(nodeMap[id])
+        (t => (t.requires || []).filter(d => nodeMap[d]))(nodeMap[id])
           .forEach(depId => traverse(depId, l + 1));
       };
       roots.forEach(r => traverse(r.id, 0));
