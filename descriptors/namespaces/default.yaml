@@ -1,4 +1,0 @@
-kind: Namespace
-metadata:
-  name: default
-  description: "Default namespace"

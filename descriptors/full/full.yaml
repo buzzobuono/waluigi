@@ -1,0 +1,111 @@
+kind: Namespace
+metadata:
+  name: test
+  description: "Test namespace"
+---
+kind: NamespaceResources
+metadata:
+  namespace: test
+spec:
+  coin: 2.0
+  brick: 2.0
+---
+kind: TaskDefinition
+metadata:
+    name: "print-config-task-definition"
+    namespace: test
+spec:
+    script: |
+        from waluigi.sdk.context import context
+        print(context.config.string)
+---
+kind: TaskDefinition
+metadata:
+    name: "print-param-task-definition"
+    namespace: test
+spec:
+    script: |
+        import os
+        print(os.environ.get("WALUIGI_PARAM_PARAM1"))
+---
+kind: TaskDefinition
+metadata:
+    name: "sleep-task-definition"
+    namespace: test
+spec:
+    script: |
+        import time
+        from waluigi.sdk.context import context
+        time.sleep(context.config.sleep)
+---
+kind: JobDefinition
+metadata:
+    name: "test-job-definition"
+    namespace: test
+    workdir: "work"
+spec:
+    tasks:
+        - id: "env"
+          taskSpec:
+              script: |
+                 from waluigi.sdk.context import context
+                 print(context.config.key1)
+                 print(context.config.obj1.key3)
+                 print(context.config.list[1])
+                 
+          config:
+              key1: 2
+              obj1: 
+                  key2: "valueString"
+                  key3: 1234
+              list: 
+                  - aaa
+                  - bbb
+          resources:
+              coin: 1
+        - id: "sleep-a-bit"
+          taskRef:
+              name: "sleep-task-definition"
+          config:
+              sleep: 2
+          resources:
+              coin: 1
+          requires:
+              - "env"
+        - id: "sleep-more"
+          taskRef:
+              name: "sleep-task-definition"
+          config:
+              sleep: 10
+          resources:
+              brick: 2
+        - id: "print-config"
+          taskRef:
+              name: "print-config-task-definition"
+          requires:
+              - "sleep-a-bit"
+              - "sleep-more"
+          config:
+              string: "Hello word!"
+          resources:
+              coin: 1
+        - id: "print-param"
+          taskRef:
+              name: "print-param-task-definition"
+          requires:
+              - "print-config"
+          resources:
+              brick: 2
+
+---
+kind: Job
+metadata:
+    name: "test-job"
+    namespace: test
+spec:
+    executionPolicy: Stateful
+    concurrencyPolicy: Replace
+    params:
+        param1: "Test me!"
+    jobRef:
+        name: "test-job-definition"

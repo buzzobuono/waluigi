@@ -1,0 +1,4 @@
+kind: Namespace
+metadata:
+  name: analytics
+  description: "Analytics namespace"
