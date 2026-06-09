@@ -63,6 +63,8 @@ class BaseRepository:
         else:
             from sqlalchemy.dialects.sqlite import insert as _insert
         stmt = _insert(table).values(**values)
+        if not update_cols:
+            return stmt.on_conflict_do_nothing(index_elements=conflict_cols)
         return stmt.on_conflict_do_update(
             index_elements=conflict_cols,
             set_={k: getattr(stmt.excluded, k) for k in update_cols},
