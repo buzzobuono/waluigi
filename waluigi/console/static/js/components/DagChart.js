@@ -3,6 +3,7 @@ export default {
   emits: ['show-logs', 'reset', 'delete', 'show-info'],
   props: {
     tasks: { type: Array, required: true },
+    spec:  { type: Object, default: null },
     colors: {
       type: Object,
       default: () => ({
@@ -68,32 +69,50 @@ export default {
       svg.selectAll('*').remove();
       const g = svg.append('g');
 
-      const nodeMap    = {};
-      const childrenOf = {};
-      props.tasks.forEach(t => {
-        nodeMap[t.id] = t;
-        if (t.parent_id) {
-          if (!childrenOf[t.parent_id]) childrenOf[t.parent_id] = [];
-          childrenOf[t.parent_id].push(t.id);
-        }
-      });
+      const nodeMap = {};
+      props.tasks.forEach(t => { nodeMap[t.id] = t; });
 
-      const level = {};
+      // Build level map and edge list from spec (full multi-parent graph)
+      // or fall back to parent_id when spec is not available.
+      const levelMap   = {};
       const visitOrder = {};
+      const edgeList   = [];  // [{task: dependentId, dep: dependencyId}]
       let seq = 0;
-      const roots = props.tasks.filter(t => !t.parent_id || !nodeMap[t.parent_id]);
 
-      const traverse = (id, l) => {
-        if (level[id] !== undefined && level[id] >= l) return;
-        level[id]      = l;
-        visitOrder[id] = seq++;
-        (childrenOf[id] || []).sort().forEach(cid => traverse(cid, l + 1));
-      };
-      roots.forEach(r => traverse(r.id, 0));
+      if (props.spec) {
+        const seenEdges = new Set();
+        const walkSpec  = (node, depth) => {
+          const id  = node.id;
+          levelMap[id] = Math.max(levelMap[id] ?? 0, depth);
+          if (visitOrder[id] === undefined) visitOrder[id] = seq++;
+          for (const dep of (node.requires || [])) {
+            const key = `${id}→${dep.id}`;
+            if (!seenEdges.has(key)) { seenEdges.add(key); edgeList.push({ task: id, dep: dep.id }); }
+            walkSpec(dep, depth + 1);
+          }
+        };
+        walkSpec(props.spec, 0);
+      } else {
+        const childrenOf = {};
+        props.tasks.forEach(t => {
+          if (t.parent_id && nodeMap[t.parent_id]) {
+            if (!childrenOf[t.parent_id]) childrenOf[t.parent_id] = [];
+            childrenOf[t.parent_id].push(t.id);
+            edgeList.push({ task: t.parent_id, dep: t.id });
+          }
+        });
+        const roots = props.tasks.filter(t => !t.parent_id || !nodeMap[t.parent_id]);
+        const traverse = (id, l) => {
+          if (levelMap[id] !== undefined && levelMap[id] >= l) return;
+          levelMap[id] = l; visitOrder[id] = seq++;
+          (childrenOf[id] || []).sort().forEach(cid => traverse(cid, l + 1));
+        };
+        roots.forEach(r => traverse(r.id, 0));
+      }
 
       const byLevel = {};
       props.tasks.forEach(t => {
-        const l = level[t.id] ?? 0;
+        const l = levelMap[t.id] ?? 0;
         if (!byLevel[l]) byLevel[l] = [];
         byLevel[l].push(t);
       });
@@ -126,11 +145,10 @@ export default {
         .attr('orient', 'auto')
         .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', '#007bff');
 
-      const links = props.tasks.filter(t => t.parent_id && nodeMap[t.parent_id]);
-      g.append('g').selectAll('path').data(links).enter().append('path')
-        .attr('d', d => {
-          const cp = pos[d.parent_id];
-          const cc = pos[d.id];
+      g.append('g').selectAll('path').data(edgeList.filter(e => pos[e.task] && pos[e.dep])).enter().append('path')
+        .attr('d', e => {
+          const cc = pos[e.task];      // dependent (right column)
+          const cp = pos[e.dep];       // dependency (left column)
           const x1 = cc.x + nodeW / 2;
           const y1 = cc.y;
           const x2 = cp.x - nodeW / 2;
