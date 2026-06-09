@@ -79,6 +79,8 @@ spec:
               sleep: 10
           resources:
               brick: 2
+          requires:
+              - "env"
         - id: "print-config"
           taskRef:
               name: "print-config-task-definition"
