@@ -12,10 +12,10 @@ class TaskService:
     def list_tasks(self, *, namespace: str, job_id: str | None = None) -> list[dict]:
         tasks = self.repo.list_tasks(namespace=namespace, job_id=job_id)
 
-        # Enrich each task with its requires from the task_deps table
-        all_deps = self.deps_repo.list_by_namespace(namespace)
+        task_ids = [t["id"] for t in tasks]
+        deps = self.deps_repo.list_by_tasks(namespace, task_ids)
         deps_by_task: dict[str, list[str]] = {}
-        for row in all_deps:
+        for row in deps:
             deps_by_task.setdefault(row["task_id"], []).append(row["dep_id"])
 
         for t in tasks:

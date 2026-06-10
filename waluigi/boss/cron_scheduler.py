@@ -3,7 +3,7 @@ import time
 import logging
 from datetime import datetime, timezone
 
-from waluigi.commons.dag import DAGTask, parse_definition
+from waluigi.commons.dag import DAGSpec, parse_definition
 
 logger = logging.getLogger("waluigi")
 
@@ -134,11 +134,11 @@ def _maybe_fire(cj, now, cron_svc, job_svc, job_def_svc, engine) -> None:
         logger.error(f"CronJob {cron_id}: parse error: {e}")
         return
 
-    dag_task = DAGTask(parsed_spec)
+    spec = DAGSpec(parsed_spec)
     job_svc.create(
         namespace=namespace, job_id=job_id,
         execution_policy=execution_policy, concurrency_policy=concurrency,
         metadata=metadata, spec=parsed_spec,
     )
-    engine.register_job(namespace, job_id, dag_task, None)
+    engine.register_job(namespace, job_id, spec)
     logger.info(f"🕐 CronJob {cron_id}: fired {namespace}/{job_id}")

@@ -25,6 +25,19 @@ class TaskDepsRepository(BaseRepository):
                 ).fetchall()
             )
 
+    def list_by_tasks(self, namespace: str, task_ids: list[str]) -> list[dict]:
+        if not task_ids:
+            return []
+        with self._conn() as conn:
+            return self._rows(
+                conn.execute(
+                    select(_t_task_deps).where(
+                        (_t_task_deps.c.namespace == namespace) &
+                        (_t_task_deps.c.task_id.in_(task_ids))
+                    )
+                ).fetchall()
+            )
+
     def delete_by_task(self, namespace: str, task_id: str) -> None:
         with self._conn() as conn:
             conn.execute(
