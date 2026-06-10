@@ -79,12 +79,7 @@ def reset(session: WaluigiSession, scope: str, target: str, namespace=None) -> N
 
 def delete(session: WaluigiSession, scope: str, target: str, namespace=None) -> None:
     try:
-        if scope == "task":
-            ns = session.resolve_namespace(namespace)
-            if not ns: return
-            r = session.http.delete(f"/boss/namespaces/{ns}/tasks/{target}",
-                                    headers=session.headers())
-        elif scope == "job":
+        if scope == "job":
             ns = session.resolve_namespace(namespace)
             if not ns: return
             r = session.http.delete(f"/boss/namespaces/{ns}/jobs/{target}",

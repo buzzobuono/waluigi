@@ -82,14 +82,6 @@ export default {
       });
     }
 
-    async function deleteTask(id) {
-      confirmRef.value.ask(`Delete task "${id}"?`, async (ok) => {
-        if (!ok) return;
-        try { await api.deleteTask(nsStore.selected, id); await load(); }
-        catch (e) { error.value = e.message; }
-      });
-    }
-
     async function resetNs() {
       confirmRef.value.ask(`Reset all tasks in "${nsStore.selected}"?`, async (ok) => {
         if (!ok) return;
@@ -115,7 +107,7 @@ export default {
       tasks, pagedTasks, loading, error, columns, TASK_STATUS, TASK_STATUSES, nsStore,
       counts, currentPage, totalPages, rangeStart, rangeEnd,
       logModalRef, confirmRef, fmtDt,
-      changePage, load, openLogs, resetTask, deleteTask, resetNs, deleteNs,
+      changePage, load, openLogs, resetTask, resetNs, deleteNs,
     };
   },
 
@@ -199,8 +191,6 @@ export default {
                            title="View Logs" @click="openLogs(item.id)" />
               <base-button icon="fas fa-undo" color="outline-warning"
                            title="Reset Task" @click="resetTask(item.id)" />
-              <base-button icon="fas fa-trash" color="outline-danger"
-                           title="Delete Task" @click="deleteTask(item.id)" />
             </base-button-group>
           </template>
 

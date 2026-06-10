@@ -49,14 +49,6 @@ export default {
       });
     };
 
-    const deleteTask = (id) => {
-      confirmRef.value.ask(`Delete task "${id}"?`, async (ok) => {
-        if (!ok) return;
-        await api.deleteTask(namespace.value, id);
-        await load();
-      });
-    };
-
     const openLogs  = (id)   => logModalRef.value?.show(namespace.value, id);
     const openInfo  = (task) => infoModalRef.value?.show(task);
 
@@ -70,7 +62,7 @@ export default {
     return {
       namespace, jobId, job, tasks, loading,
       logModalRef, infoModalRef, confirmRef, STATUS_COLOR,
-      resetTask, deleteTask, openLogs, openInfo, load
+      resetTask, openLogs, openInfo, load
     };
   },
 
@@ -112,7 +104,6 @@ export default {
         @show-info="openInfo"
         @show-logs="openLogs"
         @reset="resetTask"
-        @delete="deleteTask"
       />
 
       <div v-else-if="!loading" class="text-center py-5 text-muted">

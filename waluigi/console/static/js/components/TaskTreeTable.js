@@ -7,7 +7,7 @@ export default {
   name: 'TaskTreeTable',
   components: { BaseTable, BaseButton, BaseButtonGroup },
   props: ['tasks', 'colors'],
-  emits: ['reset', 'delete', 'show-logs'],
+  emits: ['reset', 'show-logs'],
   
   setup(props) {
     const columns = [
@@ -67,17 +67,11 @@ export default {
 
       <template #cell(actions)="{ item }">
         <base-button-group>
-          <base-button 
-            icon="fas fa-undo" 
-            color="outline-warning" 
+          <base-button
+            icon="fas fa-undo"
+            color="outline-warning"
             title="Reset Task"
-            @click.stop="$emit('reset', item.id)" 
-          />
-          <base-button 
-            icon="fas fa-trash" 
-            color="outline-danger" 
-            title="Delete Task"
-            @click.stop="$emit('delete', item.id)" 
+            @click.stop="$emit('reset', item.id)"
           />
         </base-button-group>
       </template>

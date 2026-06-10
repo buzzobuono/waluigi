@@ -38,15 +38,6 @@ class TaskDepsRepository(BaseRepository):
                 ).fetchall()
             )
 
-    def delete_by_task(self, namespace: str, task_id: str) -> None:
-        with self._conn() as conn:
-            conn.execute(
-                delete(_t_task_deps).where(
-                    (_t_task_deps.c.namespace == namespace) &
-                    (_t_task_deps.c.task_id == task_id)
-                )
-            )
-
     def delete_by_namespace(self, namespace: str) -> None:
         with self._conn() as conn:
             conn.execute(

@@ -37,12 +37,6 @@ async def reset_task(namespace: str, task_id: str, svc=Depends(task_service)):
     return ok({"task_id": task_id, "status": "PENDING"})
 
 
-@router.delete("/{task_id}")
-async def delete_task(namespace: str, task_id: str, svc=Depends(task_service)):
-    svc.delete(namespace, task_id)
-    return ok({"task_id": task_id})
-
-
 @router.post("/{task_id}/logs", status_code=201)
 async def append_logs(namespace: str, task_id: str, body: LogAppendRequest, svc=Depends(log_service)):
     if not body.logs:

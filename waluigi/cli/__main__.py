@@ -77,7 +77,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # delete
     p = sub.add_parser("delete", help="Delete a resource")
-    p.add_argument("type",   choices=["task", "job", "cronjob", "taskdefinition", "jobdefinition", "namespace"])
+    p.add_argument("type",   choices=["job", "cronjob", "taskdefinition", "jobdefinition", "namespace"])
     p.add_argument("target", help="Resource ID or namespace name")
     p.add_argument("-n", "--namespace", help="Namespace for task/job")
 

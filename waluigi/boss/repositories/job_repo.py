@@ -4,7 +4,7 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, update, delete, and_, or_, case
 
 from waluigi.boss.db.base import BaseRepository
-from waluigi.boss.db.engine import _t_jobs, _t_tasks
+from waluigi.boss.db.engine import _t_jobs, _t_tasks, _t_task_logs, _t_task_deps
 
 
 class JobRepository(BaseRepository):
@@ -205,6 +205,25 @@ class JobRepository(BaseRepository):
 
     def delete(self, namespace: str, job_id: str) -> bool:
         with self._conn() as conn:
+            task_ids = [r[0] for r in conn.execute(
+                select(_t_tasks.c.id).where(and_(
+                    _t_tasks.c.namespace == namespace,
+                    _t_tasks.c.job_id == job_id,
+                ))
+            ).fetchall()]
+            if task_ids:
+                conn.execute(
+                    delete(_t_task_logs).where(
+                        (_t_task_logs.c.namespace == namespace) &
+                        (_t_task_logs.c.task_id.in_(task_ids))
+                    )
+                )
+                conn.execute(
+                    delete(_t_task_deps).where(
+                        (_t_task_deps.c.namespace == namespace) &
+                        (_t_task_deps.c.task_id.in_(task_ids))
+                    )
+                )
             conn.execute(
                 delete(_t_tasks).where(and_(
                     _t_tasks.c.namespace == namespace,

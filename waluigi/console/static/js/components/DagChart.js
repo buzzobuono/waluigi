@@ -1,6 +1,6 @@
 export default {
   name: 'DagChart',
-  emits: ['show-logs', 'reset', 'delete', 'show-info'],
+  emits: ['show-logs', 'reset', 'show-info'],
   props: {
     tasks: { type: Array, required: true },
     colors: {
@@ -258,12 +258,6 @@ export default {
                   style="gap:8px; font-size:0.83rem; padding:7px 14px;"
                   @click="$emit('reset', menu.task.id); closeMenu()">
             <i class="fas fa-undo text-warning" style="width:14px; text-align:center;"></i> Reset
-          </button>
-          <div class="dropdown-divider" style="margin:2px 0;"></div>
-          <button class="dropdown-item text-danger d-flex align-items-center"
-                  style="gap:8px; font-size:0.83rem; padding:7px 14px;"
-                  @click="$emit('delete', menu.task.id); closeMenu()">
-            <i class="fas fa-trash" style="width:14px; text-align:center;"></i> Delete
           </button>
         </div>
 

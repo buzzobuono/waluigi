@@ -1,6 +1,6 @@
 from __future__ import annotations
 from datetime import datetime, timezone
-from sqlalchemy import select, insert, and_
+from sqlalchemy import select, insert, delete, and_
 
 from waluigi.boss.db.base import BaseRepository
 from waluigi.boss.db.engine import _t_task_logs
@@ -42,3 +42,20 @@ class LogRepository(BaseRepository):
                 }
                 for r in rows
             ]
+
+    def delete_by_task_ids(self, namespace: str, task_ids: list[str]) -> None:
+        if not task_ids:
+            return
+        with self._conn() as conn:
+            conn.execute(
+                delete(_t_task_logs).where(
+                    (_t_task_logs.c.namespace == namespace) &
+                    (_t_task_logs.c.task_id.in_(task_ids))
+                )
+            )
+
+    def delete_by_namespace(self, namespace: str) -> None:
+        with self._conn() as conn:
+            conn.execute(
+                delete(_t_task_logs).where(_t_task_logs.c.namespace == namespace)
+            )

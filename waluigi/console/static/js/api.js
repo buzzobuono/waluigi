@@ -122,7 +122,6 @@ export const api = {
   tasks:     (ns)        => _get(`/boss/namespaces/${_enc(ns)}/tasks`).then(_unwrap),
   jobTasks:  (ns, jobId) => _get(`/boss/namespaces/${_enc(ns)}/tasks`, { job_id: jobId }).then(_unwrap),
   resetTask: (ns, id)    => _post(`/boss/namespaces/${_enc(ns)}/tasks/${_enc(id)}/_reset`).then(_unwrap),
-  deleteTask: (ns, id)   => _delete(`/boss/namespaces/${_enc(ns)}/tasks/${_enc(id)}`).then(_unwrap),
   logs:      (ns, taskId, limit = 100) =>
     _get(`/boss/namespaces/${_enc(ns)}/tasks/${_enc(taskId)}/logs`, { limit }).then(_unwrap),
 

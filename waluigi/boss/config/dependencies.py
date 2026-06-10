@@ -48,7 +48,7 @@ def namespaces_repository(db=Depends(get_db)):
 
 def namespace_service(db=Depends(get_db)):
     from waluigi.boss.services.namespace_service import NamespaceService
-    return NamespaceService(db.namespaces, db.tasks, db.jobs, db.task_deps)
+    return NamespaceService(db.namespaces, db.tasks, db.jobs, db.task_deps, db.logs)
 
 
 def job_service(db=Depends(get_db)):

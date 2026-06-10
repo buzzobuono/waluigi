@@ -25,7 +25,3 @@ class TaskService:
 
     def reset(self, namespace: str, task_id: str) -> None:
         self.repo.reset(namespace, task_id)
-
-    def delete(self, namespace: str, task_id: str) -> None:
-        self.deps_repo.delete_by_task(namespace, task_id)
-        self.repo.delete(namespace, task_id)

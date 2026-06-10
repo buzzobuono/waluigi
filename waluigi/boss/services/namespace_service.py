@@ -9,11 +9,13 @@ class NamespaceService:
 
     def __init__(self, ns_repo: NamespaceRepository,
                  task_repo: TaskRepository, job_repo: JobRepository,
-                 task_deps_repo: TaskDepsRepository | None = None):
+                 task_deps_repo: TaskDepsRepository | None = None,
+                 log_repo=None):
         self.namespaces = ns_repo
         self.tasks      = task_repo
         self.jobs       = job_repo
         self.task_deps  = task_deps_repo
+        self.logs       = log_repo
 
     def list_namespaces(self) -> list[dict]:
         rows = self.namespaces.list()
@@ -43,6 +45,8 @@ class NamespaceService:
     def delete_namespace(self, namespace: str) -> None:
         if self.task_deps:
             self.task_deps.delete_by_namespace(namespace)
+        if self.logs:
+            self.logs.delete_by_namespace(namespace)
         self.tasks.delete_namespace(namespace)
         self.jobs.delete_namespace(namespace)
         self.namespaces.delete(namespace)
