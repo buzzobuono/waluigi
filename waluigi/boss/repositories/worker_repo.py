@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 from datetime import datetime, timezone
 from sqlalchemy import select, update, delete, and_, case
 
@@ -8,18 +9,20 @@ from waluigi.boss.db.engine import _t_workers
 
 class WorkerRepository(BaseRepository):
 
-    def register(self, url: str, max_slots: int, free_slots: int) -> None:
+    def register(self, url: str, max_slots: int, free_slots: int,
+                 affinity: list[str] | None = None) -> None:
         stmt = self._upsert_stmt(
             _t_workers,
             values={
                 "url":        url,
                 "max_slots":  max_slots,
                 "free_slots": free_slots,
+                "affinity":   json.dumps(affinity or []),
                 "status":     "ALIVE",
                 "last_seen":  datetime.now(timezone.utc).isoformat(),
             },
             conflict_cols=["url"],
-            update_cols=["max_slots", "free_slots", "status", "last_seen"],
+            update_cols=["max_slots", "free_slots", "affinity", "status", "last_seen"],
         )
         with self._conn() as conn:
             conn.execute(stmt)

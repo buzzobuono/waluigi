@@ -37,6 +37,7 @@ _t_workers = Table("workers", _meta,
     Column("status",     Text, nullable=False, default="ALIVE"),
     Column("max_slots",  Integer),
     Column("free_slots", Integer),
+    Column("affinity",   Text, nullable=False, default="[]"),
     Column("last_seen",  Text),
 )
 

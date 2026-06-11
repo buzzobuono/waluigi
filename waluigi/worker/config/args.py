@@ -13,7 +13,9 @@ p.add('--boss-url', default='http://localhost:8082')
 p.add('--slots', type=int, default=2)
 p.add('--heartbeat', type=int, default=10)
 p.add('--default-workdir', default=os.path.join(os.getcwd(), "work"), help='Default working directory')
+p.add('--affinity', default='', help='Comma-separated capability tags (e.g. gpu,python,catalog)')
 
 args = p.parse_args()
+args.affinity_list = [t.strip() for t in args.affinity.split(',') if t.strip()]
 
 os.makedirs(args.default_workdir, exist_ok=True)

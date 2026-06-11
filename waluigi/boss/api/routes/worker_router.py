@@ -15,7 +15,7 @@ async def list_workers(svc=Depends(worker_service)):
 
 @router.post("")
 async def register_worker(body: WorkerRegisterRequest, engine=Depends(boss_engine)):
-    engine.register_worker(body.url, body.max_slots, body.free_slots)
+    engine.register_worker(body.url, body.max_slots, body.free_slots, body.affinity)
     return ok({"url": body.url})
 
 

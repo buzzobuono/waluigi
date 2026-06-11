@@ -28,7 +28,8 @@ async def heartbeat():
                     "url": f"http://{args.host}:{args.port}",
                     "status": "ALIVE",
                     "max_slots": args.slots,
-                    "free_slots": await slot_manager.get_available_slots()
+                    "free_slots": await slot_manager.get_available_slots(),
+                    "affinity": args.affinity_list,
                 })
                 logger.info("Registrato con successo al Boss.")
             except Exception as e:
@@ -54,8 +55,9 @@ def main():
     logger.info(f"  Binding         : {args.bind_address}:{args.port}")
     logger.info(f"  URL             : http://{args.host}:{args.port}")
     logger.info(f"  Slots           : {args.slots}")
-    logger.info(f"  Heartbeatb      : {args.heartbeat}")
+    logger.info(f"  Heartbeat       : {args.heartbeat}")
     logger.info(f"  Default Work Dir: {args.default_workdir}")
+    logger.info(f"  Affinity        : {args.affinity_list or '(none)'}")
 
     uvicorn.run(app, host=args.bind_address, port=args.port, log_config=None)
     

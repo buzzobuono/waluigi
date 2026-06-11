@@ -7,6 +7,7 @@ class WorkerRegisterRequest(BaseModel):
     url: str
     max_slots: int
     free_slots: int
+    affinity: list[str] = []
 
 
 class TaskUpdateRequest(BaseModel):

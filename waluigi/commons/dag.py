@@ -102,6 +102,7 @@ class DAGTask:
         self.attributes = SimpleNamespace(**data.get("attributes", {}))
         self.config     = data.get("config", {})
         self.requires: list[str] = data.get("requires", [])
+        self.affinity: list[str] = data.get("affinity", [])
 
     def hash(self, nsdict) -> str:
         return " ".join(f"{k}:{v}" for k, v in sorted(vars(nsdict).items()))

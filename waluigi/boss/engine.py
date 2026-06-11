@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 import logging
 import httpx
 
@@ -44,8 +45,9 @@ class BossEngine:
                 for req_id in task.requires:
                     self.task_deps.add(namespace, task.id, req_id)
 
-    def register_worker(self, url: str, max_slots: int, free_slots: int) -> None:
-        self.workers.register(url, max_slots, free_slots)
+    def register_worker(self, url: str, max_slots: int, free_slots: int,
+                        affinity: list[str] | None = None) -> None:
+        self.workers.register(url, max_slots, free_slots, affinity)
 
     # ── Planner ───────────────────────────────────────────────────────────────
 
@@ -192,6 +194,16 @@ class BossEngine:
         available = self.workers.get_available()
         if not available:
             return "WORKERS_SATURATED"
+
+        task_affinity = set(getattr(task, 'affinity', None) or [])
+        if task_affinity:
+            available = [
+                w for w in available
+                if task_affinity.issubset(set(json.loads(w.get('affinity') or '[]')))
+            ]
+            if not available:
+                logger.info(f"⏳ {task.id} — no worker with affinity {task_affinity}")
+                return "RETRY"
 
         all_busy = True
         for worker in available:
