@@ -1,32 +1,33 @@
-# 🟣 Waluigi
+# Waluigi
 
-A lightweight distributed task orchestrator inspired by [Luigi](https://github.com/spotify/luigi), built on a **server-push architecture**.
-
-Instead of workers polling for work, the Boss schedules tasks and pushes them directly to workers via HTTP. Workers are passive executors — they register themselves, wait for orders, and report back.
+A lightweight distributed task orchestrator with a **server-push architecture**: the Boss schedules tasks and pushes them to Workers via HTTP. Workers are passive executors — they register, wait for dispatch, and report back.
 
 ---
 
-## How it works
+## Architecture at a glance
 
 ```
-┌─────────┐        POST /execute        ┌────────────┐
-│  Boss   │ ─────────────────────────►  │  Worker 1  │
-│         │                             └────────────┘
-│ Planner │        POST /execute        ┌────────────┐
-│  Loop   │ ─────────────────────────►  │  Worker 2  │
-│         │                             └────────────┘
-│  SQLite │ ◄──── POST /update ──────── │  Worker N  │
-└─────────┘   (RUNNING / SUCCESS / FAILED)
+                        ┌──────────────────────────────────────┐
+                        │              Boss  :8082              │
+                        │  SQLite · Planner Loop · DAG Engine  │
+                        └────┬──────────────┬──────────────────┘
+                  dispatch   │              │   dispatch
+                             ▼              ▼
+                    ┌────────────┐  ┌────────────┐
+                    │  Worker 1  │  │  Worker 2  │   …
+                    └────────────┘  └────────────┘
+                         │  status / logs (PATCH)
+                         └──────────────────────────►  Boss
+
+  ┌─────────────────┐      ┌─────────────────┐
+  │  Catalog  :9000 │      │  Console  :8080 │
+  │  dataset metadata│     │  Web UI + JWT   │
+  │  schema · lineage│     │  proxy → Boss   │
+  └─────────────────┘      │  proxy → Catalog│
+                           └─────────────────┘
 ```
 
-The **Boss** holds the DAG state in SQLite, plans task execution, and dispatches work to registered workers. Workers execute shell commands, stream logs back to the boss, and update task status on completion.
-
-Key design choices:
-- **Server push** over worker polling — the boss decides when and where to run each task
-- **Resource management** — tasks declare resource requirements, the boss enforces cluster-wide limits
-- **Affinity** — tasks declare capability requirements, workers declare what they offer
-- **Parameter inheritance** — child tasks reference parent params with `${parent.params.x}` syntax
-- **Idempotent execution** — tasks already in `SUCCESS` are never re-run, making job resubmission safe
+Four independent processes communicate over HTTP. The Boss holds all orchestration state. The Catalog is optional but enables first-class dataset management. The Console provides a web UI with authentication.
 
 ---
 
@@ -40,289 +41,357 @@ pip install waluigi
 
 ## Components
 
-### Boss (`wlboss`)
+| Component | Command | Default port | Role |
+|-----------|---------|-------------|------|
+| Boss | `wlboss` | 8082 | Control plane — SQLite state, planner loop, DAG scheduling |
+| Worker | `wlworker` | 5001 | Execution plane — subprocess runner, log streaming |
+| Catalog | `wlcatalog` | 9000 | Data catalog — dataset metadata, schema, lineage, DQ |
+| Console | `wlconsole` | 8080 | Web UI — JWT auth, namespace access control, reverse proxy |
+| CLI | `wlctl` | — | Command-line client for Boss and Catalog |
 
-The control plane. Manages the DAG state, schedules tasks, dispatches them to workers, and exposes a REST API and a web dashboard.
-
-```bash
-wlboss \
-  --port 8082 \
-  --host localhost \
-  --db-path ./db/waluigi.db
-```
-
-| Option | Default | Description |
-|---|---|---|
-| `--port` | `8082` | Listening port |
-| `--host` | hostname | Logical host used in URLs |
-| `--bind-address` | `0.0.0.0` | Bind address |
-| `--db-path` | `./db/waluigi.db` | SQLite database path |
-
-All options can be set via environment variables with the `WALUIGI_BOSS_` prefix (e.g. `WALUIGI_BOSS_PORT=8082`).
+All options are configurable via CLI flags or environment variables with component prefixes:
+`WALUIGI_BOSS_*`, `WALUIGI_WORKER_*`, `WALUIGI_CATALOG_*`.
 
 ---
 
-### Worker (`wlworker`)
+## Quick start
 
-The execution plane. Registers with the boss, waits for task dispatches, forks subprocesses, and streams logs back.
-
-```bash
-wlworker \
-  --boss-url http://localhost:8082 \
-  --port 5001 \
-  --slots 2
-```
-
-| Option | Default | Description |
-|---|---|---|
-| `--port` | `5001` | Listening port |
-| `--boss-url` | `http://localhost:8082` | Boss URL |
-| `--host` | hostname | Logical host used for registration |
-| `--bind-address` | `0.0.0.0` | Bind address |
-| `--slots` | `2` | Max concurrent tasks |
-| `--heartbeat` | `10` | Heartbeat interval in seconds |
-| `--default-workdir` | `./work` | Default working directory for tasks |
-
-All options can be set via environment variables with the `WALUIGI_WORKER_` prefix.
-
-You can run multiple workers on different machines or ports. Each worker registers itself with the boss and is matched to tasks based on available slots and affinity labels.
-
----
-
-### CLI (`wlctl`)
-
-Command-line interface to interact with the boss.
+### 1. Start the cluster
 
 ```bash
-wlctl --url http://localhost:8082 <command>
+# Boss
+wlboss --port 8082 --db-path ./db/waluigi.db
+
+# Worker (one or more)
+wlworker --boss-url http://localhost:8082 --port 5001 --slots 4
+
+# Catalog (optional)
+wlcatalog --port 9000 --db-path ./db/catalog.db --data-path ./data
+
+# Console (optional)
+wlconsole --port 8080 --boss-url http://localhost:8082 --catalog-url http://localhost:9000
 ```
 
-#### Submit a job or apply resources
-
-```bash
-wlctl apply -f descriptor.yaml
-```
-
-#### Inspect the cluster
-
-```bash
-wlctl get workers
-wlctl get jobs
-wlctl get tasks
-wlctl get tasks --namespace analytics
-wlctl get namespaces
-wlctl get resources
-```
-
-#### Read task logs
-
-```bash
-wlctl logs <task_id>
-wlctl logs <task_id> --follow
-wlctl logs <task_id> -n 50
-```
-
-#### Reset or delete
-
-```bash
-wlctl reset task <task_id>
-wlctl reset namespace <namespace>
-wlctl delete task <task_id>
-wlctl delete namespace <namespace>
-```
-
----
-
-## Defining a DAG
-
-Jobs are described in YAML. A job is a tree of tasks, each with its own command, params, resources, and dependencies declared under `requires`.
-
-```yaml
-kind: Job
-metadata:
-  workdir: "work"
-spec:
-  name: "GlobalReport"
-  id: "final_report"
-  namespace: "analytics"
-  command: "python analytics/global_report.py"
-  params:
-    date: "2026-03-20"
-  resources:
-    coin: 1
-  affinity:
-    - python
-  requires:
-    - name: "CleanData"
-      id: "clean_erp"
-      namespace: "analytics"
-      command: "python analytics/clean_data.py"
-      params:
-        source: "ERP"
-        date: "${parent.params.date}"    # inherited from parent
-      resources:
-        coin: 1
-      affinity:
-        - python
-      requires:
-        - name: "RawDataExtract"
-          id: "extract_erp"
-          namespace: "analytics"
-          command: "python analytics/raw_data_extract.py"
-          params:
-            source: "${parent.params.source}"
-            date: "${parent.params.date}"
-          resources:
-            coin: 1
-          affinity:
-            - python
-```
-
-Parameter inheritance uses `${parent.params.x}` — the boss resolves these at planning time before dispatching.
-
-Submit with:
-
-```bash
-wlctl apply -f job.yaml
-```
-
----
-
-## Writing a Task
-
-Tasks are plain Python scripts. The SDK provides a base `Task` class that reads params and attributes injected by the worker as environment variables.
-
-```python
-from waluigi.sdk.task import Task
-
-class RawDataExtract(Task):
-    def run(self):
-        print(f"Extracting from: {self.params.source}")
-        # self.params.*      — from the 'params' field in the descriptor
-        # self.attributes.*  — from the 'attributes' field in the descriptor
-
-if __name__ == "__main__":
-    RawDataExtract().start()
-```
-
-The worker runs the task as a subprocess and injects params via `WALUIGI_PARAM_*` and attributes via `WALUIGI_ATTRIBUTE_*` environment variables. Exit code `0` means success, anything else means failure.
-
-Tasks are language-agnostic — any executable that reads environment variables and exits with the correct code works.
-
----
-
-## Resource management
-
-The boss enforces cluster-wide resource limits. Tasks declare their consumption in the descriptor, and the boss only dispatches a task when enough resources are available. Resources are acquired before dispatch and released on completion or failure.
-
-Define cluster resources:
-
-```yaml
-kind: ClusterResources
-spec:
-  coin: 10
-  pdc: 4
-```
-
-```bash
-wlctl apply -f resources.yaml
-```
-
-Tasks declare consumption:
-
-```yaml
-resources:
-  coin: 1
-  pdc: 1
-```
-
-Resources are arbitrary named slots — you can model CPU shares, GPU units, API rate limits, or any other finite resource.
-
----
-
-## Affinity *(coming soon)*
-
-Workers declare the capabilities they offer via affinity labels sent in the heartbeat. The boss uses these labels to match tasks to suitable workers.
-
-A worker running in a Python-enabled container would declare:
-
-```
-affinity: ["python", "pandas"]
-```
-
-A worker running on a GPU node would declare:
-
-```
-affinity: ["python", "gpu"]
-```
-
-Tasks declare the capabilities they require:
-
-```yaml
-affinity:
-  - python
-  - gpu
-```
-
-The boss dispatches the task only to workers whose affinity set is a superset of the task's requirements. If no matching worker is available, the task waits.
-
----
-
-## Web Dashboard
-
-The boss exposes a dashboard at `http://<boss-host>:<port>/` showing live task state, worker status, and resource usage. Tasks can be reset or deleted directly from the UI.
-
----
-
-## Deployment
-
-### Docker Compose
+Or with Docker Compose:
 
 ```bash
 docker compose up
 ```
 
-### Docker Swarm
-
-Waluigi supports running multiple boss replicas on Swarm. The boss uses SQLite with WAL mode and atomic `UPDATE ... RETURNING` queries for job claiming, so concurrent replicas coordinate correctly without an external lock manager — each boss atomically claims a different job.
+### 2. Create a namespace and resources
 
 ```bash
+wlctl apply -f descriptors/namespaces/analytics.yaml
+wlctl apply -f descriptors/resources/resources.yaml
+```
+
+### 3. Submit a job
+
+```bash
+wlctl apply -f descriptors/jobs/analytics-by-command-job.yaml
+```
+
+### 4. Monitor execution
+
+```bash
+wlctl get jobs --namespace analytics
+wlctl get tasks --namespace analytics
+wlctl logs <task_id> --follow
+```
+
+---
+
+## Defining a Job
+
+Jobs are YAML descriptors. Tasks are defined inline (`jobSpec`) or by referencing a reusable `JobDefinition` (`jobRef`).
+
+### Inline job with shell commands
+
+```yaml
+kind: Job
+metadata:
+  name: daily-extract
+  namespace: analytics
+spec:
+  executionPolicy: Ephemeral   # new instance on each submit (default)
+  params:
+    date: "2026-06-12"
+  jobSpec:
+    tasks:
+      - id: extract
+        taskSpec:
+          command: "python pipeline/extract.py"
+        params:
+          source: "ERP"
+        resources:
+          coin: 1
+        affinity:
+          - python
+
+      - id: transform
+        taskSpec:
+          command: "python pipeline/transform.py"
+        requires:
+          - extract
+        resources:
+          coin: 2
+        affinity:
+          - python
+```
+
+### Inline job with Python scripts
+
+```yaml
+kind: Job
+metadata:
+  name: inline-job
+  namespace: analytics
+spec:
+  params:
+    date: "2026-06-12"
+  jobSpec:
+    tasks:
+      - id: process
+        taskSpec:
+          script: |
+            from waluigi.sdk.context import context
+            print(f"Processing date: {context.params.date}")
+        resources:
+          coin: 1
+```
+
+### Job referencing a reusable definition
+
+```yaml
+kind: Job
+metadata:
+  name: erp-run
+  namespace: analytics
+spec:
+  executionPolicy: Stateful
+  concurrencyPolicy: Forbid
+  params:
+    date: "2026-06-12"
+  jobRef:
+    name: erp-analytics-pipeline
+```
+
+→ Full YAML reference: [doc/yaml-reference.md](doc/yaml-reference.md)
+
+---
+
+## Writing Tasks
+
+Tasks are any executable (Python, bash, …) that reads environment variables and exits with code 0 for success.
+
+```python
+# pipeline/extract.py
+from waluigi.sdk.context import context
+
+date   = context.params.date          # WALUIGI_PARAM_DATE
+source = context.params.source        # WALUIGI_PARAM_SOURCE
+owner  = context.attributes.owner     # WALUIGI_ATTRIBUTE_OWNER
+cfg    = context.config               # from task config: dict
+
+print(f"Extracting {source} for {date}")
+# ... do work, exit 0 on success
+```
+
+→ Full guide: [doc/task-development.md](doc/task-development.md)
+
+### Built-in task types
+
+Reference reusable transformations without writing any code:
+
+```yaml
+- id: filter_high_value
+  taskRef:
+    name: FilterDataset
+  config:
+    input:
+      dataset: analytics/erp/clean/erp
+      source: {id: local, type: local}
+    output:
+      dataset: analytics/erp/filtered/high_value
+      format: parquet
+      source: {id: local, type: local}
+    where: "value > 1000"
+  resources:
+    coin: 1
+```
+
+Available types: `FilterDataset`, `SelectColumns`, `AddDerivedColumns`, `AggregateDataset`, `JoinDatasets`, `MergeDatasets`, `PivotDataset`, `DeduplicateDataset`, `CatalogCreateDataset`, `CatalogCreateSource`, `CatalogDefineSchema`, `CatalogSetExpectations`, `CatalogSetCharts`.
+
+→ Full reference: [doc/built-in-tasks.md](doc/built-in-tasks.md)
+
+---
+
+## Resource Management
+
+Resources are named pools — model CPU shares, GPU units, API rate limits, or anything finite. The Boss enforces limits cluster-wide: a task is dispatched only when enough resources are available.
+
+```yaml
+# Define pools per namespace
+kind: NamespaceResources
+metadata:
+  namespace: analytics
+spec:
+  coin: 10.0
+  gpu: 2.0
+```
+
+```yaml
+# Task declares consumption
+- id: train
+  taskSpec:
+    command: python train.py
+  resources:
+    coin: 2
+    gpu: 1
+```
+
+---
+
+## Worker Affinity
+
+Workers declare capability tags; tasks declare requirements. The Boss dispatches a task only to workers whose affinity is a **superset** of what the task requires.
+
+```bash
+# Worker with Python and pandas available
+wlworker --affinity python,pandas --port 5001
+
+# Worker with GPU
+wlworker --affinity python,gpu --port 5002
+```
+
+```yaml
+# Task requires python+gpu
+- id: train
+  taskSpec:
+    command: python train.py
+  affinity:
+    - python
+    - gpu
+```
+
+If no matching worker is available, the task waits until one registers.
+
+---
+
+## Scheduled Jobs (CronJobs)
+
+```yaml
+kind: CronJob
+metadata:
+  name: daily-etl
+  namespace: analytics
+spec:
+  schedule: "0 6 * * *"
+  timezone: Europe/Rome
+  enabled: true
+  executionPolicy: Ephemeral
+  concurrencyPolicy: Forbid
+  params:
+    date: "%Y-%m-%d"          # strftime interpolation at run time
+  jobRef:
+    name: erp-analytics-pipeline
+```
+
+---
+
+## Catalog Integration
+
+The Catalog tracks datasets, versions, schema, lineage, and data quality results. Task scripts interact with it via the SDK:
+
+```python
+from waluigi.sdk.catalog import CatalogClient
+
+catalog = CatalogClient()    # reads WALUIGI_CATALOG_URL + WALUIGI_CATALOG_NAMESPACE
+
+# Read a dataset
+reader = catalog.read_dataset("sales/raw/orders")
+df = reader.read()
+
+# Write a dataset (two-phase commit)
+handle = catalog.create_dataset("sales/clean/orders", format="parquet", source_id="local")
+with handle.create_version(metadata={"date": date}, inputs=[reader]) as writer:
+    writer.write(df_clean)
+```
+
+→ Full guide: [doc/catalog.md](doc/catalog.md) · [doc/sdk.md](doc/sdk.md)
+
+---
+
+## CLI Quick Reference
+
+```bash
+wlctl --url http://localhost:8082 <command>
+
+# Apply descriptors
+wlctl apply -f descriptor.yaml
+
+# Inspect
+wlctl get namespaces
+wlctl get jobs [--namespace <ns>]
+wlctl get tasks [--namespace <ns>] [--job-id <id>]
+wlctl get workers
+wlctl get resources [--namespace <ns>]
+wlctl get task-definitions [--namespace <ns>]
+wlctl get job-definitions [--namespace <ns>]
+wlctl get cronjobs [--namespace <ns>]
+
+# Describe definitions
+wlctl describe task-definition <name> [--namespace <ns>]
+wlctl describe job-definition <name> [--namespace <ns>]
+wlctl describe job <job_id> [--namespace <ns>]
+
+# Logs
+wlctl logs <task_id> [-n <lines>] [--follow]
+
+# Lifecycle
+wlctl reset task <task_id> [--namespace <ns>]
+wlctl reset job <job_id> [--namespace <ns>]
+wlctl reset namespace <ns>
+
+wlctl delete job <job_id> [--namespace <ns>]
+wlctl delete cronjob <id> [--namespace <ns>]
+wlctl delete taskdefinition <name> [--namespace <ns>]
+wlctl delete jobdefinition <name> [--namespace <ns>]
+wlctl delete namespace <ns>
+```
+
+→ Full reference: [doc/cli.md](doc/cli.md)
+
+---
+
+## Documentation
+
+| Document | Contents |
+|----------|----------|
+| [doc/architecture.md](doc/architecture.md) | System design, components, DAG engine internals, deployment |
+| [doc/yaml-reference.md](doc/yaml-reference.md) | Complete YAML spec for every kind |
+| [doc/task-development.md](doc/task-development.md) | Writing tasks, SDK context, environment variables |
+| [doc/built-in-tasks.md](doc/built-in-tasks.md) | All built-in taskRef types with config schemas |
+| [doc/catalog.md](doc/catalog.md) | Catalog service: sources, datasets, schema, lineage, DQ, charts |
+| [doc/sdk.md](doc/sdk.md) | CatalogClient, DatasetReader/Writer, connectors, context |
+| [doc/data-quality.md](doc/data-quality.md) | DQ rules, suites, DQManager |
+| [doc/cli.md](doc/cli.md) | Complete `wlctl` command reference |
+| [doc/deployment.md](doc/deployment.md) | Docker Compose, Swarm, Kubernetes, environment variables |
+
+---
+
+## Deployment
+
+```bash
+# Docker Compose (Boss + 3 Workers + Catalog + Console)
+docker compose up
+
+# Docker Swarm
 docker swarm init
 docker stack deploy -c docker-compose.yml waluigi
 ```
 
-The included `docker-compose.yml` runs 4 boss replicas and 16 worker replicas by default. The boss is exposed via Swarm's ingress load balancer — workers reach it at `http://boss:8082` and the ingress routes each request to an available replica.
-
-### Kubernetes
-
-A Kubernetes deployment follows the same model. Mount the SQLite database on a `ReadWriteMany` volume (e.g. NFS or a cloud file store) shared across boss pods, and expose the boss via a `ClusterIP` service so workers can reach it by name.
-
-```yaml
-# boss-deployment.yaml (sketch)
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: waluigi-boss
-spec:
-  replicas: 2
-  template:
-    spec:
-      containers:
-        - name: boss
-          image: buzzobuono/waluigi-bossd:latest
-          env:
-            - name: WALUIGI_BOSS_DB_PATH
-              value: /db/waluigi.db
-          volumeMounts:
-            - name: db
-              mountPath: /db
-      volumes:
-        - name: db
-          persistentVolumeClaim:
-            claimName: waluigi-db-pvc   # must be ReadWriteMany
-```
-
-> **Note:** SQLite on network file systems (NFS, EFS) can have locking issues under high write concurrency. For large-scale Kubernetes deployments, migrating the state backend to PostgreSQL is recommended.
+→ Full guide: [doc/deployment.md](doc/deployment.md)
 
 ---
 
@@ -331,10 +400,12 @@ spec:
 | | Luigi | Waluigi |
 |---|---|---|
 | Architecture | In-process scheduler | Boss/Worker over HTTP |
-| Task dispatch | Worker pulls | Boss pushes |
-| Execution | Python functions | Shell commands (any language) |
-| State | In-memory | SQLite |
-| Scaling | Single process | Multiple workers on multiple machines |
-| Resource limits | Yes | Yes |
-| Worker affinity | No | Coming soon |
-| Multi-boss | No | Yes (via atomic job claiming) |
+| Task dispatch | Worker polls | Boss pushes |
+| Execution | Python functions | Shell commands — any language |
+| State | In-memory | SQLite (WAL mode) |
+| Scaling | Single process | Multiple workers, multiple boss replicas |
+| Resource limits | Yes | Yes (named pools, namespace-scoped) |
+| Worker affinity | No | Yes (capability tag matching) |
+| Scheduled jobs | External | Built-in CronJob scheduler |
+| Dataset catalog | No | Optional full catalog service |
+| Multi-boss HA | No | Yes (atomic job claiming via SQLite) |
