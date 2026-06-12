@@ -1,0 +1,16 @@
+kind: Job
+metadata:
+    name: "create_sales_dataset_pd"
+    namespace: "sales_pd"
+spec:
+    params:
+        date: "2026-03-26"
+    jobSpec:
+        tasks:
+            - id: "create_sales_dataset_pd"
+              taskSpec:
+                  command: "python ../source/sales/create_sales_pd.py"
+              resources:
+                  coin: 1
+              affinity:
+                  - python

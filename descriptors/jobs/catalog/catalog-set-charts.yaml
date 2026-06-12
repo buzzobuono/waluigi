@@ -1,0 +1,47 @@
+kind: Job
+metadata:
+    name: "catalog_set_charts_test"
+    namespace: "catalog"
+spec:
+    jobSpec:
+        tasks:
+            - id: "catalog_set_charts_test"
+              taskRef:
+                  name: "CatalogSetCharts"
+              config:
+                  dataset: "tests/test_dataset"
+                  charts:
+                      - key:   "value_by_metric"
+                        title: "Value by metric"
+                        spec:
+                            type: "bar"
+                            x:   {field: "metric", label: "Metric"}
+                            y:   {field: "value", agg: "sum", label: "Total Value"}
+                      - key:   "value_by_category"
+                        title: "Value by category"
+                        spec:
+                            type: "bar"
+                            x:   {field: "category", label: "Category"}
+                            y:   {field: "value", agg: "sum", label: "Total Value"}
+                      - key:   "value_by_source"
+                        title: "Value by source"
+                        spec:
+                            type: "bar"
+                            x:   {field: "source", label: "Source"}
+                            y:   {field: "value", agg: "sum", label: "Total Value"}
+                      - key:   "metric_share"
+                        title: "Metric share"
+                        spec:
+                            type: "pie"
+                            x:   {field: "metric"}
+                            y:   {field: "value", agg: "sum"}
+                      - key:   "value_distribution"
+                        title: "Value distribution"
+                        spec:
+                            type: "histogram"
+                            x:   {field: "value", label: "Value"}
+                            bins: 10
+              resources:
+                  coin: 1
+              affinity:
+                  - python

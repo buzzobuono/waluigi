@@ -1,0 +1,34 @@
+x-sources:
+    local: &local
+        id:          "analytics-local"
+        type:        "LOCAL"
+        description: "Local storage for analytics pipeline"
+
+kind: Job
+metadata:
+    name: "test_aggregate"
+    namespace: "analytics"
+spec:
+    params:
+        date: "2026-05-15"
+    jobSpec:
+        tasks:
+            - id: "test_aggregate"
+              taskRef:
+                  name: "AggregateDataset"
+              config:
+                  input:
+                      dataset: "analytics/erp/clean/clean_erp"
+                      source:  *local
+                  output:
+                      dataset:     "analytics/erp/aggregated/by_category"
+                      format:      "parquet"
+                      description: "ERP value sum grouped by category"
+                      source:      *local
+                  group_by: ["category"]
+                  agg:
+                      value: "sum"
+              resources:
+                  coin: 1
+              affinity:
+                  - python

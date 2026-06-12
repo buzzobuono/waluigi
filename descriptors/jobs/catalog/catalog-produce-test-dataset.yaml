@@ -62,17 +62,20 @@ x-scripts:
         else:
             print(f"Done: {writer.dataset_id} @ {writer.version} ({len(df)} rows)")
 
-
-kind: DAG
+kind: Job
 metadata:
-spec:
-    id:   "catalog_produce_test_dataset"
+    name: "catalog_produce_test_dataset"
     namespace: "catalog"
-    script: *produce_script
+spec:
     params:
         date:            "2026-05-14"
         rows_per_source: "4"
-    resources:
-        coin: 1
-    affinity:
-        - python
+    jobSpec:
+        tasks:
+            - id: "catalog_produce_test_dataset"
+              taskSpec:
+                  script: *produce_script
+              resources:
+                  coin: 1
+              affinity:
+                  - python
