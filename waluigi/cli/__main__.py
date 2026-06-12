@@ -88,6 +88,17 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("-l", "--lines",  type=int, default=20, help="Number of lines (default: 20)")
     p.add_argument("-f", "--follow", action="store_true",  help="Stream logs in real time")
 
+    # run (local task runner — no Boss/Worker required)
+    p = sub.add_parser("run", help="Run a task locally (dev/test, no cluster needed)")
+    p.add_argument("cmd", nargs="?", default=None,
+                   help="Shell command to run directly (omit when using --file)")
+    p.add_argument("-f", "--file",        help="YAML descriptor (Job or JobDefinition)")
+    p.add_argument("-t", "--task",        help="Task ID to extract from --file")
+    p.add_argument("-p", "--params",      nargs="*", metavar="KEY=VALUE",
+                   help="Task params (override job-level defaults)")
+    p.add_argument("-n", "--namespace",   help="Catalog namespace (WALUIGI_CATALOG_NAMESPACE)")
+    p.add_argument("--catalog-url",       help="Catalog URL (WALUIGI_CATALOG_URL)")
+
     return parser
 
 
@@ -145,6 +156,16 @@ def main() -> None:
     elif args.command == "logs":
         get_logs(session, namespace=ns, task_id=args.task_id,
                  limit=args.lines, follow=args.follow)
+    elif args.command == "run":
+        from waluigi.cli.commands.run import run_task
+        run_task(
+            cmd=args.cmd,
+            file=args.file,
+            task_id=args.task,
+            params=args.params,
+            namespace=ns,
+            catalog_url=args.catalog_url,
+        )
 
 
 if __name__ == "__main__":
