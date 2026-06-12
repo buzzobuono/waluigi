@@ -8,7 +8,6 @@ class ExecuteTaskRequest(BaseModel):
     type: Optional[str] = Field(None, description="Type of task to be executed")
     command: Optional[str] = Field(None, description="Shell command string to execute")
     script: Optional[str] = Field(None, description="Script content or path to run")
-    workdir: Optional[str] = Field(None, description="Working directory path")
     params: Dict[str, Any] = Field(default_factory=dict, description="Task state parameters")
     attributes: Dict[str, Any] = Field(default_factory=dict, description="Task custom attributes")
     config: Dict[str, Any] = Field(default_factory=dict, description="Task configuration")

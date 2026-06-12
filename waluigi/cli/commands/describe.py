@@ -203,7 +203,6 @@ def describe_job_definition(session: WaluigiSession, namespace=None,
         print(tabulate([
             ["id",        defn.get("id")],
             ["namespace", ns],
-            ["workdir",   meta.get("workdir") or "-"],
         ], tablefmt="plain"))
         tasks_list = spec.get("tasks") or []
         if tasks_list:

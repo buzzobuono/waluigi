@@ -37,7 +37,6 @@ async def dispatch(
     worker_service: WorkerService = Depends(get_worker_service)
 ):
     try:
-        workdir    = body.workdir if body.workdir is not None else args.default_workdir
         task_type  = body.type
         command    = body.command
         script     = body.script
@@ -72,7 +71,7 @@ async def dispatch(
     
         try:
             asyncio.create_task(
-                worker_service.run_command_async(command, id, job_id, namespace, params, attributes, config, resources, workdir, script)
+                worker_service.run_command_async(command, id, job_id, namespace, params, attributes, config, resources, script)
             )
         except Exception as e:
             logger.error(f"Error: {e}")

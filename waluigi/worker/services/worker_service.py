@@ -21,7 +21,7 @@ class WorkerService:
         self.slot_manager = slot_manager
         self._boss = AsyncHttpClient(args.boss_url, timeout=5)
 
-    async def run_command_async(self, command, id, job_id, namespace, params, attributes, config, resources, workdir, script=None):
+    async def run_command_async(self, command, id, job_id, namespace, params, attributes, config, resources, script=None):
         try:
             await self._update_boss(namespace, id, params, attributes, resources, "RUNNING")
 
@@ -37,12 +37,11 @@ class WorkerService:
             env["WALUIGI_CATALOG_NAMESPACE"] = namespace
             if script:
                 env["WALUIGI_SCRIPT"] = script
-            os.makedirs(workdir, exist_ok=True)
             logger.info(f"🚀 Forking: {'<inline script>' if script else command}")
 
             process = await asyncio.create_subprocess_shell(
                 command,
-                cwd=workdir,
+                cwd=args.default_workdir,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 env=env

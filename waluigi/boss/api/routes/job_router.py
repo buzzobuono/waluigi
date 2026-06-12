@@ -28,7 +28,6 @@ def _resolve_job(data: dict, namespace: str, job_def_svc) -> tuple[list, dict, s
         if job_def is None:
             return [], {}, f"JobDefinition '{def_name}' not found in namespace '{namespace}'"
         tasks_list = job_def["spec"].get("tasks", [])
-        # Definition metadata (e.g. workdir) as base; run metadata overrides.
         metadata = {**job_def.get("metadata", {}), **metadata}
     elif "jobSpec" in spec:
         tasks_list = spec["jobSpec"].get("tasks", [])

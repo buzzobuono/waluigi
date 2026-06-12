@@ -178,7 +178,6 @@ class BossEngine:
 
     def _dispatch(self, namespace: str, job_metadata: dict, task) -> str:
         payload = {
-            "workdir":     job_metadata.get("workdir", "/work"),
             "type":        task.type,
             "command":     task.command,
             "script":      task.script,
