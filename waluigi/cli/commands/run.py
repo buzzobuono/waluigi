@@ -19,7 +19,7 @@ def _parse_params(raw: list[str]) -> dict[str, str]:
 
 def _extract_from_yaml(file_path: str, task_id: str) -> tuple:
     """
-    Returns (command, script, config, job_params) for the given task_id.
+    Returns (command, script, config, job_params, task_params) for the given task_id.
     Supports multi-document YAMLs (---).
     """
     with open(file_path) as f:
@@ -45,9 +45,10 @@ def _extract_from_yaml(file_path: str, task_id: str) -> tuple:
                 task_spec.get('script'),
                 dict(task.get('config', {})),
                 job_params,
+                dict(task.get('params', {})),
             )
 
-    return None, None, {}, {}
+    return None, None, {}, {}, {}
 
 
 def run_task(cmd, file, task_id, params, namespace, catalog_url):
@@ -55,12 +56,13 @@ def run_task(cmd, file, task_id, params, namespace, catalog_url):
     script = None
     config = {}
     job_params = {}
+    task_params = {}
 
     if file:
         if not task_id:
             print("Error: --task required when --file is specified", file=sys.stderr)
             sys.exit(1)
-        extracted_cmd, script, config, job_params = _extract_from_yaml(file, task_id)
+        extracted_cmd, script, config, job_params, task_params = _extract_from_yaml(file, task_id)
         if cmd is None:
             cmd = extracted_cmd
         if cmd is None and script is None:
@@ -86,8 +88,8 @@ def run_task(cmd, file, task_id, params, namespace, catalog_url):
     if effective_catalog:
         env['WALUIGI_CATALOG_URL'] = effective_catalog
 
-    # CLI params override job-level params
-    merged = {**job_params, **parsed_params}
+    # Precedence: job params < task params < CLI params
+    merged = {**job_params, **task_params, **parsed_params}
     for k, v in merged.items():
         env[f'WALUIGI_PARAM_{k.upper()}'] = str(v)
 
