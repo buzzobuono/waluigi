@@ -6,18 +6,19 @@ Start all components manually:
 
 ```bash
 # Boss (control plane)
-wlboss --port 8082 --db-path ./db/waluigi.db
+wlboss --port 8082 --db-url sqlite:///./db/waluigi.db
 
 # Worker (execution)
 wlworker --boss-url http://localhost:8082 --port 5001 --slots 4
 
 # Catalog (dataset management)
-wlcatalog --port 9000 --db-path ./db/catalog.db --data-path ./data
+wlcatalog --port 9000 --db-url sqlite:///./db/catalog.db --data-path ./data
 
 # Console (web UI + auth)
 wlconsole --port 8080 \
   --boss-url http://localhost:8082 \
-  --catalog-url http://localhost:9000
+  --catalog-url http://localhost:9000 \
+  --secret-key change-me-in-production
 ```
 
 ---
@@ -33,7 +34,8 @@ All CLI options are available as environment variables with component prefixes.
 | `WALUIGI_BOSS_PORT` | `--port` | `8082` | Listening port |
 | `WALUIGI_BOSS_HOST` | `--host` | hostname | Logical hostname |
 | `WALUIGI_BOSS_BIND_ADDRESS` | `--bind-address` | `0.0.0.0` | Bind address |
-| `WALUIGI_BOSS_DB_PATH` | `--db-path` | `./db/waluigi.db` | SQLite database path |
+| `WALUIGI_BOSS_DB_URL` | `--db-url` | `sqlite:///./db/waluigi.db` | SQLAlchemy DB URL |
+| `WALUIGI_BOSS_TICK` | `--tick` | `15` | Planner loop interval (seconds) |
 
 ### Worker (`WALUIGI_WORKER_*`)
 
@@ -64,6 +66,21 @@ WALUIGI_WORKER_AFFINITY=python,pandas,gpu
 | `WALUIGI_CATALOG_DB_URL` | `--db-url` | `sqlite:///./db/catalog.db` | SQLite DB path or SQLAlchemy URL |
 | `WALUIGI_CATALOG_DATA_PATH` | `--data-path` | `./data` | Root directory for LOCAL datasets |
 | `WALUIGI_CATALOG_RULES_PATH` | `--rules-path` | `./rules` | Directory for DQ rule YAML files |
+
+### Console (`WALUIGI_CONSOLE_*`)
+
+| Variable | CLI option | Default | Description |
+|----------|-----------|---------|-------------|
+| `WALUIGI_CONSOLE_PORT` | `--port` | `8080` | Listening port |
+| `WALUIGI_CONSOLE_HOST` | `--host` | hostname | Logical hostname |
+| `WALUIGI_CONSOLE_BIND_ADDRESS` | `--bind-address` | `0.0.0.0` | Bind address |
+| `WALUIGI_CONSOLE_BOSS_URL` | `--boss-url` | `http://localhost:8082` | Boss URL to proxy |
+| `WALUIGI_CONSOLE_CATALOG_URL` | `--catalog-url` | `http://localhost:9000` | Catalog URL to proxy |
+| `WALUIGI_CONSOLE_SECRET_KEY` | `--secret-key` | `change-me-in-production` | JWT signing key (**change in production**) |
+| `WALUIGI_CONSOLE_ADMIN_USER` | `--admin-user` | `admin` | Bootstrap admin username |
+| `WALUIGI_CONSOLE_ADMIN_PASSWORD` | `--admin-password` | `admin` | Bootstrap admin password (**change in production**) |
+| `WALUIGI_CONSOLE_TOKEN_EXPIRE_H` | `--token-expire-h` | `8` | JWT token TTL in hours |
+| `WALUIGI_CONSOLE_DB_URL` | `--db-url` | `sqlite:///./db/console.db` | SQLAlchemy DB URL for user store |
 
 ### Task scripts (injected by Worker)
 
@@ -159,8 +176,8 @@ spec:
           ports:
             - containerPort: 8082
           env:
-            - name: WALUIGI_BOSS_DB_PATH
-              value: /db/waluigi.db
+            - name: WALUIGI_BOSS_DB_URL
+              value: sqlite:////db/waluigi.db
             - name: WALUIGI_BOSS_HOST
               valueFrom:
                 fieldRef:

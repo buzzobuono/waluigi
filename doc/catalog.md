@@ -66,8 +66,14 @@ A dataset is a logical data asset identified by a hierarchical path (e.g., `sale
 
 ### Dataset lifecycle
 
-```
-draft ──► in_review ──► approved ──► deprecated
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*]        --> draft
+    draft      --> in_review  : submit for review
+    in_review  --> approved   : _approve (publishes schema)
+    in_review  --> draft      : reject
+    approved   --> deprecated : deprecate
 ```
 
 | Status | Meaning |
@@ -147,8 +153,13 @@ On commit, Waluigi infers schema automatically from the data file (column names,
 
 ### Schema column status
 
-```
-inferred ──► draft ──► published
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*]      --> inferred : auto-detected on commit
+    inferred --> draft    : manual edit
+    draft    --> published : schema/publish
+    inferred --> published : schema/publish
 ```
 
 | Status | Meaning |

@@ -87,10 +87,16 @@ The `_memo` dict deduplicates shared dependencies. In a diamond DAG (`A → B, A
 
 ### Task state machine
 
-```
-PENDING ──► READY ──► RUNNING ──► SUCCESS
-                                ╲
-                                 ► FAILED
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> PENDING
+    PENDING --> READY    : deps OK + resources acquired
+    READY   --> RUNNING  : worker accepts dispatch (202)
+    RUNNING --> SUCCESS  : exit code 0
+    RUNNING --> FAILED   : exit code ≠ 0
+    FAILED  --> PENDING  : wlctl reset task
+    SUCCESS --> [*]
 ```
 
 - `PENDING` — waiting (dependency not done, resource unavailable, or explicitly reset)
@@ -201,33 +207,39 @@ Users are stored in a local SQLite table. Admin users can create/update/delete u
 
 ## Data flow: job submission to completion
 
-```
-1. wlctl apply -f job.yaml
-       │
-       ▼
-2. Console (auth check) → Boss POST /namespaces/{ns}/jobs
-       │
-       ▼
-3. Boss: parse YAML → DAGSpec → register tasks + deps in SQLite → return job_id
-       │
-       ▼
-4. Planner loop picks up job
-   build() recurses from terminal task upward
-       │
-       ▼
-5. Leaf task: deps=[]; resources acquired; mark READY; dispatch to worker
-       │  POST /namespaces/{ns}/dispatch  →  Worker
-       ▼
-6. Worker: fork subprocess; inject env vars; stream logs to Boss
-       │
-       ▼
-7. Task exits 0 → Worker: PATCH /namespaces/{ns}/tasks/{id} status=SUCCESS
-       │
-       ▼
-8. Boss: update DB; release resources; planner advances to next task
-       │
-       ▼
-9. Terminal task SUCCESS → job completes
+```mermaid
+sequenceDiagram
+    actor User
+    participant Console
+    participant Boss
+    participant Worker
+    participant Catalog
+
+    User->>Console: wlctl apply -f job.yaml
+    Console->>Console: verify JWT + namespace access
+    Console->>Boss: POST /namespaces/{ns}/jobs
+    Boss->>Boss: parse YAML → DAGSpec<br/>register tasks + deps in SQLite
+    Boss-->>User: {job_id, task_id}
+
+    loop Planner tick (every --tick seconds)
+        Boss->>Boss: build() from terminal task upward
+        Boss->>Boss: acquire resources
+        Boss->>Worker: POST /namespaces/{ns}/dispatch
+        Worker-->>Boss: 202 Accepted
+
+        Worker->>Worker: fork subprocess<br/>inject env vars
+        Worker->>Boss: POST logs (batches of 5 lines)
+
+        alt exit code 0
+            Worker->>Boss: PATCH status=SUCCESS
+            Boss->>Boss: release resources<br/>advance DAG
+        else exit code ≠ 0
+            Worker->>Boss: PATCH status=FAILED
+            Boss->>Boss: release resources<br/>halt downstream
+        end
+    end
+
+    Note over Boss: terminal task SUCCESS → job complete
 ```
 
 ---

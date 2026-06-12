@@ -6,25 +6,44 @@ A lightweight distributed task orchestrator with a **server-push architecture**:
 
 ## Architecture at a glance
 
-```
-                        ┌──────────────────────────────────────┐
-                        │              Boss  :8082              │
-                        │  SQLite · Planner Loop · DAG Engine  │
-                        └────┬──────────────┬──────────────────┘
-                  dispatch   │              │   dispatch
-                             ▼              ▼
-                    ┌────────────┐  ┌────────────┐
-                    │  Worker 1  │  │  Worker 2  │   …
-                    └────────────┘  └────────────┘
-                         │  status / logs (PATCH)
-                         └──────────────────────────►  Boss
+```mermaid
+flowchart TD
+    User(["👤 User<br/>wlctl / Browser"])
 
-  ┌─────────────────┐      ┌─────────────────┐
-  │  Catalog  :9000 │      │  Console  :8080 │
-  │  dataset metadata│     │  Web UI + JWT   │
-  │  schema · lineage│     │  proxy → Boss   │
-  └─────────────────┘      │  proxy → Catalog│
-                           └─────────────────┘
+    subgraph console["Console  :8080"]
+        Auth["JWT Auth<br/>namespace access control"]
+        Proxy["Reverse Proxy"]
+    end
+
+    subgraph boss["Boss  :8082"]
+        Planner["Planner Loop<br/>(every --tick seconds)"]
+        BossAPI["REST API"]
+        BossDB[("SQLite WAL")]
+    end
+
+    subgraph workers["Worker pool"]
+        W1["Worker :5001<br/>N slots"]
+        W2["Worker :5002<br/>N slots"]
+        WN["…"]
+    end
+
+    subgraph catalog["Catalog  :9000"]
+        CatAPI["REST API"]
+        CatDB[("SQLite")]
+        Storage[("Files<br/>local · S3 · SQL · SFTP")]
+    end
+
+    User -->|"REST / Browser"| console
+    console -->|proxied| boss
+    console -->|proxied| catalog
+
+    Planner <-->|read / write state| BossDB
+    Planner -->|"POST /namespaces/{ns}/dispatch"| workers
+    workers -->|"PATCH status + logs"| BossAPI
+
+    workers -->|"Catalog SDK<br/>read / write datasets"| catalog
+    CatAPI --- CatDB
+    CatAPI --- Storage
 ```
 
 Four independent processes communicate over HTTP. The Boss holds all orchestration state. The Catalog is optional but enables first-class dataset management. The Console provides a web UI with authentication.
@@ -50,7 +69,7 @@ pip install waluigi
 | CLI | `wlctl` | — | Command-line client for Boss and Catalog |
 
 All options are configurable via CLI flags or environment variables with component prefixes:
-`WALUIGI_BOSS_*`, `WALUIGI_WORKER_*`, `WALUIGI_CATALOG_*`.
+`WALUIGI_BOSS_*`, `WALUIGI_WORKER_*`, `WALUIGI_CATALOG_*`, `WALUIGI_CONSOLE_*`.
 
 ---
 
@@ -60,16 +79,19 @@ All options are configurable via CLI flags or environment variables with compone
 
 ```bash
 # Boss
-wlboss --port 8082 --db-path ./db/waluigi.db
+wlboss --port 8082 --db-url sqlite:///./db/waluigi.db
 
 # Worker (one or more)
 wlworker --boss-url http://localhost:8082 --port 5001 --slots 4
 
 # Catalog (optional)
-wlcatalog --port 9000 --db-path ./db/catalog.db --data-path ./data
+wlcatalog --port 9000 --db-url sqlite:///./db/catalog.db --data-path ./data
 
 # Console (optional)
-wlconsole --port 8080 --boss-url http://localhost:8082 --catalog-url http://localhost:9000
+wlconsole --port 8080 \
+  --boss-url http://localhost:8082 \
+  --catalog-url http://localhost:9000 \
+  --secret-key change-me-in-production
 ```
 
 Or with Docker Compose:
