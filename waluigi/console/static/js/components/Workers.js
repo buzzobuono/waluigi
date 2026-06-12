@@ -27,6 +27,7 @@ export default {
       { key: 'url', label: 'URL' },
       { key: 'status', label: 'Status' },
       { key: 'slots', label: 'Slots (Used/Max)', class: 'text-center' },
+      { key: 'affinity', label: 'Affinity' },
       { key: 'last_seen', label: 'Last Seen' }
     ];
 
@@ -99,6 +100,14 @@ export default {
             <span class="text-danger font-weight-bold">{{ item.max_slots - item.free_slots }}</span>
             <span class="text-mutedmx-1">/</span>
             <span class="text-info font-weight-bold">{{ item.max_slots }}</span>
+          </template>
+
+          <template #cell(affinity)="{ item }">
+            <template v-if="(JSON.parse(item.affinity || '[]')).length">
+              <span v-for="tag in JSON.parse(item.affinity)" :key="tag"
+                    class="badge badge-secondary mr-1">{{ tag }}</span>
+            </template>
+            <span v-else class="text-muted">—</span>
           </template>
 
           <template #cell(last_seen)="{ item }">

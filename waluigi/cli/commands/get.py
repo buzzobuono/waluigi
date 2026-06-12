@@ -83,10 +83,13 @@ def get_workers(session: WaluigiSession, output=None) -> None:
         r = session.http.get("/boss/workers", headers=session.headers())
         if not ok(r): return
         rows = data(r)
+        import json as _json
         table(
             [[w.get("url"), color(w.get("status", "")),
-              w.get("max_slots"), w.get("free_slots"), fmt_dt(w.get("last_seen"))] for w in rows],
-            headers=["URL", "STATUS", "MAX_SLOTS", "FREE_SLOTS", "LAST_SEEN"],
+              w.get("max_slots"), w.get("free_slots"),
+              ", ".join(_json.loads(w.get("affinity") or "[]")) or "—",
+              fmt_dt(w.get("last_seen"))] for w in rows],
+            headers=["URL", "STATUS", "MAX_SLOTS", "FREE_SLOTS", "AFFINITY", "LAST_SEEN"],
             output_arg=output, raw=rows,
         )
     except Exception as e:
