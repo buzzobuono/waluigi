@@ -209,7 +209,6 @@ kind: Job
 metadata:
     name: "analytics-by-script-job"
     namespace: "analytics"
-    workdir: "work"
 spec:
     params:
         date: "2026-05-16"

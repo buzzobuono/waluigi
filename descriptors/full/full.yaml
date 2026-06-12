@@ -42,7 +42,6 @@ kind: JobDefinition
 metadata:
     name: "test-job-definition"
     namespace: test
-    workdir: "work"
 spec:
     tasks:
         - id: "env"

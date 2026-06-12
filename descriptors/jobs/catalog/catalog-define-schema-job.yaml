@@ -2,7 +2,6 @@ kind: Job
 metadata:
     name: "catalog-define-schema-job"
     namespace: "catalog"
-    workdir: "work"
 spec:
     jobSpec:
         tasks:

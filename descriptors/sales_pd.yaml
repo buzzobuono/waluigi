@@ -1,6 +1,5 @@
 kind: DAG
 metadata:
-  workdir: "work"
 spec:
   id: "create_sales_dataset_pd"
   namespace: "sales_pd"

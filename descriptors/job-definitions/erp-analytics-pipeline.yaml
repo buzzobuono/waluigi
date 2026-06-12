@@ -8,7 +8,6 @@ kind: JobDefinition
 metadata:
     name: "erp-analytics-pipeline"
     namespace: "analytics"
-    workdir: "work"
 spec:
     tasks:
         - id: "filter_high_value"

@@ -2,7 +2,6 @@ kind: Job
 metadata:
     name: "catalog-create-dataset-job"
     namespace: "catalog"
-    workdir: "work"
 spec:
     jobSpec:
         tasks:

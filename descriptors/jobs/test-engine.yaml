@@ -5,7 +5,6 @@ kind: Job
 metadata:
     name: "orchestration-test-job"
     namespace: "simulation"
-    workdir: "work"
 spec:
     executionPolicy: Stateful
     concurrencyPolicy: Forbid

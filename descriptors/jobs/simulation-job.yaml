@@ -8,7 +8,6 @@ kind: Job
 metadata:
     name: "simulation-job"
     namespace: "simulation"
-    workdir: "work"
 spec:
     params:
         date: "2026-05-15"

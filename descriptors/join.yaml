@@ -6,7 +6,6 @@ x-sources:
 
 kind: DAG
 metadata:
-    workdir: "work"
 spec:
     id:   "join_erp_web"
     namespace: "analytics"

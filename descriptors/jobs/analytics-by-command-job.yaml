@@ -1,7 +1,6 @@
 kind: Job
 metadata:
     name: analytics-by-command-job
-    workdir: "work"
     namespace: "analytics"
 spec:
     params:

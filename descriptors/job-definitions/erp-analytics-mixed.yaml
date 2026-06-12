@@ -8,7 +8,6 @@ kind: JobDefinition
 metadata:
     name: "erp-analytics-mixed"
     namespace: "analytics"
-    workdir: "work"
 spec:
     tasks:
         - id: "custom_filter_step"

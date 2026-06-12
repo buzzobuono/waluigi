@@ -1,6 +1,5 @@
 kind: Job
 metadata:
-    workdir: "work"
     name: "catalog-create-source-job"
     namespace: "catalog"
 spec:

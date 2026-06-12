@@ -6,7 +6,6 @@ x-sources:
 
 kind: DAG
 metadata:
-    workdir: "work"
 spec:
     id:   "test_pivot"
     namespace: "analytics"

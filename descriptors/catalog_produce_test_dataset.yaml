@@ -65,7 +65,6 @@ x-scripts:
 
 kind: DAG
 metadata:
-    workdir: "work"
 spec:
     id:   "catalog_produce_test_dataset"
     namespace: "catalog"

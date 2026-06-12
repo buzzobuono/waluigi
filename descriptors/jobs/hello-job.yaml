@@ -1,7 +1,6 @@
 kind: Job
 metadata:
     name: "hello-job"
-    workdir: "work"
 spec:
     jobSpec:
         tasks:
