@@ -352,11 +352,51 @@ wlctl disable cronjob <id> [--namespace <ns>]
 
 ## run
 
-Run a task locally for development and testing — no Boss, no Worker, no cluster required.
+Run a task or full job locally for development and testing — no Boss, no Worker, no cluster required.
 The command injects the same environment variables that a Worker would inject, so the same
 task scripts that run in production work unchanged on the developer's machine.
 
-### Direct command
+### Run a single task from a descriptor
+
+```bash
+wlctl run --file descriptors/jobs/erp-daily.yaml --task extract \
+    --params date=2026-06-12
+```
+
+Job-level `spec.params` defaults are merged in; `--params` values take precedence.
+The task `config` block is read from the YAML automatically.
+
+Tasks defined via `taskRef.name` are resolved by looking up the corresponding
+`TaskDefinition` in the same YAML file. Both `command` and `script` are supported.
+
+### Run the full job (all tasks in DAG order)
+
+Omit `--task` to run every task in the file, in topological dependency order:
+
+```bash
+wlctl run --file descriptors/jobs/erp-daily.yaml --params date=2026-06-12
+```
+
+Tasks are executed sequentially. If a task fails, execution stops immediately.
+
+Output example:
+```
+[wlctl run job] file      : descriptors/jobs/erp-daily.yaml
+[wlctl run job] namespace : analytics
+[wlctl run job] tasks     : 3  extract → transform → load
+
+── Task 1/3: extract ────────────────────────
+...
+✓ extract  (0.8s)
+
+── Task 2/3: transform ──────────────────────
+...
+✓ transform  (1.2s)
+
+[wlctl run job] completed — 3/3 tasks OK
+```
+
+### Run a direct command
 
 ```bash
 wlctl run "python pipeline/extract.py" \
@@ -365,25 +405,13 @@ wlctl run "python pipeline/extract.py" \
     --catalog-url http://localhost:9000
 ```
 
-### From a YAML descriptor
-
-Extract a task's command/script and config directly from a `Job` or `JobDefinition` file:
-
-```bash
-wlctl run --file descriptors/jobs/erp-daily.yaml --task extract \
-    --params date=2026-06-12
-```
-
-Job-level `spec.params` defaults are merged in; `--params` values take precedence.
-The task `config` block is read from the YAML and passed as `WALUIGI_CONFIG` automatically.
-
 ### Options
 
 | Flag | Description |
 |------|-------------|
 | `cmd` | Shell command to run directly (positional, optional) |
 | `-f` / `--file` | YAML descriptor (`Job` or `JobDefinition`) |
-| `-t` / `--task` | Task ID to extract from `--file` |
+| `-t` / `--task` | Task ID (omit to run the whole job) |
 | `-p` / `--params KEY=VALUE` | Override or supply task params (repeatable) |
 | `-n` / `--namespace` | Catalog namespace (`WALUIGI_CATALOG_NAMESPACE`) |
 | `--catalog-url` | Catalog URL (`WALUIGI_CATALOG_URL`) |
@@ -392,29 +420,14 @@ The task `config` block is read from the YAML and passed as `WALUIGI_CONFIG` aut
 
 | Variable | Value |
 |----------|-------|
-| `WALUIGI_TASK_ID` | `local-run` |
+| `WALUIGI_TASK_ID` | Task ID (or `local-run` for direct commands) |
 | `WALUIGI_JOB_ID` | `local-run` |
 | `WALUIGI_PARAM_<KEY>` | Each merged param (uppercased) |
+| `WALUIGI_ATTRIBUTE_<KEY>` | Each task attribute (uppercased) |
 | `WALUIGI_CONFIG` | Task config JSON (from YAML descriptor) |
 | `WALUIGI_CATALOG_NAMESPACE` | From `--namespace` or pre-existing env var |
 | `WALUIGI_CATALOG_URL` | From `--catalog-url` or pre-existing env var |
 | `PYTHONUNBUFFERED` | `1` |
-
-### Inline script tasks
-
-`wlctl run --file` also supports tasks with a `taskSpec.script` block (inline Python):
-
-```yaml
-- id: process
-  taskSpec:
-    script: |
-      from waluigi.sdk.context import context
-      print(f"date={context.params.date}")
-```
-
-```bash
-wlctl run --file job.yaml --task process --params date=2026-06-12
-```
 
 ---
 
