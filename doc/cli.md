@@ -183,12 +183,12 @@ Displays type, config, description, dates.
 Show the first N rows of a Catalog dataset version.
 
 ```bash
-wlctl preview <dataset-id> [-n <ns>] [-v <version>] [-l <rows>]
+wlctl preview dataset <dataset-id> [-n <ns>] [-v <version>] [-l <rows>]
 ```
 
 ```bash
-wlctl preview web/raw/raw_web -n analytics
-wlctl preview web/raw/raw_web -n analytics --version 2026-06-13T10:00:00.000+00:00 --lines 50
+wlctl preview dataset web/raw/raw_web -n analytics
+wlctl preview dataset web/raw/raw_web -n analytics --version 2026-06-13T10:00:00.000+00:00 --lines 50
 ```
 
 If `--version` is omitted, the latest committed version is used.
@@ -200,11 +200,11 @@ If `--version` is omitted, the latest committed version is used.
 Show upstream (inputs) and downstream (consumers) for a dataset version.
 
 ```bash
-wlctl lineage <dataset-id> [-n <ns>] [-v <version>]
+wlctl lineage dataset <dataset-id> [-n <ns>] [-v <version>]
 ```
 
 ```bash
-wlctl lineage web/clean/clean_web -n analytics
+wlctl lineage dataset web/clean/clean_web -n analytics
 ```
 
 ---
@@ -214,11 +214,11 @@ wlctl lineage web/clean/clean_web -n analytics
 Show data quality check results for a dataset version.
 
 ```bash
-wlctl dq <dataset-id> [-n <ns>] [-v <version>]
+wlctl dq dataset <dataset-id> [-n <ns>] [-v <version>]
 ```
 
 ```bash
-wlctl dq web/clean/clean_web -n analytics
+wlctl dq dataset web/clean/clean_web -n analytics
 ```
 
 Displays overall score and per-rule PASS/FAIL with individual scores.

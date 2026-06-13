@@ -64,21 +64,24 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("-o", "--output",    choices=["json"])
 
     # preview
-    p = sub.add_parser("preview", help="Preview rows of a Catalog dataset")
-    p.add_argument("dataset",           help="Dataset ID (e.g. web/raw/raw_web)")
+    p = sub.add_parser("preview", help="Preview rows of a Catalog resource")
+    p.add_argument("type",              choices=["dataset"], help="Resource type")
+    p.add_argument("target",            help="Dataset ID (e.g. web/raw/raw_web)")
     p.add_argument("-n", "--namespace", help="Namespace")
     p.add_argument("-v", "--version",   help="Version (default: latest committed)")
     p.add_argument("-l", "--lines",     type=int, default=10, help="Number of rows (default: 10)")
 
     # lineage
-    p = sub.add_parser("lineage", help="Show upstream/downstream lineage of a Catalog dataset")
-    p.add_argument("dataset",           help="Dataset ID")
+    p = sub.add_parser("lineage", help="Show upstream/downstream lineage of a Catalog resource")
+    p.add_argument("type",              choices=["dataset"], help="Resource type")
+    p.add_argument("target",            help="Dataset ID")
     p.add_argument("-n", "--namespace", help="Namespace")
     p.add_argument("-v", "--version",   help="Version (default: latest committed)")
 
     # dq
-    p = sub.add_parser("dq", help="Show data quality results for a Catalog dataset version")
-    p.add_argument("dataset",           help="Dataset ID")
+    p = sub.add_parser("dq", help="Show data quality results for a Catalog resource")
+    p.add_argument("type",              choices=["dataset"], help="Resource type")
+    p.add_argument("target",            help="Dataset ID")
     p.add_argument("-n", "--namespace", help="Namespace")
     p.add_argument("-v", "--version",   help="Version (default: latest committed)")
 
@@ -191,12 +194,12 @@ def main() -> None:
         get_logs(session, namespace=ns, task_id=args.task_id,
                  limit=args.lines, follow=args.follow)
     elif args.command == "preview":
-        preview(session, args.dataset, namespace=ns,
+        preview(session, args.target, namespace=ns,
                 version=args.version, lines=args.lines)
     elif args.command == "lineage":
-        lineage(session, args.dataset, namespace=ns, version=args.version)
+        lineage(session, args.target, namespace=ns, version=args.version)
     elif args.command == "dq":
-        dq(session, args.dataset, namespace=ns, version=args.version)
+        dq(session, args.target, namespace=ns, version=args.version)
     elif args.command == "run":
         from waluigi.cli.commands.run import run_task
         run_task(
