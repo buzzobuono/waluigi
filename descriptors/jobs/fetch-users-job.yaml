@@ -1,0 +1,14 @@
+kind: Job
+metadata:
+    name: "fetch-users-job"
+    namespace: "analytics"
+spec:
+    params:
+        date: "2026-06-13"
+    jobSpec:
+        tasks:
+        - id: "fetch_users"
+          taskSpec:
+              command: "python source/api/fetch_users.py"
+          resources:
+              coin: 1
