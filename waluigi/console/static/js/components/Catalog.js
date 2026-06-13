@@ -214,35 +214,39 @@ export default {
     const confirmRef = Vue.ref(null);
 
     async function deleteDataset(item) {
-      const ok = await confirmRef.value?.confirm(
-        `Delete dataset "${item.id}"? This will remove all versions and physical files.`
+      confirmRef.value.ask(
+        `Delete dataset "<b>${item.id}</b>"?<br><small class="text-muted">All versions and physical files will be permanently removed.</small>`,
+        async (confirmed) => {
+          if (!confirmed) return;
+          try {
+            await api.catalogDeleteDataset(nsStore.selected, item.id);
+            await loadFolders(currentFolder.value);
+            if (selDataset.value === item.id) closeDetail();
+          } catch (e) {
+            alert(e.message);
+          }
+        }
       );
-      if (!ok) return;
-      try {
-        await api.catalogDeleteDataset(nsStore.selected, item.id);
-        await loadFolders(currentFolder.value);
-        if (selDataset.value === item.id) closeDetail();
-      } catch (e) {
-        alert(e.message);
-      }
     }
 
     async function deleteVersion(ver) {
-      const ok = await confirmRef.value?.confirm(
-        `Delete version "${ver.version.slice(0, 19)}"? This will remove the file permanently.`
-      );
-      if (!ok) return;
-      try {
-        await api.catalogDeleteVersion(nsStore.selected, selDataset.value, ver.version);
-        const res = await api.catalogDatasetVersions(nsStore.selected, selDataset.value);
-        history.value = Array.isArray(res.data) ? res.data : [];
-        if (selectedVersion.value === ver.version) {
-          selectedVersion.value = null;
-          metadata.value = {};
+      confirmRef.value.ask(
+        `Delete version "<b>${ver.version.slice(0, 19)}</b>"?<br><small class="text-muted">The file will be permanently removed.</small>`,
+        async (confirmed) => {
+          if (!confirmed) return;
+          try {
+            await api.catalogDeleteVersion(nsStore.selected, selDataset.value, ver.version);
+            const res = await api.catalogDatasetVersions(nsStore.selected, selDataset.value);
+            history.value = Array.isArray(res.data) ? res.data : [];
+            if (selectedVersion.value === ver.version) {
+              selectedVersion.value = null;
+              metadata.value = {};
+            }
+          } catch (e) {
+            alert(e.message);
+          }
         }
-      } catch (e) {
-        alert(e.message);
-      }
+      );
     }
 
     function closeDetail() {
@@ -488,7 +492,7 @@ export default {
      </base-panel>
      
      <materialize ref="materializeRef" @done="loadFolders(currentFolder)"></materialize>
-     <confirm-dialog ref="confirmRef"></confirm-dialog>
+     <confirm-dialog title="Confirm" ref="confirmRef"></confirm-dialog>
 
      <!-- create dataset modal -->
      <base-modal ref="newDatasetModalRef" size="md" icon="fas fa-plus"
