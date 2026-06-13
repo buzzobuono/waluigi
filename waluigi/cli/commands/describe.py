@@ -284,7 +284,7 @@ def describe_secret(session: WaluigiSession, namespace=None,
         print(f"Error: {e}")
 
 
-
+def describe_namespace(session: WaluigiSession, namespace=None, output=None) -> None:
     ns = session.resolve_namespace(namespace)
     if not ns: return
     try:
