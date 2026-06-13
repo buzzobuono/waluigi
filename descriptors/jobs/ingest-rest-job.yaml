@@ -1,0 +1,54 @@
+kind: Job
+metadata:
+    name: "ingest-rest-job"
+    namespace: "analytics"
+spec:
+    jobSpec:
+        tasks:
+        - id: "ingest_users"
+          taskRef:
+              name: "IngestRest"
+          config:
+              output:
+                  dataset:     "bronze/api/users"
+                  source:
+                      id:   "local"
+                      type: "LOCAL"
+                  format:      "parquet"
+                  description: "Users from JSONPlaceholder — nested address and company"
+              http:
+                  url: "https://jsonplaceholder.typicode.com/users"
+          resources:
+              coin: 1
+
+        - id: "ingest_posts"
+          taskRef:
+              name: "IngestRest"
+          config:
+              output:
+                  dataset:     "bronze/api/posts"
+                  source:
+                      id:   "local"
+                      type: "LOCAL"
+                  format:      "parquet"
+                  description: "Posts from JSONPlaceholder"
+              http:
+                  url: "https://jsonplaceholder.typicode.com/posts"
+          resources:
+              coin: 1
+
+        - id: "ingest_comments"
+          taskRef:
+              name: "IngestRest"
+          config:
+              output:
+                  dataset:     "bronze/api/comments"
+                  source:
+                      id:   "local"
+                      type: "LOCAL"
+                  format:      "parquet"
+                  description: "Comments from JSONPlaceholder"
+              http:
+                  url: "https://jsonplaceholder.typicode.com/comments"
+          resources:
+              coin: 1
