@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 
 from waluigi.commons.http import AsyncHttpClient
 from waluigi.worker.config.args import args
@@ -14,6 +15,16 @@ def _hash(nsdict):
         f"{k}:{v}"
         for k, v in sorted(nsdict.items())
     )
+
+def _expand_config(obj, env: dict):
+    """Recursively expand ${VAR} placeholders in config string values."""
+    if isinstance(obj, str):
+        return re.sub(r"\$\{([^}]+)\}", lambda m: env.get(m.group(1), m.group(0)), obj)
+    if isinstance(obj, dict):
+        return {k: _expand_config(v, env) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_expand_config(i, env) for i in obj]
+    return obj
 
 class WorkerService:
 
@@ -33,10 +44,10 @@ class WorkerService:
                 env[f"WALUIGI_ATTRIBUTE_{k.upper()}"] = str(v)
             env["WALUIGI_TASK_ID"] = id
             env["WALUIGI_JOB_ID"] = job_id
-            env["WALUIGI_CONFIG"] = json.dumps(config)
             env["WALUIGI_CATALOG_NAMESPACE"] = namespace
             for k, v in (secrets or {}).items():
                 env[f"WALUIGI_SECRET_{k.upper()}"] = str(v)
+            env["WALUIGI_CONFIG"] = json.dumps(_expand_config(config, env))
             if script:
                 env["WALUIGI_SCRIPT"] = script
             logger.info(f"🚀 Forking: {'<inline script>' if script else command}")

@@ -1,10 +1,22 @@
 import json
 import os
+import re
 import subprocess
 import sys
 import time
 
 import yaml
+
+
+def _expand_config(obj, env: dict):
+    """Recursively expand ${VAR} placeholders in config string values."""
+    if isinstance(obj, str):
+        return re.sub(r"\$\{([^}]+)\}", lambda m: env.get(m.group(1), m.group(0)), obj)
+    if isinstance(obj, dict):
+        return {k: _expand_config(v, env) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_expand_config(i, env) for i in obj]
+    return obj
 
 
 def _parse_params(raw: list[str]) -> dict[str, str]:
@@ -119,7 +131,7 @@ def _inject_params(env: dict, job_params: dict, task_params: dict,
     for k, v in attributes.items():
         env[f'WALUIGI_ATTRIBUTE_{k.upper()}'] = str(v)
     if config:
-        env['WALUIGI_CONFIG'] = json.dumps(config)
+        env['WALUIGI_CONFIG'] = json.dumps(_expand_config(config, env))
     return merged
 
 

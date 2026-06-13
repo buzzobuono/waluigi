@@ -19,8 +19,6 @@ Config (WALUIGI_CONFIG, from task config block in YAML):
   page_size     Value for page_size query param (optional)
   description   Dataset description (optional)
 """
-import os
-import re
 import httpx
 import pandas as pd
 from waluigi.sdk.context import context
@@ -29,14 +27,6 @@ from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
-
-def _expand(val: str) -> str:
-    """Expand ${VAR_NAME} placeholders from environment variables."""
-    return re.sub(r"\$\{([^}]+)\}", lambda m: os.environ.get(m.group(1), m.group(0)), val)
-
-
-def _expand_dict(d: dict) -> dict:
-    return {k: _expand(str(v)) if isinstance(v, str) else v for k, v in d.items()}
 
 def _flatten(obj: dict, prefix: str = "", sep: str = "_") -> dict:
     out = {}
@@ -160,8 +150,8 @@ dataset_id  = cfg.dataset_id
 source_id   = cfg.source_id
 fmt         = getattr(cfg, "format",      "parquet")
 description = getattr(cfg, "description", f"HTTP extract from {url}")
-headers     = _expand_dict(_to_dict(getattr(cfg, "headers", None)))
-extra_params= _expand_dict(_to_dict(getattr(cfg, "params",  None)))
+headers     = _to_dict(getattr(cfg, "headers", None))
+extra_params= _to_dict(getattr(cfg, "params",  None))
 data_key    = getattr(cfg, "data_key",    None)
 next_key    = getattr(cfg, "next_key",    "next")
 page_param  = getattr(cfg, "page_param",  None)
