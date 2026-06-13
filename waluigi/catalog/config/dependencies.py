@@ -156,11 +156,13 @@ def lineage_service(
 def dataset_service(
     datasets_repo=Depends(datasets_repository),
     sources_repo=Depends(sources_repository),
+    versions_repo=Depends(versions_repository),
     schema_repo=Depends(schema_repository),
 ) -> DatasetService:
     return DatasetService(
         datasets_repository=datasets_repo,
         sources_repository=sources_repo,
+        versions_repository=versions_repo,
         schema_repository=schema_repo,
     )
 

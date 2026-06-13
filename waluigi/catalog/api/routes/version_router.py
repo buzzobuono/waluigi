@@ -95,6 +95,18 @@ async def preview(namespace: str, dataset_id: str, version: str,
         return ko(f"Read error: {e}", 500)
 
 
+@version_router.delete("/{dataset_id:path}/versions/{version}",
+    summary="Hard-delete a dataset version (removes file and all related records)")
+async def delete_version(namespace: str, dataset_id: str, version: str,
+                         svc: VersionService = Depends(version_service)):
+    try:
+        return ok(svc.delete_version(namespace, dataset_id, version))
+    except ValueError as e:
+        return ko(str(e), 404)
+    except Exception as e:
+        return ko(str(e), 500)
+
+
 @version_router.delete("/{dataset_id:path}/_deprecate/{version}",
     summary="Deprecate a dataset version")
 async def deprecate(namespace: str, dataset_id: str, version: str,

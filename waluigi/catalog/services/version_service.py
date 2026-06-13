@@ -52,6 +52,26 @@ class VersionService:
         return [VersionResponse.from_entity(v)
                 for v in self.versions_repository.list(browse_path)]
 
+    def delete_version(self, namespace: str, dataset_id: str, version: str) -> dict:
+        dataset = self.datasets_repository.get(namespace, dataset_id)
+        if not dataset:
+            raise ValueError("Dataset not found")
+        browse_path = f"{namespace}/{dataset_id}"
+        record = self.versions_repository.get(browse_path, version)
+        if not record:
+            raise ValueError("Version not found")
+        source = self.sources_repository.get(namespace, dataset.source_id)
+        if source:
+            connector = ConnectorFactory.get(source.type, source.config or {})
+            try:
+                connector.delete(record.location)
+            except Exception as e:
+                logger.warning(f"Could not delete file {record.location}: {e}")
+        if not self.versions_repository.delete_hard(browse_path, version):
+            raise ValueError("Version not found")
+        logger.info(f"Deleted {browse_path}@{version}")
+        return {"dataset_id": browse_path, "version": version, "deleted": True}
+
     def deprecate(self, namespace: str, dataset_id: str, version: str) -> dict:
         browse_path = f"{namespace}/{dataset_id}"
         if not self.versions_repository.deprecate(browse_path, version):

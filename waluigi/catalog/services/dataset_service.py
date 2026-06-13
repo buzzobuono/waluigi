@@ -3,8 +3,10 @@ import logging
 from waluigi.catalog.db.base import atomic
 from waluigi.catalog.repositories.dataset_repo import DatasetRepository
 from waluigi.catalog.repositories.source_repo import SourceRepository
+from waluigi.catalog.repositories.version_repo import VersionRepository
 from waluigi.catalog.repositories.schema_repo import SchemaRepository
 from waluigi.catalog.api.schemas import DatasetResponse
+from waluigi.sdk.connectors import ConnectorFactory
 
 logger = logging.getLogger("waluigi")
 
@@ -13,9 +15,11 @@ class DatasetService:
 
     def __init__(self, datasets_repository: DatasetRepository,
                  sources_repository: SourceRepository,
+                 versions_repository: VersionRepository,
                  schema_repository: SchemaRepository):
         self.datasets_repository = datasets_repository
         self.sources_repository  = sources_repository
+        self.versions_repository = versions_repository
         self.schema_repository   = schema_repository
 
     def find(self, namespace: str, status=None,
@@ -64,6 +68,18 @@ class DatasetService:
             self.datasets_repository.get(namespace, id))
 
     def delete(self, namespace: str, id: str) -> bool:
+        dataset = self.datasets_repository.get(namespace, id)
+        if not dataset:
+            return False
+        browse_path = f"{namespace}/{id}"
+        source = self.sources_repository.get(namespace, dataset.source_id)
+        if source:
+            connector = ConnectorFactory.get(source.type, source.config or {})
+            for version in self.versions_repository.list(browse_path):
+                try:
+                    connector.delete(version.location)
+                except Exception as e:
+                    logger.warning(f"Could not delete file {version.location}: {e}")
         return self.datasets_repository.delete(namespace, id)
 
     @atomic

@@ -7,6 +7,7 @@ import BaseButtonGroup from './BaseButtonGroup.js';
 import BaseTable from './BaseTable.js';
 import BaseModal from './BaseModal.js';
 import BaseInput from './BaseInput.js';
+import ConfirmDialog from './ConfirmDialog.js';
 import Materialize from './Materialize.js';
 
 const { computed, watch, onMounted } = Vue;
@@ -14,7 +15,7 @@ const { computed, watch, onMounted } = Vue;
 export default {
   name: 'Catalog',
 
-  components: { BasePage, BasePanel, BaseButton, BaseButtonGroup, BaseTable, BaseModal, BaseInput, Materialize },
+  components: { BasePage, BasePanel, BaseButton, BaseButtonGroup, BaseTable, BaseModal, BaseInput, ConfirmDialog, Materialize },
 
   setup() {
     const columns = [
@@ -210,6 +211,40 @@ export default {
       router.go(-1);
     }
 
+    const confirmRef = Vue.ref(null);
+
+    async function deleteDataset(item) {
+      const ok = await confirmRef.value?.confirm(
+        `Delete dataset "${item.id}"? This will remove all versions and physical files.`
+      );
+      if (!ok) return;
+      try {
+        await api.catalogDeleteDataset(nsStore.selected, item.id);
+        await loadFolders(currentFolder.value);
+        if (selDataset.value === item.id) closeDetail();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function deleteVersion(ver) {
+      const ok = await confirmRef.value?.confirm(
+        `Delete version "${ver.version.slice(0, 19)}"? This will remove the file permanently.`
+      );
+      if (!ok) return;
+      try {
+        await api.catalogDeleteVersion(nsStore.selected, selDataset.value, ver.version);
+        const res = await api.catalogDatasetVersions(nsStore.selected, selDataset.value);
+        history.value = Array.isArray(res.data) ? res.data : [];
+        if (selectedVersion.value === ver.version) {
+          selectedVersion.value = null;
+          metadata.value = {};
+        }
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
     function closeDetail() {
       detailOpen.value = false;
       selFolder.value = null;
@@ -272,7 +307,8 @@ export default {
       selFolder, selDataset, columns_history, history, metadata, detailOpen,
       selectedVersion, currentFolder,
       navigateTo, navigateBreadcrumb, openDataset, closeDetail, goBack,
-      selectVersion, materializeRef,
+      selectVersion, materializeRef, confirmRef,
+      deleteDataset, deleteVersion,
       newDatasetModalRef, newDatasetSaving, newDatasetError, newDatasetSources,
       newDatasetForm, FORMATS, openNewDataset, submitNewDataset,
     };
@@ -359,6 +395,7 @@ export default {
               <base-button icon="fas fa-shield-alt" color="outline-success" title="DQ Expectations"  @click="$router.push('/expectations/' + item.id)" />
               <base-button icon="fas fa-chart-line" color="outline-primary" title="DQ History"       @click="$router.push('/dq-history/'   + item.id)" />
               <base-button icon="fas fa-chart-bar"  color="outline-info"    title="Chart definitions" @click="$router.push('/chart-defs/'   + item.id)" />
+              <base-button icon="fas fa-trash"      color="outline-danger"  title="Delete dataset"    @click="deleteDataset(item)" />
              </base-button-group>
            </template>
         </base-table>
@@ -426,6 +463,12 @@ export default {
                 title="Preview"
                 @click="$router.push({ path: '/datasets/' + selDataset + '/' + item.version })"
               />
+              <base-button
+                icon="fas fa-trash"
+                color="outline-danger"
+                title="Delete version"
+                @click="deleteVersion(item)"
+              />
              </base-button-group>
            </template>
   
@@ -445,6 +488,7 @@ export default {
      </base-panel>
      
      <materialize ref="materializeRef" @done="loadFolders(currentFolder)"></materialize>
+     <confirm-dialog ref="confirmRef"></confirm-dialog>
 
      <!-- create dataset modal -->
      <base-modal ref="newDatasetModalRef" size="md" icon="fas fa-plus"

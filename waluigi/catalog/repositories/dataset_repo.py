@@ -83,6 +83,24 @@ class DatasetRepository(BaseRepository):
     def delete(self, namespace: str, id: str) -> bool:
         browse_path = f"{namespace}/{id}"
         with self._conn() as conn:
+            for tbl in ("schema_columns", "expectations", "charts"):
+                conn.execute(
+                    text(f"DELETE FROM {tbl} WHERE dataset_id = :path"),
+                    {"path": browse_path},
+                )
+            conn.execute(
+                text("DELETE FROM dq_results WHERE dataset_id = :path"),
+                {"path": browse_path},
+            )
+            conn.execute(
+                text("DELETE FROM version_metadata WHERE dataset_id = :path"),
+                {"path": browse_path},
+            )
+            conn.execute(
+                text("DELETE FROM lineage"
+                     " WHERE output_dataset = :path OR input_dataset = :path"),
+                {"path": browse_path},
+            )
             conn.execute(
                 text("DELETE FROM versions WHERE dataset_id = :path"),
                 {"path": browse_path},

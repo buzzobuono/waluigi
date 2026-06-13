@@ -177,6 +177,39 @@ def describe_source(session: WaluigiSession, source_id: str, namespace=None, out
         print(f"Error: {e}")
 
 
+# ── delete dataset ────────────────────────────────────────────────────────────
+
+def delete_dataset(session: WaluigiSession, dataset_id: str, namespace=None) -> None:
+    ns = session.resolve_namespace(namespace)
+    if not ns:
+        return
+    try:
+        r = session.http.delete(
+            f"/catalog/namespaces/{ns}/datasets/{dataset_id}",
+            headers=session.headers(),
+        )
+        if ok(r):
+            print(f"dataset/{dataset_id} deleted")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+def delete_version(session: WaluigiSession, dataset_id: str, version: str,
+                   namespace=None) -> None:
+    ns = session.resolve_namespace(namespace)
+    if not ns:
+        return
+    try:
+        r = session.http.delete(
+            f"/catalog/namespaces/{ns}/datasets/{dataset_id}/versions/{version}",
+            headers=session.headers(),
+        )
+        if ok(r):
+            print(f"dataset/{dataset_id}@{version} deleted")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
 # ── preview ───────────────────────────────────────────────────────────────────
 
 def preview(session: WaluigiSession, dataset_id: str, namespace=None,

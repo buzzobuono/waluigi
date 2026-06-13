@@ -101,6 +101,30 @@ class VersionRepository(BaseRepository):
             )
         return result.rowcount > 0
 
+    def delete_hard(self, dataset_id: str, version: str) -> bool:
+        with self._conn() as conn:
+            conn.execute(
+                text("DELETE FROM version_metadata"
+                     " WHERE dataset_id = :did AND version = :ver"),
+                {"did": dataset_id, "ver": version},
+            )
+            conn.execute(
+                text("DELETE FROM dq_results"
+                     " WHERE dataset_id = :did AND version = :ver"),
+                {"did": dataset_id, "ver": version},
+            )
+            conn.execute(
+                text("DELETE FROM lineage"
+                     " WHERE (output_dataset = :did AND output_version = :ver)"
+                     "    OR (input_dataset  = :did AND input_version  = :ver)"),
+                {"did": dataset_id, "ver": version},
+            )
+            result = conn.execute(
+                text("DELETE FROM versions WHERE dataset_id = :did AND version = :ver"),
+                {"did": dataset_id, "ver": version},
+            )
+        return result.rowcount > 0
+
     def deprecate(self, dataset_id: str, version: str) -> bool:
         with self._conn() as conn:
             result = conn.execute(

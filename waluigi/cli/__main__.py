@@ -21,6 +21,7 @@ from waluigi.cli.commands.catalog   import (
     get_sources, get_datasets, get_versions, get_schema,
     describe_dataset, describe_source,
     preview, lineage, dq,
+    delete_dataset, delete_version,
 )
 
 
@@ -108,9 +109,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # delete
     p = sub.add_parser("delete", help="Delete a resource")
-    p.add_argument("type",   choices=["job", "cronjob", "taskdefinition", "jobdefinition", "namespace", "secret"])
+    p.add_argument("type",   choices=["job", "cronjob", "taskdefinition", "jobdefinition",
+                                      "namespace", "secret", "dataset", "dataset-version"])
     p.add_argument("target", help="Resource ID or namespace name")
     p.add_argument("-n", "--namespace", help="Namespace for task/job")
+    p.add_argument("-v", "--version",   help="Version (required for dataset-version)")
 
     # logs
     p = sub.add_parser("logs", help="Fetch task logs")
@@ -191,7 +194,16 @@ def main() -> None:
     elif args.command == "reset":
         reset(session, args.type, args.target, namespace=ns)
     elif args.command == "delete":
-        delete(session, args.type, args.target, namespace=ns)
+        if args.type == "dataset":
+            delete_dataset(session, args.target, namespace=ns)
+        elif args.type == "dataset-version":
+            ver = getattr(args, "version", None)
+            if not ver:
+                print("Error: --version is required for dataset-version")
+            else:
+                delete_version(session, args.target, ver, namespace=ns)
+        else:
+            delete(session, args.type, args.target, namespace=ns)
     elif args.command == "logs":
         get_logs(session, namespace=ns, task_id=args.task_id,
                  limit=args.lines, follow=args.follow)
