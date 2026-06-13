@@ -75,6 +75,9 @@ def _fetch_all(url: str, headers: dict, extra_params: dict,
     current_url = url
     page = 1
 
+    # Always request JSON
+    req_headers = {"Accept": "application/json", **headers}
+
     qp = dict(extra_params)
     if page_size:
         qp["page_size"] = page_size
@@ -83,8 +86,25 @@ def _fetch_all(url: str, headers: dict, extra_params: dict,
         while current_url:
             call_params = {**qp, page_param: page} if page_param and page > 1 else qp
             print(f"  GET {current_url}  (page {page})")
-            r = client.get(current_url, params=call_params, headers=headers)
-            r.raise_for_status()
+            r = client.get(current_url, params=call_params, headers=req_headers)
+
+            ct = r.headers.get("content-type", "")
+            print(f"  → {r.status_code}  content-type: {ct}")
+
+            if r.status_code != 200:
+                print(f"  Response body: {r.text[:500]}")
+                r.raise_for_status()
+
+            if not r.content:
+                raise RuntimeError(f"Empty response body from {current_url}")
+
+            if "json" not in ct and "javascript" not in ct:
+                preview = r.text[:300].replace("\n", " ")
+                raise RuntimeError(
+                    f"Response is not JSON (content-type: {ct!r}).\n"
+                    f"Body preview: {preview}"
+                )
+
             body  = r.json()
             items = _extract_items(body, data_key)
             if not items:
