@@ -80,7 +80,7 @@ def get_versions(session: WaluigiSession, dataset_id: str, namespace=None, outpu
             return
         rows = data(r)
         table(
-            [[v.get("version"), v.get("status"), v.get("row_count", "—"),
+            [[str(v.get("version")), v.get("status"), v.get("row_count", "—"),
               v.get("size_bytes", "—"), fmt_dt(v.get("createdate"))] for v in rows],
             headers=["VERSION", "STATUS", "ROWS", "BYTES", "CREATED"],
             output_arg=output, raw=rows,
