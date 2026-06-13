@@ -83,6 +83,13 @@ def cron_job_service(db=Depends(get_db)):
     from waluigi.boss.services.cron_job_service import CronJobService
     return CronJobService(db.cron_jobs)
 
+def secrets_repository(db=Depends(get_db)):
+    return db.secrets
+
+def secret_service(db=Depends(get_db)):
+    from waluigi.boss.services.secret_service import SecretService
+    return SecretService(db.secrets)
+
 def boss_engine(db=Depends(get_db)):
     from waluigi.boss.engine import BossEngine
-    return BossEngine(db.tasks, db.workers, db.resources, db.task_definitions, db.task_deps)
+    return BossEngine(db.tasks, db.workers, db.resources, db.task_definitions, db.task_deps, db.secrets)

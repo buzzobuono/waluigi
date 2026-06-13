@@ -79,6 +79,19 @@ def _apply_one(session: WaluigiSession, doc: dict,
             r = session.http.post(f"/boss/namespaces/{ns}/resources",
                                   json=doc, headers=session.headers())
 
+        elif kind == "Secret":
+            ns = namespace_override or doc.get("metadata", {}).get("namespace") \
+                 or session.resolve_namespace(None)
+            if not ns: return
+            name = doc.get("metadata", {}).get("name", "").strip()
+            if not name:
+                print("Error: metadata.name (secret group name) is required"); return
+            spec = doc.get("spec", {})
+            if not isinstance(spec, dict):
+                print("Error: spec must be a dict of KEY: value pairs"); return
+            r = session.http.post(f"/boss/namespaces/{ns}/secrets/{name}",
+                                  json=spec, headers=session.headers())
+
         else:
             print(f"Error: kind '{kind}' not supported"); return
 

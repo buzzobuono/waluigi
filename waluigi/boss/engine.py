@@ -21,12 +21,14 @@ class BossEngine:
                  worker_repo: WorkerRepository,
                  resource_repo: ResourceRepository,
                  task_definition_repo: TaskDefinitionRepository | None = None,
-                 task_deps_repo: TaskDepsRepository | None = None):
+                 task_deps_repo: TaskDepsRepository | None = None,
+                 secret_repo=None):
         self.tasks            = task_repo
         self.task_deps        = task_deps_repo
         self.workers          = worker_repo
         self.resources        = resource_repo
         self.task_definitions = task_definition_repo
+        self.secrets          = secret_repo
 
     # ── Registration ─────────────────────────────────────────────────────────
 
@@ -177,6 +179,12 @@ class BossEngine:
         )
 
     def _dispatch(self, namespace: str, job_metadata: dict, task) -> str:
+        secrets = {}
+        if self.secrets is not None:
+            try:
+                secrets = self.secrets.get_all_for_namespace(namespace)
+            except Exception:
+                pass
         payload = {
             "type":        task.type,
             "command":     task.command,
@@ -188,6 +196,7 @@ class BossEngine:
             "attributes":  vars(task.attributes),
             "config":      task.config,
             "resources":   task.resources,
+            "secrets":     secrets,
         }
 
         available = self.workers.get_available()

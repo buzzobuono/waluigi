@@ -7,6 +7,7 @@ from waluigi.cli.commands.apply     import apply
 from waluigi.cli.commands.get       import (
     get_namespaces, get_jobs, get_tasks, get_resources,
     get_workers, get_task_definitions, get_job_definitions, get_cron_jobs, get_users,
+    get_secrets,
 )
 from waluigi.cli.commands.describe  import (
     describe_job, describe_task, describe_task_definition,
@@ -39,7 +40,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("logout", help="Remove saved token")
 
     # apply
-    p = sub.add_parser("apply", help="Apply a YAML descriptor (Namespace, Job, CronJob, JobDefinition, TaskDefinition, NamespaceResources, User)")
+    p = sub.add_parser("apply", help="Apply a YAML descriptor (Namespace, Job, CronJob, JobDefinition, TaskDefinition, NamespaceResources, Secret, User)")
     p.add_argument("-f", "--file",      required=True, help="Path to YAML file")
     p.add_argument("-n", "--namespace", help="Override namespace from descriptor metadata")
 
@@ -47,7 +48,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("get", help="List resources")
     p.add_argument("type", choices=["namespaces", "jobs", "tasks", "resources",
                                     "workers", "taskdefinitions", "jobdefinitions",
-                                    "cronjobs", "users",
+                                    "cronjobs", "users", "secrets",
                                     "sources", "datasets", "versions", "schema"])
     p.add_argument("-n", "--namespace", help="Namespace (auto-detected if token has one)")
     p.add_argument("-j", "--job_id",    help="Filter tasks by job ID")
@@ -107,7 +108,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # delete
     p = sub.add_parser("delete", help="Delete a resource")
-    p.add_argument("type",   choices=["job", "cronjob", "taskdefinition", "jobdefinition", "namespace"])
+    p.add_argument("type",   choices=["job", "cronjob", "taskdefinition", "jobdefinition", "namespace", "secret"])
     p.add_argument("target", help="Resource ID or namespace name")
     p.add_argument("-n", "--namespace", help="Namespace for task/job")
 
@@ -160,6 +161,7 @@ def main() -> None:
             "jobdefinitions":  lambda: get_job_definitions(session, namespace=ns, output=out),
             "cronjobs":        lambda: get_cron_jobs(session, namespace=ns, output=out),
             "users":           lambda: get_users(session, output=out),
+            "secrets":         lambda: get_secrets(session, namespace=ns, output=out),
             "sources":         lambda: get_sources(session, namespace=ns, output=out),
             "datasets":        lambda: get_datasets(session, namespace=ns, status=args.status, output=out),
             "versions":        lambda: get_versions(session, dataset_id, namespace=ns, output=out),

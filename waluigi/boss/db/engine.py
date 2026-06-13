@@ -99,6 +99,15 @@ _t_cron_jobs = Table("cron_jobs", _meta,
     PrimaryKeyConstraint("namespace", "id"),
 )
 
+_t_secrets = Table("secrets", _meta,
+    Column("namespace",  Text, nullable=False),
+    Column("name",       Text, nullable=False),
+    Column("data",       Text, nullable=False, default="{}"),
+    Column("createdate", Text, nullable=False),
+    Column("updatedate", Text, nullable=False),
+    PrimaryKeyConstraint("namespace", "name"),
+)
+
 
 def create_boss_engine(url: str):
     kwargs = {"pool_pre_ping": True}

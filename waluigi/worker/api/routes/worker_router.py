@@ -46,6 +46,7 @@ async def dispatch(
         attributes = body.attributes
         config     = body.config
         resources  = body.resources
+        secrets    = body.secrets
         
         if body.type:
             from waluigi.tasks import get_command
@@ -71,7 +72,7 @@ async def dispatch(
     
         try:
             asyncio.create_task(
-                worker_service.run_command_async(command, id, job_id, namespace, params, attributes, config, resources, script)
+                worker_service.run_command_async(command, id, job_id, namespace, params, attributes, config, resources, script, secrets)
             )
         except Exception as e:
             logger.error(f"Error: {e}")

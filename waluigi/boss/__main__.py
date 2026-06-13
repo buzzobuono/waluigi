@@ -22,6 +22,7 @@ from waluigi.boss.api.routes.resource_router          import router as resource_
 from waluigi.boss.api.routes.task_definition_router   import router as task_definition_router
 from waluigi.boss.api.routes.job_definition_router    import router as job_definition_router
 from waluigi.boss.api.routes.cron_job_router          import router as cron_job_router
+from waluigi.boss.api.routes.secret_router            import router as secret_router
 
 logger = logging.getLogger("waluigi")
 
@@ -39,6 +40,7 @@ app.include_router(resource_router)
 app.include_router(task_definition_router)
 app.include_router(job_definition_router)
 app.include_router(cron_job_router)
+app.include_router(secret_router)
 
 
 def main():
@@ -59,7 +61,7 @@ def main():
     init_db(args.db_url)
     db = get_db()
 
-    engine      = BossEngine(db.tasks, db.workers, db.resources, db.task_definitions, db.task_deps)
+    engine      = BossEngine(db.tasks, db.workers, db.resources, db.task_definitions, db.task_deps, db.secrets)
     job_svc     = JobService(db.jobs)
     cron_svc    = CronJobService(db.cron_jobs)
     job_def_svc = JobDefinitionService(db.job_definitions)

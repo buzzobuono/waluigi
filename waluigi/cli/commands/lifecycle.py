@@ -99,6 +99,11 @@ def delete(session: WaluigiSession, scope: str, target: str, namespace=None) -> 
             if not ns: return
             r = session.http.delete(f"/boss/namespaces/{ns}/job-definitions/{target}",
                                     headers=session.headers())
+        elif scope == "secret":
+            ns = session.resolve_namespace(namespace)
+            if not ns: return
+            r = session.http.delete(f"/boss/namespaces/{ns}/secrets/{target}",
+                                    headers=session.headers())
         else:
             r = session.http.delete(f"/boss/namespaces/{target}",
                                     headers=session.headers())

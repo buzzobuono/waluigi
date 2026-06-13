@@ -21,7 +21,7 @@ class WorkerService:
         self.slot_manager = slot_manager
         self._boss = AsyncHttpClient(args.boss_url, timeout=5)
 
-    async def run_command_async(self, command, id, job_id, namespace, params, attributes, config, resources, script=None):
+    async def run_command_async(self, command, id, job_id, namespace, params, attributes, config, resources, script=None, secrets=None):
         try:
             await self._update_boss(namespace, id, params, attributes, resources, "RUNNING")
 
@@ -35,6 +35,8 @@ class WorkerService:
             env["WALUIGI_JOB_ID"] = job_id
             env["WALUIGI_CONFIG"] = json.dumps(config)
             env["WALUIGI_CATALOG_NAMESPACE"] = namespace
+            for k, v in (secrets or {}).items():
+                env[f"WALUIGI_SECRET_{k.upper()}"] = str(v)
             if script:
                 env["WALUIGI_SCRIPT"] = script
             logger.info(f"🚀 Forking: {'<inline script>' if script else command}")

@@ -163,6 +163,22 @@ def get_job_definitions(session: WaluigiSession, namespace=None, output=None) ->
         print(f"Error: {e}")
 
 
+def get_secrets(session: WaluigiSession, namespace=None, output=None) -> None:
+    ns = session.resolve_namespace(namespace)
+    if not ns: return
+    try:
+        r = session.http.get(f"/boss/namespaces/{ns}/secrets", headers=session.headers())
+        if not ok(r): return
+        names = data(r)
+        table(
+            [[name] for name in names],
+            headers=["NAME"],
+            output_arg=output, raw=names,
+        )
+    except Exception as e:
+        print(f"Error: {e}")
+
+
 def get_users(session: WaluigiSession, output=None) -> None:
     try:
         r = session.http.get("/auth/users", headers=session.headers())

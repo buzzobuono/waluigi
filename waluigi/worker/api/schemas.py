@@ -12,4 +12,5 @@ class ExecuteTaskRequest(BaseModel):
     attributes: Dict[str, Any] = Field(default_factory=dict, description="Task custom attributes")
     config: Dict[str, Any] = Field(default_factory=dict, description="Task configuration")
     resources: Dict[str, Any] = Field(default_factory=dict, description="Resource allocations or constraints")
+    secrets: Dict[str, str] = Field(default_factory=dict, description="Namespace secrets injected as env vars")
   
