@@ -19,7 +19,7 @@ def _parse_params(raw: list[str]) -> dict[str, str]:
 
 def _extract_from_yaml(file_path: str, task_id: str) -> tuple:
     """
-    Returns (command, script, config, job_params, task_params) for the given task_id.
+    Returns (command, script, config, job_params, task_params, task_attributes) for the given task_id.
     Supports multi-document YAMLs (---).
     """
     with open(file_path) as f:
@@ -46,9 +46,10 @@ def _extract_from_yaml(file_path: str, task_id: str) -> tuple:
                 dict(task.get('config', {})),
                 job_params,
                 dict(task.get('params', {})),
+                dict(task.get('attributes', {})),
             )
 
-    return None, None, {}, {}, {}
+    return None, None, {}, {}, {}, {}
 
 
 def run_task(cmd, file, task_id, params, namespace, catalog_url):
@@ -57,12 +58,13 @@ def run_task(cmd, file, task_id, params, namespace, catalog_url):
     config = {}
     job_params = {}
     task_params = {}
+    task_attributes = {}
 
     if file:
         if not task_id:
             print("Error: --task required when --file is specified", file=sys.stderr)
             sys.exit(1)
-        extracted_cmd, script, config, job_params, task_params = _extract_from_yaml(file, task_id)
+        extracted_cmd, script, config, job_params, task_params, task_attributes = _extract_from_yaml(file, task_id)
         if cmd is None:
             cmd = extracted_cmd
         if cmd is None and script is None:
@@ -92,6 +94,9 @@ def run_task(cmd, file, task_id, params, namespace, catalog_url):
     merged = {**job_params, **task_params, **parsed_params}
     for k, v in merged.items():
         env[f'WALUIGI_PARAM_{k.upper()}'] = str(v)
+
+    for k, v in task_attributes.items():
+        env[f'WALUIGI_ATTRIBUTE_{k.upper()}'] = str(v)
 
     if config:
         env['WALUIGI_CONFIG'] = json.dumps(config)
