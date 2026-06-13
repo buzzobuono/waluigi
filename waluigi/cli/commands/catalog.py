@@ -264,7 +264,7 @@ def dq(session: WaluigiSession, dataset_id: str, namespace=None,
             return
         result = data(r)
         score  = result.get("score")
-        checks = result.get("checks") or []
+        checks = result.get("details") or []
 
         print(f"Dataset : {dataset_id}")
         print(f"Version : {v}")
@@ -272,9 +272,9 @@ def dq(session: WaluigiSession, dataset_id: str, namespace=None,
         print()
         if checks:
             table(
-                [[c.get("rule_id"), "PASS" if c.get("passed") else "FAIL",
+                [[c.get("rule_id"), "PASS" if c.get("success") else "FAIL",
                   f"{c.get('score', 0):.2%}" if c.get('score') is not None else "—",
-                  c.get("message") or ""] for c in checks],
+                  c.get("error") or ""] for c in checks],
                 headers=["RULE", "RESULT", "SCORE", "MESSAGE"],
             )
         else:
