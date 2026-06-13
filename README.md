@@ -242,7 +242,7 @@ Reference reusable transformations without writing any code:
     coin: 1
 ```
 
-Available types: `FilterDataset`, `SelectColumns`, `AddDerivedColumns`, `AggregateDataset`, `JoinDatasets`, `MergeDatasets`, `PivotDataset`, `DeduplicateDataset`, `CatalogCreateDataset`, `CatalogCreateSource`, `CatalogDefineSchema`, `CatalogSetExpectations`, `CatalogSetCharts`.
+Available types: `FilterDataset`, `SelectColumns`, `AddDerivedColumns`, `AggregateDataset`, `JoinDatasets`, `MergeDatasets`, `PivotDataset`, `DeduplicateDataset`, `CatalogCreateDataset`, `CatalogCreateSource`, `CatalogDefineSchema`, `CatalogSetExpectations`, `CatalogSetCharts`, `FetchHttp`.
 
 → Full reference: [doc/built-in-tasks.md](doc/built-in-tasks.md)
 

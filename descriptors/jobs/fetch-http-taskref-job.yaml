@@ -1,0 +1,45 @@
+kind: Job
+metadata:
+    name: "fetch-http-taskref-job"
+    namespace: "analytics"
+spec:
+    jobSpec:
+        tasks:
+        - id: "fetch_users"
+          taskRef:
+              name: "FetchHttp"
+          params:
+              url: "https://jsonplaceholder.typicode.com/users"
+          config:
+              dataset_id:  "api/users/raw"
+              source_id:   "api-local"
+              format:      "parquet"
+              description: "Users from JSONPlaceholder — nested address and company"
+          resources:
+              coin: 1
+
+        - id: "fetch_posts"
+          taskRef:
+              name: "FetchHttp"
+          params:
+              url: "https://jsonplaceholder.typicode.com/posts"
+          config:
+              dataset_id:  "api/posts/raw"
+              source_id:   "api-local"
+              format:      "parquet"
+              description: "Posts from JSONPlaceholder"
+          resources:
+              coin: 1
+
+        - id: "fetch_comments"
+          taskRef:
+              name: "FetchHttp"
+          params:
+              url: "https://jsonplaceholder.typicode.com/comments"
+          config:
+              dataset_id:  "api/comments/raw"
+              source_id:   "api-local"
+              format:      "parquet"
+              description: "Comments from JSONPlaceholder"
+          resources:
+              coin: 1

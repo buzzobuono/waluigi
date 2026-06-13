@@ -14,6 +14,8 @@ REGISTRY = {
     "PivotDataset":           "waluigi.tasks.pivot_dataset",
     "DeduplicateDataset":     "waluigi.tasks.deduplicate_dataset",
     "AddDerivedColumns":      "waluigi.tasks.add_derived_columns",
+    # — ingestion —
+    "FetchHttp":              "waluigi.tasks.fetch_http",
 }
 
 def get_command(task_type: str) -> str:

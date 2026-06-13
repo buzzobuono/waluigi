@@ -639,3 +639,40 @@ config:
   resources:
     coin: 1
 ```
+
+---
+
+## FetchHttp
+
+Calls an HTTP JSON endpoint, flattens nested objects, and writes the result as a Catalog dataset.
+Supports pagination via `next` link or `page` query parameter.
+
+```yaml
+- id: fetch_users
+  taskRef:
+    name: FetchHttp
+  params:
+    url: "https://api.example.com/v1/users"
+  config:
+    dataset_id:   "api/users/raw"        # Catalog dataset path
+    source_id:    "api-local"            # Catalog source for local storage
+    format:       "parquet"              # parquet (default), csv, json
+    description:  "Users from external API"
+    # optional
+    headers:      {}                     # HTTP request headers
+    params:       {}                     # extra query params
+    data_key:     "data"                 # key containing list in response (auto-detected)
+    next_key:     "next"                 # key for next-page URL
+    page_param:   "page"                 # query param for page-number pagination
+    page_size:    100                    # value for page_size query param
+  resources:
+    coin: 1
+```
+
+Nested fields are flattened with underscore separator:
+
+| Raw JSON | Flat column |
+|----------|-------------|
+| `address.city` | `address_city` |
+| `company.name` | `company_name` |
+| `geo.lat` | `address_geo_lat` |
