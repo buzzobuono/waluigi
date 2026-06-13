@@ -70,6 +70,7 @@ const App = {
           { path: '/job-definitions',  label: 'Job Definitions',  icon: 'fa-list-alt' },
           { path: '/cron-jobs',        label: 'Cron Jobs',        icon: 'fa-clock' },
           { path: '/resources',        label: 'Resources',        icon: 'fa-chart-bar' },
+          { path: '/secrets',          label: 'Secrets',          icon: 'fa-key' },
         ]
       },
       {

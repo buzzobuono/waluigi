@@ -22,6 +22,23 @@ class SecretRepository(BaseRepository):
             ).fetchall()
             return [r[0] for r in rows]
 
+    def get_keys(self, namespace: str, name: str) -> list[str] | None:
+        """Return the key names of a secret group (no values)."""
+        with self._conn() as conn:
+            row = conn.execute(
+                select(_s.data, _s.createdate, _s.updatedate).where(
+                    and_(_s.namespace == namespace, _s.name == name)
+                )
+            ).fetchone()
+        if row is None:
+            return None
+        try:
+            d = json.loads(row[0]) if isinstance(row[0], str) else (row[0] or {})
+            return {"name": name, "keys": list(d.keys()),
+                    "createdate": row[1], "updatedate": row[2]}
+        except (json.JSONDecodeError, TypeError):
+            return {"name": name, "keys": [], "createdate": row[1], "updatedate": row[2]}
+
     def upsert(self, namespace: str, name: str, data: dict) -> None:
         now = _now()
         with self._conn() as conn:

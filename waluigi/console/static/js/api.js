@@ -146,6 +146,12 @@ export const api = {
   resources:      (ns)        => _get(`/boss/namespaces/${_enc(ns)}/resources`).then(_unwrap),
   applyResources: (ns, spec)  => _postJson(`/boss/namespaces/${_enc(ns)}/resources`, { kind: 'NamespaceResources', spec }).then(_unwrap),
 
+  // ── Boss — Secrets (namespace-scoped) ────────────────────────────────────
+  secrets:       (ns)              => _get(`/boss/namespaces/${_enc(ns)}/secrets`).then(_unwrap),
+  secretKeys:    (ns, name)        => _get(`/boss/namespaces/${_enc(ns)}/secrets/${_enc(name)}`).then(_unwrap),
+  upsertSecret:  (ns, name, data)  => _postJson(`/boss/namespaces/${_enc(ns)}/secrets/${_enc(name)}`, data).then(_unwrap),
+  deleteSecret:  (ns, name)        => _delete(`/boss/namespaces/${_enc(ns)}/secrets/${_enc(name)}`).then(_unwrap),
+
   // ── Catalog ───────────────────────────────────────────────────────────────
   // All namespace-scoped catalog APIs take `ns` (namespace) as first argument.
   // Global APIs (DQ rules/suite) remain namespace-free.

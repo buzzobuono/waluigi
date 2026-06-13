@@ -14,6 +14,14 @@ async def list_secrets(namespace: str, svc=Depends(secret_service)):
     return ok(svc.list_names(namespace))
 
 
+@router.get("/{name}")
+async def get_secret_keys(namespace: str, name: str, svc=Depends(secret_service)):
+    result = svc.get_keys(namespace, name)
+    if result is None:
+        return ko(f"Secret '{name}' not found in namespace '{namespace}'", status=404)
+    return ok(result)
+
+
 @router.post("/{name}")
 async def upsert_secret(namespace: str, name: str, request: Request,
                         svc=Depends(secret_service),
