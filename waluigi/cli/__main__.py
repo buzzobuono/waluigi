@@ -110,10 +110,10 @@ def _build_parser() -> argparse.ArgumentParser:
     # delete
     p = sub.add_parser("delete", help="Delete a resource")
     p.add_argument("type",   choices=["job", "cronjob", "taskdefinition", "jobdefinition",
-                                      "namespace", "secret", "dataset", "dataset-version"])
-    p.add_argument("target", help="Resource ID or namespace name")
-    p.add_argument("-n", "--namespace", help="Namespace for task/job")
-    p.add_argument("-v", "--version",   help="Version (required for dataset-version)")
+                                      "namespace", "secret", "dataset", "version"])
+    p.add_argument("target", help="Resource ID / version / namespace name")
+    p.add_argument("-n", "--namespace", help="Namespace")
+    p.add_argument("-d", "--dataset",   help="Dataset ID (required for version)")
 
     # logs
     p = sub.add_parser("logs", help="Fetch task logs")
@@ -196,12 +196,12 @@ def main() -> None:
     elif args.command == "delete":
         if args.type == "dataset":
             delete_dataset(session, args.target, namespace=ns)
-        elif args.type == "dataset-version":
-            ver = getattr(args, "version", None)
-            if not ver:
-                print("Error: --version is required for dataset-version")
+        elif args.type == "version":
+            dataset_id = getattr(args, "dataset", None)
+            if not dataset_id:
+                print("Error: --dataset is required for version")
             else:
-                delete_version(session, args.target, ver, namespace=ns)
+                delete_version(session, dataset_id, args.target, namespace=ns)
         else:
             delete(session, args.type, args.target, namespace=ns)
     elif args.command == "logs":
