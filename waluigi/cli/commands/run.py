@@ -60,12 +60,17 @@ def _resolve_task(task: dict, taskdefs: dict) -> tuple[str | None, str | None]:
     if task_spec:
         return task_spec.get('command'), task_spec.get('script')
 
-    task_ref  = task.get('taskRef') or {}
-    ref_name  = task_ref.get('name')
+    task_ref = task.get('taskRef') or {}
+    ref_name = task_ref.get('name')
     if ref_name:
+        # 1. TaskDefinition in the same YAML file
         defn = taskdefs.get(ref_name)
         if defn:
             return defn.get('command'), defn.get('script')
+        # 2. Built-in registry
+        from waluigi.tasks import REGISTRY
+        if ref_name in REGISTRY:
+            return f"python -m {REGISTRY[ref_name]}", None
         return None, None   # unresolvable
 
     return None, None
