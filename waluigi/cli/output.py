@@ -60,4 +60,4 @@ def table(rows, headers, output_arg=None, raw=None):
     elif not rows:
         print("No results found.")
     else:
-        print(tabulate(rows, headers=headers, tablefmt="plain"))
+        print(tabulate(rows, headers=headers, tablefmt="plain", disable_numparse=True))
