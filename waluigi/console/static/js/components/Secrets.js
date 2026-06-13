@@ -1,5 +1,6 @@
 import { api }          from '../api.js';
 import { nsStore }      from '../store.js';
+import { fmtDt }        from '../utils.js';
 import BasePage          from './BasePage.js';
 import BasePanel         from './BasePanel.js';
 import BaseTable         from './BaseTable.js';
@@ -39,11 +40,6 @@ export default {
     );
 
     const hasNs = computed(() => !!nsStore.selected);
-
-    function fmtDate(iso) {
-      if (!iso) return '—';
-      return iso.slice(0, 16).replace('T', ' ');
-    }
 
     // ── load ──────────────────────────────────────────────────────────────────
 
@@ -138,7 +134,7 @@ export default {
     return {
       nsStore, items, loading, saving, pageError, formError,
       mode, modalTitle, form, columns: COLUMNS, hasNs,
-      modalRef, confirmRef, fmtDate,
+      modalRef, confirmRef, fmtDt,
       load, openCreate, openEdit, addPair, removePair, submitForm, deleteItem,
     };
   },
@@ -192,7 +188,7 @@ export default {
           </template>
 
           <template #cell(updated)="{ item }">
-            <small class="text-muted">{{ fmtDate(item.updatedate) }}</small>
+            <small class="text-muted">{{ fmtDt(item.updatedate) }}</small>
           </template>
 
           <template #cell(actions)="{ item }">
