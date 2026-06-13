@@ -203,7 +203,8 @@ def preview(session: WaluigiSession, dataset_id: str, namespace=None,
         print(f"Version : {v}")
         print(f"Rows    : {len(rows)} (showing up to {lines})")
         print()
-        print(tabulate(rows, headers=columns, tablefmt="plain"))
+        row_lists = [[row.get(c) for c in columns] for row in rows]
+        print(tabulate(row_lists, headers=columns, tablefmt="plain"))
     except Exception as e:
         print(f"Error: {e}")
 
