@@ -16,6 +16,11 @@ from waluigi.cli.commands.lifecycle import (
     pause, resume, cancel, reset, delete, enable_cron_job, disable_cron_job,
 )
 from waluigi.cli.commands.logs      import get_logs
+from waluigi.cli.commands.catalog   import (
+    get_sources, get_datasets, get_versions, get_schema,
+    describe_dataset, describe_source,
+    preview, lineage, dq,
+)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -42,18 +47,40 @@ def _build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("get", help="List resources")
     p.add_argument("type", choices=["namespaces", "jobs", "tasks", "resources",
                                     "workers", "taskdefinitions", "jobdefinitions",
-                                    "cronjobs", "users"])
+                                    "cronjobs", "users",
+                                    "sources", "datasets", "versions", "schema"])
     p.add_argument("-n", "--namespace", help="Namespace (auto-detected if token has one)")
     p.add_argument("-j", "--job_id",    help="Filter tasks by job ID")
-    p.add_argument("-s", "--status",    help="Filter jobs by status")
+    p.add_argument("-s", "--status",    help="Filter jobs or datasets by status")
+    p.add_argument("-d", "--dataset",   help="Dataset ID (required for versions and schema)")
     p.add_argument("-o", "--output",    choices=["json"])
 
     # describe
     p = sub.add_parser("describe", help="Show full details of a resource")
-    p.add_argument("type",   choices=["namespace", "job", "task", "taskdefinition", "jobdefinition", "cronjob"])
-    p.add_argument("target", help="Resource ID or name (namespace name for 'namespace')")
+    p.add_argument("type",   choices=["namespace", "job", "task", "taskdefinition",
+                                      "jobdefinition", "cronjob", "dataset", "source"])
+    p.add_argument("target", help="Resource ID or name")
     p.add_argument("-n", "--namespace", help="Namespace (auto-detected if token has one)")
     p.add_argument("-o", "--output",    choices=["json"])
+
+    # preview
+    p = sub.add_parser("preview", help="Preview rows of a Catalog dataset")
+    p.add_argument("dataset",           help="Dataset ID (e.g. web/raw/raw_web)")
+    p.add_argument("-n", "--namespace", help="Namespace")
+    p.add_argument("-v", "--version",   help="Version (default: latest committed)")
+    p.add_argument("-l", "--lines",     type=int, default=10, help="Number of rows (default: 10)")
+
+    # lineage
+    p = sub.add_parser("lineage", help="Show upstream/downstream lineage of a Catalog dataset")
+    p.add_argument("dataset",           help="Dataset ID")
+    p.add_argument("-n", "--namespace", help="Namespace")
+    p.add_argument("-v", "--version",   help="Version (default: latest committed)")
+
+    # dq
+    p = sub.add_parser("dq", help="Show data quality results for a Catalog dataset version")
+    p.add_argument("dataset",           help="Dataset ID")
+    p.add_argument("-n", "--namespace", help="Namespace")
+    p.add_argument("-v", "--version",   help="Version (default: latest committed)")
 
     # cancel / pause / resume
     for cmd in ("cancel", "pause", "resume"):
@@ -119,6 +146,7 @@ def main() -> None:
     elif args.command == "apply":
         apply(session, args.file, namespace_override=ns)
     elif args.command == "get":
+        dataset_id = getattr(args, "dataset", None)
         {
             "namespaces":      lambda: get_namespaces(session, output=out),
             "jobs":            lambda: get_jobs(session, namespace=ns, status=args.status, output=out),
@@ -129,6 +157,10 @@ def main() -> None:
             "jobdefinitions":  lambda: get_job_definitions(session, namespace=ns, output=out),
             "cronjobs":        lambda: get_cron_jobs(session, namespace=ns, output=out),
             "users":           lambda: get_users(session, output=out),
+            "sources":         lambda: get_sources(session, namespace=ns, output=out),
+            "datasets":        lambda: get_datasets(session, namespace=ns, status=args.status, output=out),
+            "versions":        lambda: get_versions(session, dataset_id, namespace=ns, output=out),
+            "schema":          lambda: get_schema(session, dataset_id, namespace=ns, output=out),
         }[args.type]()
     elif args.command == "describe":
         {
@@ -138,6 +170,8 @@ def main() -> None:
             "taskdefinition": lambda: describe_task_definition(session, namespace=ns, defn_id=args.target, output=out),
             "jobdefinition":  lambda: describe_job_definition(session, namespace=ns, defn_id=args.target, output=out),
             "cronjob":        lambda: describe_cron_job(session, namespace=ns, cron_id=args.target, output=out),
+            "dataset":        lambda: describe_dataset(session, args.target, namespace=ns, output=out),
+            "source":         lambda: describe_source(session, args.target, namespace=ns, output=out),
         }[args.type]()
     elif args.command == "enable":
         enable_cron_job(session, namespace=ns, cron_id=args.target)
@@ -156,6 +190,13 @@ def main() -> None:
     elif args.command == "logs":
         get_logs(session, namespace=ns, task_id=args.task_id,
                  limit=args.lines, follow=args.follow)
+    elif args.command == "preview":
+        preview(session, args.dataset, namespace=ns,
+                version=args.version, lines=args.lines)
+    elif args.command == "lineage":
+        lineage(session, args.dataset, namespace=ns, version=args.version)
+    elif args.command == "dq":
+        dq(session, args.dataset, namespace=ns, version=args.version)
     elif args.command == "run":
         from waluigi.cli.commands.run import run_task
         run_task(

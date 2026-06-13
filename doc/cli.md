@@ -104,6 +104,38 @@ wlctl get cronjobs [--namespace <ns>]
 
 Columns: `ID`, `SCHEDULE`, `TIMEZONE`, `ENABLED`, `LAST_RUN`, `NEXT_RUN`.
 
+### Sources (Catalog)
+
+```bash
+wlctl get sources [-n <ns>]
+```
+
+Columns: `ID`, `TYPE`, `DESCRIPTION`, `CREATED`.
+
+### Datasets (Catalog)
+
+```bash
+wlctl get datasets [-n <ns>] [--status draft|in_review|approved|deprecated]
+```
+
+Columns: `ID`, `FORMAT`, `SOURCE`, `STATUS`, `DESCRIPTION`, `UPDATED`.
+
+### Versions of a dataset (Catalog)
+
+```bash
+wlctl get versions -d <dataset-id> [-n <ns>]
+```
+
+Columns: `VERSION`, `STATUS`, `ROWS`, `BYTES`, `CREATED`.
+
+### Schema of a dataset (Catalog)
+
+```bash
+wlctl get schema -d <dataset-id> [-n <ns>]
+```
+
+Columns: `COLUMN`, `TYPE`, `PII`, `STATUS`, `DESCRIPTION`.
+
 ---
 
 ## describe
@@ -113,18 +145,14 @@ Show detailed information about a definition or job.
 ### Job Definition
 
 ```bash
-wlctl describe job-definition <name> [--namespace <ns>]
+wlctl describe jobdefinition <name> [--namespace <ns>]
 ```
-
-Displays metadata and a task dependency tree.
 
 ### Task Definition
 
 ```bash
-wlctl describe task-definition <name> [--namespace <ns>]
+wlctl describe taskdefinition <name> [--namespace <ns>]
 ```
-
-Displays metadata and script/command.
 
 ### Job
 
@@ -132,7 +160,68 @@ Displays metadata and script/command.
 wlctl describe job <job_id> [--namespace <ns>]
 ```
 
-Displays job metadata and a flat task list with dependency info.
+### Dataset (Catalog)
+
+```bash
+wlctl describe dataset <dataset-id> [-n <ns>]
+```
+
+Displays format, source, status, description, dates.
+
+### Source (Catalog)
+
+```bash
+wlctl describe source <source-id> [-n <ns>]
+```
+
+Displays type, config, description, dates.
+
+---
+
+## preview
+
+Show the first N rows of a Catalog dataset version.
+
+```bash
+wlctl preview <dataset-id> [-n <ns>] [-v <version>] [-l <rows>]
+```
+
+```bash
+wlctl preview web/raw/raw_web -n analytics
+wlctl preview web/raw/raw_web -n analytics --version 2026-06-13T10:00:00.000+00:00 --lines 50
+```
+
+If `--version` is omitted, the latest committed version is used.
+
+---
+
+## lineage
+
+Show upstream (inputs) and downstream (consumers) for a dataset version.
+
+```bash
+wlctl lineage <dataset-id> [-n <ns>] [-v <version>]
+```
+
+```bash
+wlctl lineage web/clean/clean_web -n analytics
+```
+
+---
+
+## dq
+
+Show data quality check results for a dataset version.
+
+```bash
+wlctl dq <dataset-id> [-n <ns>] [-v <version>]
+```
+
+```bash
+wlctl dq web/clean/clean_web -n analytics
+```
+
+Displays overall score and per-rule PASS/FAIL with individual scores.
 
 ---
 
