@@ -18,7 +18,7 @@ from waluigi.cli.commands.lifecycle import (
 )
 from waluigi.cli.commands.logs      import get_logs
 from waluigi.cli.commands.catalog   import (
-    get_sources, get_datasets, get_versions, get_schema,
+    get_sources, get_datasets, get_versions, get_schema, get_metadata,
     describe_dataset, describe_source,
     preview, lineage, dq,
     delete_dataset, delete_version,
@@ -50,11 +50,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("type", choices=["namespaces", "jobs", "tasks", "resources",
                                     "workers", "taskdefinitions", "jobdefinitions",
                                     "cronjobs", "users", "secrets",
-                                    "sources", "datasets", "versions", "schema"])
+                                    "sources", "datasets", "versions", "schema", "metadata"])
     p.add_argument("-n", "--namespace", help="Namespace (auto-detected if token has one)")
     p.add_argument("-j", "--job_id",    help="Filter tasks by job ID")
     p.add_argument("-s", "--status",    help="Filter jobs or datasets by status")
-    p.add_argument("-d", "--dataset",   help="Dataset ID (required for versions and schema)")
+    p.add_argument("-d", "--dataset",   help="Dataset ID (required for versions, schema, metadata)")
+    p.add_argument("-v", "--version",   help="Version (required for metadata; default: latest for others)")
     p.add_argument("-o", "--output",    choices=["json"])
 
     # describe
@@ -154,6 +155,7 @@ def main() -> None:
         apply(session, args.file, namespace_override=ns)
     elif args.command == "get":
         dataset_id = getattr(args, "dataset", None)
+        version    = getattr(args, "version",  None)
         {
             "namespaces":      lambda: get_namespaces(session, output=out),
             "jobs":            lambda: get_jobs(session, namespace=ns, status=args.status, output=out),
@@ -169,6 +171,7 @@ def main() -> None:
             "datasets":        lambda: get_datasets(session, namespace=ns, status=args.status, output=out),
             "versions":        lambda: get_versions(session, dataset_id, namespace=ns, output=out),
             "schema":          lambda: get_schema(session, dataset_id, namespace=ns, output=out),
+            "metadata":        lambda: get_metadata(session, dataset_id, version, namespace=ns, output=out),
         }[args.type]()
     elif args.command == "describe":
         {

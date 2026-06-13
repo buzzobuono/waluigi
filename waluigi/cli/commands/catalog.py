@@ -177,6 +177,39 @@ def describe_source(session: WaluigiSession, source_id: str, namespace=None, out
         print(f"Error: {e}")
 
 
+# ── get metadata ─────────────────────────────────────────────────────────────
+
+def get_metadata(session: WaluigiSession, dataset_id: str, version: str = None,
+                 namespace=None, output=None) -> None:
+    ns = session.resolve_namespace(namespace)
+    if not ns:
+        return
+    if not dataset_id:
+        print("Error: --dataset is required for metadata", file=__import__('sys').stderr)
+        return
+    try:
+        v = version or _latest_version(session, ns, dataset_id)
+        if not v:
+            return
+        r = _cat(session, f"namespaces/{ns}/datasets/{dataset_id}/versions/{v}/metadata")
+        if not ok(r):
+            return
+        meta = data(r)
+        if not meta:
+            print("No metadata.")
+            return
+        if output == "json":
+            import json as _json
+            print(_json.dumps(meta, indent=2))
+            return
+        table(
+            [[k, str(val)] for k, val in sorted(meta.items())],
+            headers=["KEY", "VALUE"],
+        )
+    except Exception as e:
+        print(f"Error: {e}")
+
+
 # ── delete dataset ────────────────────────────────────────────────────────────
 
 def delete_dataset(session: WaluigiSession, dataset_id: str, namespace=None) -> None:
