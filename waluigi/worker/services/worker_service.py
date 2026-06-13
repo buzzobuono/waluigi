@@ -47,7 +47,17 @@ class WorkerService:
             env["WALUIGI_CATALOG_NAMESPACE"] = namespace
             for k, v in (secrets or {}).items():
                 env[f"WALUIGI_SECRET_{k.upper()}"] = str(v)
-            env["WALUIGI_CONFIG"] = json.dumps(_expand_config(config, env))
+
+            if secrets:
+                logger.info(f"Secrets injected: {[f'WALUIGI_SECRET_{k.upper()}' for k in secrets]}")
+
+            expanded_config = _expand_config(config, env)
+
+            unexpanded = re.findall(r"\$\{[^}]+\}", json.dumps(expanded_config))
+            if unexpanded:
+                logger.warning(f"Unexpanded placeholders in config after secret injection: {unexpanded}")
+
+            env["WALUIGI_CONFIG"] = json.dumps(expanded_config)
             if script:
                 env["WALUIGI_SCRIPT"] = script
             logger.info(f"🚀 Forking: {'<inline script>' if script else command}")

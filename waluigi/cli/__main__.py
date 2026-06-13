@@ -11,7 +11,7 @@ from waluigi.cli.commands.get       import (
 )
 from waluigi.cli.commands.describe  import (
     describe_job, describe_task, describe_task_definition,
-    describe_job_definition, describe_cron_job, describe_namespace,
+    describe_job_definition, describe_cron_job, describe_namespace, describe_secret,
 )
 from waluigi.cli.commands.lifecycle import (
     pause, resume, cancel, reset, delete, enable_cron_job, disable_cron_job,
@@ -61,7 +61,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # describe
     p = sub.add_parser("describe", help="Show full details of a resource")
     p.add_argument("type",   choices=["namespace", "job", "task", "taskdefinition",
-                                      "jobdefinition", "cronjob", "dataset", "source"])
+                                      "jobdefinition", "cronjob", "dataset", "source", "secret"])
     p.add_argument("target", help="Resource ID or name")
     p.add_argument("-n", "--namespace", help="Namespace (auto-detected if token has one)")
     p.add_argument("-o", "--output",    choices=["json"])
@@ -183,6 +183,7 @@ def main() -> None:
             "cronjob":        lambda: describe_cron_job(session, namespace=ns, cron_id=args.target, output=out),
             "dataset":        lambda: describe_dataset(session, args.target, namespace=ns, output=out),
             "source":         lambda: describe_source(session, args.target, namespace=ns, output=out),
+            "secret":         lambda: describe_secret(session, namespace=ns, name=args.target, output=out),
         }[args.type]()
     elif args.command == "enable":
         enable_cron_job(session, namespace=ns, cron_id=args.target)

@@ -252,7 +252,39 @@ def describe_task_definition(session: WaluigiSession, namespace=None,
         print(f"Error: {e}")
 
 
-def describe_namespace(session: WaluigiSession, namespace=None, output=None) -> None:
+def describe_secret(session: WaluigiSession, namespace=None,
+                    name=None, output=None) -> None:
+    ns = session.resolve_namespace(namespace)
+    if not ns: return
+    try:
+        r = session.http.get(f"/boss/namespaces/{ns}/secrets/{name}",
+                             headers=session.headers())
+        if not ok(r): return
+        result = data(r)
+        if output == "json":
+            print(json.dumps(result, indent=2)); return
+        keys = result.get("keys") or []
+        print(tabulate([
+            ["name",      result.get("name")],
+            ["namespace", ns],
+            ["created",   fmt_dt(result.get("createdate"))],
+            ["updated",   fmt_dt(result.get("updatedate"))],
+        ], tablefmt="plain"))
+        if keys:
+            print(f"\nEnv vars injected into tasks:")
+            print(tabulate(
+                [[f"WALUIGI_SECRET_{k.upper()}", f"${{{f'WALUIGI_SECRET_{k.upper()}'}}}"] for k in keys],
+                headers=["ENV VAR", "YAML placeholder"],
+                tablefmt="plain",
+                disable_numparse=True,
+            ))
+        else:
+            print("\nNo keys.")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+
     ns = session.resolve_namespace(namespace)
     if not ns: return
     try:
