@@ -75,8 +75,17 @@ def _fetch_all(url: str, headers: dict, extra_params: dict,
     current_url = url
     page = 1
 
-    # Always request JSON
-    req_headers = {"Accept": "application/json", **headers}
+    # Mimic a browser so bot-detection / consent gates let the request through
+    req_headers = {
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/125.0.0.0 Safari/537.36"
+        ),
+        **headers,   # caller-supplied headers override defaults
+    }
 
     qp = dict(extra_params)
     if page_size:
@@ -102,7 +111,9 @@ def _fetch_all(url: str, headers: dict, extra_params: dict,
                 preview = r.text[:300].replace("\n", " ")
                 raise RuntimeError(
                     f"Response is not JSON (content-type: {ct!r}).\n"
-                    f"Body preview: {preview}"
+                    f"Body preview: {preview}\n"
+                    f"Tip: the endpoint may require auth cookies or custom headers — "
+                    f"add them under config.headers in your YAML descriptor."
                 )
 
             body  = r.json()
