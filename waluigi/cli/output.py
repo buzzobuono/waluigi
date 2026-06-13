@@ -3,6 +3,17 @@ import json
 from datetime import datetime, timezone
 from tabulate import tabulate
 
+_STATUS_NAMES = {
+    400: "BadRequest",
+    401: "Unauthorized",
+    403: "Forbidden",
+    404: "NotFound",
+    409: "Conflict",
+    422: "Invalid",
+    500: "InternalError",
+    503: "ServiceUnavailable",
+}
+
 _COLORS = {
     "PENDING":   "\033[90m",
     "READY":     "\033[96m",
@@ -29,9 +40,10 @@ def ok(r) -> bool:
             msgs   = body.get("diagnostic", {}).get("messages", [])
             detail = body.get("detail")
             msg    = msgs[0] if msgs else (detail or r.text)
-            print(f"Error {r.status_code}: {msg}")
         except Exception:
-            print(f"Error {r.status_code}: {r.text}")
+            msg = r.text
+        reason = _STATUS_NAMES.get(r.status_code, f"Error{r.status_code}")
+        print(f"Error from server ({reason}): {msg}", file=sys.stderr)
         return False
     return True
 
