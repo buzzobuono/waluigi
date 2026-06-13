@@ -133,6 +133,16 @@ def _fetch_all(url: str, headers: dict, extra_params: dict,
 
 # ── main ──────────────────────────────────────────────────────────────────────
 
+def _to_dict(val) -> dict:
+    if not val:
+        return {}
+    if isinstance(val, dict):
+        return val
+    if hasattr(val, "__dict__"):   # SimpleNamespace
+        return vars(val)
+    return {}
+
+
 url        = context.params.url
 cfg        = context.config
 
@@ -140,8 +150,8 @@ dataset_id  = cfg.dataset_id
 source_id   = cfg.source_id
 fmt         = getattr(cfg, "format",      "parquet")
 description = getattr(cfg, "description", f"HTTP extract from {url}")
-headers     = dict(getattr(cfg, "headers",     {}) or {})
-extra_params= dict(getattr(cfg, "params",      {}) or {})
+headers     = _to_dict(getattr(cfg, "headers", None))
+extra_params= _to_dict(getattr(cfg, "params",  None))
 data_key    = getattr(cfg, "data_key",    None)
 next_key    = getattr(cfg, "next_key",    "next")
 page_param  = getattr(cfg, "page_param",  None)
