@@ -20,17 +20,20 @@ def apply(session: WaluigiSession, descriptor_path: str,
 
 def _apply_one(session: WaluigiSession, doc: dict,
                namespace_override: str | None) -> None:
-    kind = doc.get("kind")
+    kind  = doc.get("kind")
+    meta  = doc.get("metadata") or {}
+    _ns   = ""
+    _name = ""
     try:
         if kind == "Namespace":
             r = session.http.post("/boss/namespaces", json=doc, headers=session.headers())
 
         elif kind == "User":
-            meta     = doc.get("metadata", {})
             spec     = doc.get("spec", {})
             uid      = meta.get("name", "").strip()
             if not uid:
                 print("Error: metadata.name (userid) is required"); return
+            _name = uid
             password = spec.get("password") or None
             if not password:
                 password = getpass.getpass(
@@ -45,57 +48,96 @@ def _apply_one(session: WaluigiSession, doc: dict,
             r = session.http.put(f"/auth/users/{uid}", json=body, headers=session.headers())
 
         elif kind == "Job":
-            ns = namespace_override or doc.get("metadata", {}).get("namespace") \
-                 or session.resolve_namespace(None)
-            if not ns: return
-            r = session.http.post(f"/boss/namespaces/{ns}/jobs",
+            _ns = namespace_override or meta.get("namespace") \
+                  or session.resolve_namespace(None)
+            if not _ns: return
+            r = session.http.post(f"/boss/namespaces/{_ns}/jobs",
                                   json=doc, headers=session.headers())
 
         elif kind == "CronJob":
-            ns = namespace_override or doc.get("metadata", {}).get("namespace") \
-                 or session.resolve_namespace(None)
-            if not ns: return
-            r = session.http.post(f"/boss/namespaces/{ns}/cron-jobs",
+            _ns   = namespace_override or meta.get("namespace") \
+                    or session.resolve_namespace(None)
+            _name = meta.get("name", "")
+            if not _ns: return
+            r = session.http.post(f"/boss/namespaces/{_ns}/cron-jobs",
                                   json=doc, headers=session.headers())
 
         elif kind == "JobDefinition":
-            ns = namespace_override or doc.get("metadata", {}).get("namespace") \
-                 or session.resolve_namespace(None)
-            if not ns: return
-            r = session.http.post(f"/boss/namespaces/{ns}/job-definitions",
+            _ns   = namespace_override or meta.get("namespace") \
+                    or session.resolve_namespace(None)
+            _name = meta.get("name", "")
+            if not _ns: return
+            r = session.http.post(f"/boss/namespaces/{_ns}/job-definitions",
                                   json=doc, headers=session.headers())
 
         elif kind == "TaskDefinition":
-            ns = namespace_override or doc.get("metadata", {}).get("namespace") \
-                 or session.resolve_namespace(None)
-            if not ns: return
-            r = session.http.post(f"/boss/namespaces/{ns}/task-definitions",
+            _ns   = namespace_override or meta.get("namespace") \
+                    or session.resolve_namespace(None)
+            _name = meta.get("name", "")
+            if not _ns: return
+            r = session.http.post(f"/boss/namespaces/{_ns}/task-definitions",
                                   json=doc, headers=session.headers())
 
         elif kind in ("NamespaceResources", "ClusterResources"):
-            ns = namespace_override or doc.get("metadata", {}).get("namespace") \
-                 or session.resolve_namespace(None)
-            if not ns: return
-            r = session.http.post(f"/boss/namespaces/{ns}/resources",
+            _ns = namespace_override or meta.get("namespace") \
+                  or session.resolve_namespace(None)
+            if not _ns: return
+            r = session.http.post(f"/boss/namespaces/{_ns}/resources",
                                   json=doc, headers=session.headers())
 
         elif kind == "Secret":
-            ns = namespace_override or doc.get("metadata", {}).get("namespace") \
-                 or session.resolve_namespace(None)
-            if not ns: return
-            name = doc.get("metadata", {}).get("name", "").strip()
-            if not name:
+            _ns   = namespace_override or meta.get("namespace") \
+                    or session.resolve_namespace(None)
+            _name = meta.get("name", "").strip()
+            if not _ns:   return
+            if not _name:
                 print("Error: metadata.name (secret group name) is required"); return
             spec = doc.get("spec", {})
             if not isinstance(spec, dict):
                 print("Error: spec must be a dict of KEY: value pairs"); return
-            r = session.http.post(f"/boss/namespaces/{ns}/secrets/{name}",
+            r = session.http.post(f"/boss/namespaces/{_ns}/secrets/{_name}",
                                   json=spec, headers=session.headers())
 
         else:
             print(f"Error: kind '{kind}' not supported"); return
 
-        print(json.dumps(r.json(), indent=2))
+        _print_applied(kind, doc, r, ns=_ns, name=_name)
 
     except Exception as e:
         print(f"Error applying {kind}: {e}")
+
+
+def _print_applied(kind: str, doc: dict, r, ns: str = "", name: str = "") -> None:
+    from waluigi.cli.output import ok
+    if not ok(r):
+        return
+    body = r.json()
+    d    = body.get("data", body) or {}
+    verb = "created" if r.status_code == 201 else "configured"
+    meta = doc.get("metadata") or {}
+    name = name or meta.get("name", "")
+    ns   = ns   or meta.get("namespace", "")
+
+    if kind == "Namespace":
+        ref = d.get("namespace") or name
+        print(f"namespace/{ref} {verb}")
+    elif kind == "User":
+        print(f"user/{name} {verb}")
+    elif kind == "Job":
+        ref = d.get("job_id") or name
+        print(f"job/{ref} {verb}")
+    elif kind == "CronJob":
+        ref = d.get("id") or name
+        print(f"cronjob/{ref} {verb}")
+    elif kind == "JobDefinition":
+        ref = d.get("id") or name
+        print(f"jobdefinition/{ref} {verb}")
+    elif kind == "TaskDefinition":
+        ref = d.get("id") or name
+        print(f"taskdefinition/{ref} {verb}")
+    elif kind in ("NamespaceResources", "ClusterResources"):
+        print(f"namespaceresources/{ns} {verb}")
+    elif kind == "Secret":
+        print(f"secret/{ns}/{name} {verb}")
+    else:
+        print(f"{kind.lower()}/{name} {verb}")

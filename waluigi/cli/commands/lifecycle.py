@@ -72,7 +72,7 @@ def reset(session: WaluigiSession, scope: str, target: str, namespace=None) -> N
         else:
             r = session.http.post(f"/boss/namespaces/{target}/_reset",
                                   headers=session.headers())
-        if ok(r): print(f"{scope}/{target} reset to PENDING")
+        if ok(r): print(f"{scope}/{target} reset")
     except Exception as e:
         print(f"Error: {e}")
 
