@@ -100,11 +100,14 @@ Or with Docker Compose:
 docker compose up
 ```
 
-### 2. Create a namespace and resources
+### 2. Create a namespace, resources, and task definitions
 
 ```bash
 wlctl apply -f descriptors/namespaces/analytics.yaml
 wlctl apply -f descriptors/resources/resources.yaml
+
+# Apply built-in task definitions if you plan to use taskRef
+wlctl apply -f descriptors/task-definitions/builtin-task-definitions.yaml -n analytics
 ```
 
 ### 3. Submit a job
@@ -143,22 +146,22 @@ spec:
       - id: extract
         taskSpec:
           command: "python pipeline/extract.py"
+          affinity:
+            - python
         params:
           source: "ERP"
         resources:
           coin: 1
-        affinity:
-          - python
 
       - id: transform
         taskSpec:
           command: "python pipeline/transform.py"
+          affinity:
+            - python
         requires:
           - extract
         resources:
           coin: 2
-        affinity:
-          - python
 ```
 
 ### Inline job with Python scripts
@@ -223,7 +226,13 @@ print(f"Extracting {source} for {date}")
 
 ### Built-in task types
 
-Reference reusable transformations without writing any code:
+Reference reusable transformations without writing any code. First, apply the built-in `TaskDefinition` descriptors to the namespace:
+
+```bash
+wlctl apply -f descriptors/task-definitions/builtin-task-definitions.yaml -n analytics
+```
+
+Then reference them in jobs with `taskRef.name`:
 
 ```yaml
 - id: filter_high_value
@@ -287,13 +296,13 @@ wlworker --affinity python,gpu --port 5002
 ```
 
 ```yaml
-# Task requires python+gpu
+# Task requires python+gpu — affinity goes inside taskSpec
 - id: train
   taskSpec:
     command: python train.py
-  affinity:
-    - python
-    - gpu
+    affinity:
+      - python
+      - gpu
 ```
 
 If no matching worker is available, the task waits until one registers.

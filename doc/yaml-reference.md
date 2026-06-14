@@ -46,7 +46,6 @@ spec:
 ```yaml
 - id: <string>                 # unique task ID within the job (required)
   requires: <list[string]>     # IDs of tasks this depends on (default: [])
-  affinity: <list[string]>     # worker capability tags required (optional)
   resources: <dict>            # resource consumption, e.g. {coin: 1, gpu: 1}
   params: <dict>               # task-level params (override/extend job params)
   attributes: <dict>           # task-level attributes (override/extend job attributes)
@@ -56,11 +55,13 @@ spec:
   taskSpec:
     command: <string>          # shell command to execute
     script: <string>           # inline Python script (mutually exclusive with command)
-    resources: <dict>          # resource defaults (overridden by task-level resources)
+    affinity: <list[string]>   # worker capability tags required (inline tasks only)
 
   taskRef:
-    name: <string>             # TaskDefinition or built-in task type name
+    name: <string>             # TaskDefinition name; affinity comes from the TaskDefinition
 ```
+
+> **Affinity placement:** for `taskSpec` tasks, declare `affinity` inside `taskSpec`. For `taskRef` tasks, affinity is defined in the `TaskDefinition` in the database and cannot be set in the job YAML.
 
 ### Parameter inheritance
 
@@ -85,32 +86,32 @@ spec:
       - id: extract
         taskSpec:
           command: "python pipeline/extract.py"
+          affinity:
+            - python
         params:
           source: ERP
         resources:
           coin: 1
-        affinity:
-          - python
 
       - id: transform
         taskSpec:
           command: "python pipeline/transform.py"
+          affinity:
+            - python
         requires:
           - extract
         resources:
           coin: 2
-        affinity:
-          - python
 
       - id: load
         taskSpec:
           command: "python pipeline/load.py"
+          affinity:
+            - python
         requires:
           - transform
         resources:
           coin: 1
-        affinity:
-          - python
 ```
 
 ---
@@ -188,10 +189,12 @@ metadata:
 spec:
   command: <string>            # shell command (optional)
   script: <string>             # inline Python script (optional; mutually exclusive)
-  resources: <dict>            # default resource requirements (optional)
+  affinity: <list[string]>     # worker capability tags required (optional)
 ```
 
-### Example
+> **Resources in TaskDefinition:** resource consumption is a job-level concern and is never set in a `TaskDefinition`. Declare `resources` on the task in the `Job` or `JobDefinition` YAML.
+
+### Example — custom script
 
 ```yaml
 kind: TaskDefinition
@@ -201,11 +204,41 @@ metadata:
 spec:
   script: |
     from waluigi.sdk.context import context
-    import smtplib
     recipient = context.params.recipient
     print(f"Sending report to {recipient}")
-  resources:
-    coin: 1
+  affinity:
+    - python
+```
+
+### Example — built-in task type
+
+Built-in task types (FilterDataset, AggregateDataset, etc.) are shipped as Python modules. They are **not** automatically available — you must apply the corresponding `TaskDefinition` to each namespace where you want to use them:
+
+```bash
+wlctl apply -f descriptors/task-definitions/builtin-task-definitions.yaml -n <namespace>
+```
+
+The file `descriptors/task-definitions/builtin-task-definitions.yaml` in the repo contains all built-in definitions ready to apply. Once applied, tasks can reference them via `taskRef.name`.
+
+### Example — referencing a built-in
+
+```yaml
+kind: Job
+metadata:
+  name: etl
+  namespace: analytics
+spec:
+  jobSpec:
+    tasks:
+      - id: filter_orders
+        taskRef:
+          name: FilterDataset     # must be applied as TaskDefinition in this namespace
+        config:
+          input: {dataset: sales/raw/orders, source: *local}
+          output: {dataset: sales/clean/orders, format: parquet, source: *local}
+          where: "status == 'completed'"
+        resources:
+          coin: 1
 ```
 
 ---

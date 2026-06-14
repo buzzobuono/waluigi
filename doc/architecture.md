@@ -77,11 +77,34 @@ terminal task
                 if dep = None  → return None
                 if dep = False → mark task PENDING, return False
             all deps True →
+                if task.type (taskRef): resolve TaskDefinition from DB
+                    → get command, script, affinity from definition
+                    → if not found → FAILED
                 acquire resources (or return False/PAUSE)
                 mark task READY
                 dispatch to worker
                 return False  (will become True when worker reports SUCCESS)
 ```
+
+### TaskDefinitions
+
+All `taskRef` types are resolved at dispatch time against `TaskDefinition` records stored in the namespace. There is no built-in registry — built-in task types (FilterDataset, etc.) must be explicitly applied as `TaskDefinition` descriptors in each namespace where they will be used:
+
+```bash
+wlctl apply -f descriptors/task-definitions/builtin-task-definitions.yaml -n analytics
+```
+
+The `TaskDefinition` spec contains `command` (or `script`) and `affinity`. Resources are **never** part of a `TaskDefinition` — they are declared on the task in the `Job`/`JobDefinition` YAML.
+
+### Affinity
+
+Workers declare capability tags (`--affinity python,gpu`). Tasks declare requirements inside `taskSpec.affinity` (for inline tasks) or in `TaskDefinition.spec.affinity` (for `taskRef` tasks). The Boss filters eligible workers before dispatch:
+
+```
+task.affinity ⊆ worker.affinity  →  eligible
+```
+
+A task with no affinity requirements can run on any worker. If no eligible worker is available, the Boss returns RETRY and the task waits for the next planning tick.
 
 The `_memo` dict deduplicates shared dependencies. In a diamond DAG (`A → B, A → C, B → D, C → D`), task `A` is evaluated exactly once per planning cycle.
 
@@ -158,6 +181,8 @@ task.affinity ⊆ worker.affinity  →  eligible
 ```
 
 A task with no affinity requirements can be dispatched to any worker. A worker with no declared affinity only receives tasks with no requirements.
+
+For inline `taskSpec` tasks, affinity is declared inside `taskSpec`. For `taskRef` tasks, it is resolved from the `TaskDefinition` at dispatch time.
 
 ---
 

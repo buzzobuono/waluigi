@@ -14,13 +14,13 @@ Any shell command. Parameters are available as environment variables.
 - id: extract
   taskSpec:
     command: "python pipeline/extract.py"
+    affinity:
+      - python
   params:
     date: "2026-06-12"
     source: ERP
   resources:
     coin: 1
-  affinity:
-    - python
 ```
 
 The worker runs the command with `asyncio.create_subprocess_shell`, capturing stdout+stderr and streaming logs back to the Boss.
@@ -302,12 +302,17 @@ Resources must be defined in `NamespaceResources` before they can be consumed. S
 
 ## Affinity
 
-Declare which worker capabilities a task requires:
+Declare which worker capabilities a task requires. For `taskSpec` tasks, put `affinity` inside `taskSpec`. For `taskRef` tasks, affinity is defined in the `TaskDefinition`.
 
 ```yaml
-affinity:
-  - python
-  - pandas
+- id: train
+  taskSpec:
+    command: python train.py
+    affinity:
+      - python
+      - gpu
+  resources:
+    gpu: 1
 ```
 
 The Boss dispatches the task only to workers that declare at least these tags. If no matching worker is available, the task waits (the planner retries on the next tick).
@@ -316,6 +321,8 @@ The Boss dispatches the task only to workers that declare at least these tags. I
 # Worker registration
 wlworker --affinity python,pandas,gpu --slots 4
 ```
+
+> **Note:** `affinity` at the outer task level (outside `taskSpec`) is ignored. Always declare it inside `taskSpec` or in the `TaskDefinition`.
 
 ---
 

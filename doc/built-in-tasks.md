@@ -4,6 +4,18 @@ Waluigi ships with reusable task types that cover common data transformation pat
 
 All built-in tasks use `CatalogClient` internally to read inputs and write outputs via the two-phase commit protocol. Lineage is recorded automatically.
 
+## Setup: applying built-in TaskDefinitions
+
+Built-in task types are Python modules in the `waluigi.tasks` package. They are **not** auto-registered — you must apply the corresponding `TaskDefinition` to each namespace where you want to use them:
+
+```bash
+wlctl apply -f descriptors/task-definitions/builtin-task-definitions.yaml -n analytics
+```
+
+The `descriptors/task-definitions/builtin-task-definitions.yaml` file in the repo contains all built-in definitions. Each definition sets `affinity: [python]` — make sure at least one worker registers with `--affinity python`.
+
+Once applied, tasks can reference built-in types via `taskRef.name` without any custom code.
+
 ---
 
 ## Source definition
