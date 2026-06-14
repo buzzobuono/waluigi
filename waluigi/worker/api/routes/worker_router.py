@@ -37,7 +37,6 @@ async def dispatch(
     worker_service: WorkerService = Depends(get_worker_service)
 ):
     try:
-        task_type  = body.type
         command    = body.command
         script     = body.script
         id         = body.id

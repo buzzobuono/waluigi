@@ -224,6 +224,9 @@ class BossEngine:
                 if r.status_code == 400:
                     logger.error(f"💥 Fatal 400 from {url} for {task.id}")
                     return "FATAL_ERROR"
+                if 500 <= r.status_code < 600:
+                    logger.error(f"💥 Fatal 5xx from {url} for {task.id}: {r.status_code}")
+                    return "FATAL_ERROR"
                 if r.status_code != 429:
                     all_busy = False
             except Exception:
