@@ -12,10 +12,11 @@ import ConfirmDialog     from './ConfirmDialog.js';
 const { ref, computed, watch } = Vue;
 
 const COLUMNS = [
-  { key: 'id',      label: 'Name' },
-  { key: 'mode',    label: 'Type' },
-  { key: 'preview', label: 'Command / Script' },
-  { key: 'actions', label: '',  class: 'text-right pr-3' },
+  { key: 'id',       label: 'Name' },
+  { key: 'mode',     label: 'Type' },
+  { key: 'affinity', label: 'Affinity' },
+  { key: 'preview',  label: 'Command / Script' },
+  { key: 'actions',  label: '',  class: 'text-right pr-3' },
 ];
 
 function specToForm(spec) {
@@ -190,6 +191,17 @@ export default {
             <span :class="['badge', item.spec?.script ? 'badge-info' : 'badge-secondary']">
               {{ item.spec?.script ? 'script' : 'command' }}
             </span>
+          </template>
+
+          <template #cell(affinity)="{ item }">
+            <span v-if="item.spec?.affinity?.length">
+              <span
+                v-for="tag in item.spec.affinity"
+                :key="tag"
+                class="badge badge-primary mr-1"
+              >{{ tag }}</span>
+            </span>
+            <span v-else class="text-muted">—</span>
           </template>
 
           <template #cell(preview)="{ item }">
