@@ -22,15 +22,20 @@ const COLUMNS = [
 function specToForm(spec) {
   const hasScript = !!spec.script;
   return {
-    mode:    hasScript ? 'script' : 'command',
-    command: spec.command || '',
-    script:  spec.script  || '',
+    mode:     hasScript ? 'script' : 'command',
+    command:  spec.command || '',
+    script:   spec.script  || '',
+    affinity: (spec.affinity || []).join(', '),
   };
 }
 
 function formToSpec(form) {
-  if (form.mode === 'script') return { script: form.script };
-  return { command: form.command };
+  const affinity = form.affinity
+    ? form.affinity.split(',').map(s => s.trim()).filter(Boolean)
+    : [];
+  const spec = form.mode === 'script' ? { script: form.script } : { command: form.command };
+  if (affinity.length) spec.affinity = affinity;
+  return spec;
 }
 
 export default {
@@ -48,10 +53,11 @@ export default {
     const confirmRef = ref(null);
 
     const form = ref({
-      name:    '',
-      mode:    'command',
-      command: '',
-      script:  '',
+      name:     '',
+      mode:     'command',
+      command:  '',
+      script:   '',
+      affinity: '',
     });
 
     const modalTitle = computed(() =>
@@ -80,7 +86,7 @@ export default {
     function openCreate() {
       mode.value      = 'create';
       formError.value = null;
-      form.value      = { name: '', mode: 'command', command: '', script: '' };
+      form.value      = { name: '', mode: 'command', command: '', script: '', affinity: '' };
       modalRef.value?.open();
     }
 
@@ -291,6 +297,16 @@ export default {
             spellcheck="false"
           ></textarea>
           <small class="text-muted">Python code executed inline via <code>WALUIGI_SCRIPT</code>.</small>
+        </div>
+
+        <!-- Affinity -->
+        <div class="form-group">
+          <label class="font-weight-bold">Affinity</label>
+          <base-input
+            v-model="form.affinity"
+            placeholder="e.g. python, gpu"
+          />
+          <small class="text-muted">Comma-separated capability tags. Workers must have all listed tags to run this task.</small>
         </div>
 
         <div v-if="formError" class="alert alert-danger mt-3 mb-0 py-2 small">
