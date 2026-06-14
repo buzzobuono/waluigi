@@ -204,6 +204,7 @@ class BossEngine:
             return "WORKERS_SATURATED"
 
         task_affinity = set(getattr(task, 'affinity', None) or [])
+        logger.info(f"🎯 {task.id} — affinity={task_affinity or '(any)'}")
         if task_affinity:
             available = [
                 w for w in available
