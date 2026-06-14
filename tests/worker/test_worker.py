@@ -76,15 +76,14 @@ def test_execute_400_missing_command_type_script(worker_url):
     assert "No type, command or script provided" in r.json()["diagnostic"]["messages"]
 
 
-def test_execute_400_unknown_task_type(worker_url):
+def test_execute_400_no_command_or_script(worker_url):
     r = _execute(worker_url, {
-        "id": "v-badtype",
+        "id": "v-nocommand",
         "job_id": "j1",
         "namespace": "ns",
-        "type": "NoSuchTask",
     })
     assert r.status_code == 400
-    assert "Unknown task type" in r.json()["diagnostic"]["messages"]
+    assert "No command or script provided" in r.json()["diagnostic"]["messages"]
 
 
 def test_execute_202_command_accepted(worker_url, boss_url):
@@ -112,12 +111,12 @@ def test_execute_202_script_accepted(worker_url, boss_url):
     time.sleep(0.3)
 
 
-def test_execute_202_known_task_type_accepted(worker_url):
+def test_execute_202_command_runs_builtin_module(worker_url, boss_url):
     r = _execute(worker_url, {
-        "id": "v-type",
+        "id": "v-builtin",
         "job_id": "j1",
         "namespace": "ns",
-        "type": "MergeDatasets",
+        "command": "python -m waluigi.tasks.merge_datasets",
     })
     assert r.status_code == 202
     time.sleep(2)

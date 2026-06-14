@@ -112,22 +112,19 @@ class BossEngine:
             _memo[task_id] = False
             return False
 
-        # Resolve taskRef against DB-defined TaskDefinitions if needed
+        # Resolve taskRef against DB-defined TaskDefinitions
         if task.type and self.task_definitions is not None:
-            from waluigi.tasks import REGISTRY
-            if task.type not in REGISTRY:
-                defn = self.task_definitions.get(namespace, task.type)
-                if defn is None:
-                    logger.error(f"❌ Unknown task type '{task.type}' — no built-in or TaskDefinition found")
-                    self._set_status(namespace, task, "FAILED")
-                    _memo[task_id] = None
-                    return None
-                spec_def = defn["spec"]
-                task.command = spec_def.get("command", "")
-                task.script  = spec_def.get("script")
-                if "resources" in spec_def:
-                    task.resources = spec_def["resources"]
-                task.type = None
+            defn = self.task_definitions.get(namespace, task.type)
+            if defn is None:
+                logger.error(f"❌ Unknown task type '{task.type}' — no TaskDefinition found in namespace '{namespace}'")
+                self._set_status(namespace, task, "FAILED")
+                _memo[task_id] = None
+                return None
+            spec_def = defn["spec"]
+            task.command  = spec_def.get("command", "")
+            task.script   = spec_def.get("script")
+            task.affinity = spec_def.get("affinity", [])
+            task.type = None
 
         task_resources = getattr(task, "resources", _DEFAULT_RESOURCES)
 
@@ -186,7 +183,6 @@ class BossEngine:
             except Exception:
                 pass
         payload = {
-            "type":        task.type,
             "command":     task.command,
             "script":      task.script,
             "id":          task.id,

@@ -48,18 +48,10 @@ async def dispatch(
         resources  = body.resources
         secrets    = body.secrets
         
-        if body.type:
-            from waluigi.tasks import get_command
-            try:
-                command = get_command(task_type)
-            except ValueError as e:
-                msg = "Unknown task type"
-                logger.error(msg)
-                return ko(msg, 400)
-        elif script:
+        if script:
             command = "python -c \"import os; exec(os.environ['WALUIGI_SCRIPT'])\""
         elif not command:
-            msg = "No type, command or script provided"
+            msg = "No command or script provided"
             logger.error(msg)
             return ko(msg, 400)
             

@@ -25,16 +25,19 @@ def parse_definition(definition) -> list[dict]:
 
         t_flat["params"]     = {**pipeline_params,     **t_flat.get("params", {})}
         t_flat["attributes"] = {**t_flat.get("attributes", {}), **pipeline_attributes}
+        t_flat["affinity"]   = []  # affinity never comes from the outer task level
 
         if "taskSpec" in t_flat:
             inner = t_flat.get("taskSpec", {})
-            t_flat["script"]  = inner.get("script")
-            t_flat["command"] = inner.get("command", "")
+            t_flat["script"]   = inner.get("script")
+            t_flat["command"]  = inner.get("command", "")
+            t_flat["affinity"] = inner.get("affinity", [])
             if "resources" in inner:
                 t_flat["resources"] = inner["resources"]
 
         elif "taskRef" in t_flat:
             t_flat["type"] = t_flat["taskRef"].get("name")
+            # affinity resolved at dispatch time from TaskDefinition in DB
 
         t_flat["namespace"] = metadata.get("namespace", "default")
         t_flat.setdefault("requires", [])
