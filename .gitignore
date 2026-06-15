@@ -7,5 +7,6 @@ env/
 waluigi.egg-info
 work/
 /db/
-data/
+/data/
 build/
+/custom/
