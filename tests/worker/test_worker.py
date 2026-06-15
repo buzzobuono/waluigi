@@ -73,7 +73,7 @@ def test_execute_400_missing_command_type_script(worker_url):
         "namespace": "ns",
     })
     assert r.status_code == 400
-    assert "No type, command or script provided" in r.json()["diagnostic"]["messages"]
+    assert "No command or script provided" in r.json()["diagnostic"]["messages"]
 
 
 def test_execute_400_no_command_or_script(worker_url):
