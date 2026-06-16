@@ -1,7 +1,8 @@
 __pycache__/
 *.py[cod]
 *$py.class
-env/
+/env/
+/.venv/
 *.out
 .vscode
 waluigi.egg-info
