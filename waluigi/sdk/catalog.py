@@ -88,7 +88,17 @@ class CatalogClient:
     def get_source(self, id: str) -> dict:
         return self._get(self._ns_url(f"/sources/{id}"))
 
-    def create_source(self, request: SourceCreateRequest) -> dict:
+    def create_source(self, id_or_request=None, *, id: str = None, type: str = None,
+                      config: dict = None, description: str = None) -> dict:
+        if isinstance(id_or_request, SourceCreateRequest):
+            request = id_or_request
+        else:
+            src_id = id_or_request if id_or_request is not None else id
+            request = SourceCreateRequest(
+                id=src_id, type=type,
+                config=config or {},
+                description=description,
+            )
         return self._post(self._ns_url("/sources"), json=_model_dump(request))
 
     def update_source(self, id: str, updates) -> dict:

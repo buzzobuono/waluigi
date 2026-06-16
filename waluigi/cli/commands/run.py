@@ -212,11 +212,8 @@ def run_task(cmd, file, task_id, params, namespace, catalog_url):
     cmd    = _make_cmd(cmd, script, env)
 
     label = '<inline script>' if script else cmd
-    print(f"[wlctl run] command   : {label}")
-    print(f"[wlctl run] namespace : {effective_ns or '(not set)'}")
-    print(f"[wlctl run] params    : {merged or '(none)'}")
-    if effective_catalog:
-        print(f"[wlctl run] catalog   : {effective_catalog}")
+    print(f"[wlrun] command       : {label}")
+    print(f"[wlrun] params        : {merged or '(none)'}")
     print()
 
     result = subprocess.run(cmd, shell=True, env=env)
@@ -240,12 +237,9 @@ def run_job(file, params, namespace, catalog_url):
     base_env, effective_ns, effective_catalog = _build_base_env(namespace, catalog_url)
 
     ids_line = " → ".join(t['id'] for t in ordered)
-    print(f"[wlctl run job] file      : {file}")
-    print(f"[wlctl run job] namespace : {effective_ns or '(not set)'}")
-    print(f"[wlctl run job] params    : {parsed_params or '(none)'}")
-    print(f"[wlctl run job] tasks     : {len(ordered)}  {ids_line}")
-    if effective_catalog:
-        print(f"[wlctl run job] catalog   : {effective_catalog}")
+    print(f"[wlrun] file          : {file}")
+    print(f"[wlrun] params        : {parsed_params or '(none)'}")
+    print(f"[wlrun] tasks         : {len(ordered)}  {ids_line}")
     print()
 
     for i, task in enumerate(ordered, 1):
@@ -284,7 +278,7 @@ def run_job(file, params, namespace, catalog_url):
             print(f"\n✓ {task_id}  ({elapsed:.1f}s)\n")
         else:
             print(f"\n✗ {task_id}  FAILED (exit {result.returncode})")
-            print(f"\n[wlctl run job] stopped — task '{task_id}' failed")
+            print(f"\n[wlrun] stopped — task '{task_id}' failed")
             sys.exit(result.returncode)
 
-    print(f"[wlctl run job] completed — {len(ordered)}/{len(ordered)} tasks OK")
+    print(f"[wlrun] completed — {len(ordered)}/{len(ordered)} tasks OK")
