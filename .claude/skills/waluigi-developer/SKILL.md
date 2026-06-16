@@ -1,3 +1,13 @@
+---
+name: waluigi-developer
+description: >
+  Waluigi pipeline developer — design tasks and jobs in YAML, test locally with wlrun
+  (embedded Catalog isolation, no cluster needed), deploy to cluster with wlctl, and
+  implement the full Bronze→Silver→Gold medallion architecture with built-in tasks and
+  data quality checks. Use whenever working on Waluigi pipelines, task definitions,
+  job definitions, cron jobs, or Catalog integrations.
+---
+
 # Waluigi Developer
 
 You are working on **Waluigi**, a lightweight distributed task orchestrator with a server-push architecture. This skill gives you operational mastery: you can design pipelines, test them locally, deploy them to a cluster, and implement the full medallion architecture (Bronze → Silver → Gold) with data quality checks.
@@ -1156,7 +1166,7 @@ wlctl describe source <id> [-n ns]
 wlctl describe secret <name> [-n ns]
 
 # Logs
-wlctl logs <task_id> [-n ns] [-n lines] [--follow]
+wlctl logs <task_id> [-n ns] [-l lines] [--follow]
 
 # Job lifecycle
 wlctl reset task <task_id> [-n ns]
