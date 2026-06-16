@@ -7,6 +7,23 @@ import time
 
 import yaml
 
+_BUILTIN_COMMANDS = {
+    "IngestRest":             "python -m waluigi.tasks.ingest_rest",
+    "FilterDataset":          "python -m waluigi.tasks.filter_dataset",
+    "SelectColumns":          "python -m waluigi.tasks.select_columns",
+    "AddDerivedColumns":      "python -m waluigi.tasks.add_derived_columns",
+    "AggregateDataset":       "python -m waluigi.tasks.aggregate_dataset",
+    "JoinDatasets":           "python -m waluigi.tasks.join_datasets",
+    "MergeDatasets":          "python -m waluigi.tasks.merge_datasets",
+    "PivotDataset":           "python -m waluigi.tasks.pivot_dataset",
+    "DeduplicateDataset":     "python -m waluigi.tasks.deduplicate_dataset",
+    "CatalogCreateSource":    "python -m waluigi.tasks.catalog_create_source",
+    "CatalogCreateDataset":   "python -m waluigi.tasks.catalog_create_dataset",
+    "CatalogDefineSchema":    "python -m waluigi.tasks.catalog_define_schema",
+    "CatalogSetExpectations": "python -m waluigi.tasks.catalog_set_expectations",
+    "CatalogSetCharts":       "python -m waluigi.tasks.catalog_set_charts",
+}
+
 
 def _expand_config(obj, env: dict):
     """Recursively expand ${VAR} placeholders in config string values."""
@@ -36,7 +53,7 @@ def _load_docs(file_path: str) -> list:
 
 
 def _collect_taskdefs(docs: list) -> dict:
-    """Returns {name: {command, script, params}} from TaskDefinition docs."""
+    """Returns {name: {command, script}} from TaskDefinition docs in the YAML file."""
     taskdefs = {}
     for doc in docs:
         if doc.get('kind') != 'TaskDefinition':
@@ -44,12 +61,10 @@ def _collect_taskdefs(docs: list) -> dict:
         name = (doc.get('metadata') or {}).get('name')
         if not name:
             continue
-        spec      = doc.get('spec', {})
-        task_spec = spec.get('taskSpec', {})
+        spec = doc.get('spec', {})
         taskdefs[name] = {
-            'command': task_spec.get('command'),
-            'script':  task_spec.get('script'),
-            'params':  dict(spec.get('params', {})),
+            'command': spec.get('command'),
+            'script':  spec.get('script'),
         }
     return taskdefs
 
@@ -79,10 +94,9 @@ def _resolve_task(task: dict, taskdefs: dict) -> tuple[str | None, str | None]:
         defn = taskdefs.get(ref_name)
         if defn:
             return defn.get('command'), defn.get('script')
-        # 2. Built-in registry
-        from waluigi.tasks import REGISTRY
-        if ref_name in REGISTRY:
-            return f"python -m {REGISTRY[ref_name]}", None
+        # 2. Built-in task types
+        if ref_name in _BUILTIN_COMMANDS:
+            return _BUILTIN_COMMANDS[ref_name], None
         return None, None   # unresolvable
 
     return None, None
