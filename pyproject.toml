@@ -35,6 +35,7 @@ python_files = "test_*.py"
 
 [project.scripts]
 wlctl = "waluigi.cli.__main__:main"
+wlrun = "waluigi.cli.run_main:main"
 wlboss = "waluigi.boss.__main__:main"
 wlworker = "waluigi.worker.__main__:main"
 wlcatalog = "waluigi.catalog.__main__:main"
