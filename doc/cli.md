@@ -350,40 +350,62 @@ wlctl disable cronjob <id> [--namespace <ns>]
 
 ---
 
-## run
+## wlrun — local isolated run
 
-Run a task or full job locally for development and testing — no Boss, no Worker, no cluster required.
-The command injects the same environment variables that a Worker would inject, so the same
-task scripts that run in production work unchanged on the developer's machine.
+`wlrun` is a standalone CLI for running tasks and full jobs locally — no Boss, no Worker, no
+cluster required. It automatically starts an embedded Catalog server backed by a local SQLite
+database, so tasks that use the Catalog SDK work exactly as they would in production, but write
+to a local folder instead.
+
+```bash
+wlrun -f pipeline.yaml                        # run full job
+wlrun -f pipeline.yaml -t extract             # run one task
+wlrun -f pipeline.yaml -t extract -p date=2026-06-15
+wlrun "python script.py" -p date=2026-06-15 -n analytics
+```
+
+### Catalog isolation
+
+On startup `wlrun` launches a `wlcatalog` process bound to a randomly chosen free port and
+pointing to `--data-dir` (default `./wlrun-data`). The `WALUIGI_CATALOG_URL` env variable is
+injected automatically — no manual setup needed.
+
+Data is written to `<data-dir>/<namespace>/<dataset_id>/<version>.parquet` and the catalog
+database is kept at `<data-dir>/catalog.db`.
 
 ### Run a single task from a descriptor
 
 ```bash
-wlctl run --file descriptors/jobs/erp-daily.yaml --task extract \
+wlrun --file descriptors/jobs/erp-daily.yaml --task extract \
     --params date=2026-06-12
 ```
 
 Job-level `spec.params` defaults are merged in; `--params` values take precedence.
 The task `config` block is read from the YAML automatically.
 
-Tasks defined via `taskRef.name` are resolved by looking up the corresponding
-`TaskDefinition` in the same YAML file. Both `command` and `script` are supported.
+Tasks defined via `taskRef.name` are resolved in this order:
+1. `TaskDefinition` in the same YAML file
+2. Built-in task types (e.g. `IngestRest`, `FilterDataset`, …)
 
 ### Run the full job (all tasks in DAG order)
 
 Omit `--task` to run every task in the file, in topological dependency order:
 
 ```bash
-wlctl run --file descriptors/jobs/erp-daily.yaml --params date=2026-06-12
+wlrun --file descriptors/jobs/erp-daily.yaml --params date=2026-06-12
 ```
 
-Tasks are executed sequentially. If a task fails, execution stops immediately.
+Tasks execute sequentially. If a task fails, execution stops immediately.
 
 Output example:
 ```
-[wlctl run job] file      : descriptors/jobs/erp-daily.yaml
-[wlctl run job] namespace : analytics
-[wlctl run job] tasks     : 3  extract → transform → load
+[wlrun] catalog       : http://localhost:54321
+[wlrun] data dir      : /home/user/project/wlrun-data
+[wlrun] namespace     : local
+
+[wlrun] file          : descriptors/jobs/erp-daily.yaml
+[wlrun] params        : {'date': '2026-06-12'}
+[wlrun] tasks         : 3  extract → transform → load
 
 ── Task 1/3: extract ────────────────────────
 ...
@@ -393,28 +415,27 @@ Output example:
 ...
 ✓ transform  (1.2s)
 
-[wlctl run job] completed — 3/3 tasks OK
+[wlrun] completed — 3/3 tasks OK
 ```
 
 ### Run a direct command
 
 ```bash
-wlctl run "python pipeline/extract.py" \
+wlrun "python pipeline/extract.py" \
     --params date=2026-06-12 source=ERP \
-    --namespace analytics \
-    --catalog-url http://localhost:9000
+    --namespace analytics
 ```
 
 ### Options
 
-| Flag | Description |
-|------|-------------|
-| `cmd` | Shell command to run directly (positional, optional) |
-| `-f` / `--file` | YAML descriptor (`Job` or `JobDefinition`) |
-| `-t` / `--task` | Task ID (omit to run the whole job) |
-| `-p` / `--params KEY=VALUE` | Override or supply task params (repeatable) |
-| `-n` / `--namespace` | Catalog namespace (`WALUIGI_CATALOG_NAMESPACE`) |
-| `--catalog-url` | Catalog URL (`WALUIGI_CATALOG_URL`) |
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `cmd` | — | — | Shell command to run directly (positional, optional) |
+| `--file` | `-f` | — | YAML descriptor (`Job` or `JobDefinition`) |
+| `--task` | `-t` | — | Task ID (omit to run the whole job) |
+| `--params KEY=VALUE` | `-p` | — | Override or supply task params (repeatable) |
+| `--namespace` | `-n` | `local` | Catalog namespace (`WALUIGI_CATALOG_NAMESPACE`) |
+| `--data-dir` | `-d` | `./wlrun-data` | Local folder for catalog data (`WALUIGI_RUN_DATA_DIR`) |
 
 ### Environment variables injected
 
@@ -425,8 +446,8 @@ wlctl run "python pipeline/extract.py" \
 | `WALUIGI_PARAM_<KEY>` | Each merged param (uppercased) |
 | `WALUIGI_ATTRIBUTE_<KEY>` | Each task attribute (uppercased) |
 | `WALUIGI_CONFIG` | Task config JSON (from YAML descriptor) |
-| `WALUIGI_CATALOG_NAMESPACE` | From `--namespace` or pre-existing env var |
-| `WALUIGI_CATALOG_URL` | From `--catalog-url` or pre-existing env var |
+| `WALUIGI_CATALOG_NAMESPACE` | From `--namespace` |
+| `WALUIGI_CATALOG_URL` | Auto-injected (embedded catalog URL) |
 | `PYTHONUNBUFFERED` | `1` |
 
 ---

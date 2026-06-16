@@ -111,31 +111,36 @@ spec:
 
 ### Step 2 — Run a single task locally
 
-No Boss, no Worker, no cluster needed:
+No Boss, no Worker, no cluster needed. `wlrun` starts an embedded Catalog automatically:
 
 ```bash
-wlctl run -f my-pipeline.yaml -t ingest --params date=2026-06-15
+wlrun -f my-pipeline.yaml -t ingest --params date=2026-06-15
 ```
 
 You see exactly what the Worker would see: stdout, stderr, exit code. Fix until it passes.
+Catalog data is written to `./wlrun-data/` (SQLite DB + Parquet files).
 
 ### Step 3 — Run the full pipeline locally
 
 ```bash
-wlctl run -f my-pipeline.yaml --params date=2026-06-15
+wlrun -f my-pipeline.yaml --params date=2026-06-15
 ```
 
 Tasks execute sequentially in dependency order. Stops immediately on first failure.
 
 ```
-[wlctl run job] tasks: 2  ingest → clean
+[wlrun] catalog       : http://localhost:54321
+[wlrun] data dir      : /home/user/project/wlrun-data
+[wlrun] namespace     : local
+
+[wlrun] tasks: 2  ingest → clean
 ── Task 1/2: ingest ──────────────────────
 Ingested 3 rows for 2026-06-15
 ✓ ingest  (0.4s)
 ── Task 2/2: clean ───────────────────────
 Clean rows: 3
 ✓ clean  (0.2s)
-[wlctl run job] completed — 2/2 tasks OK
+[wlrun] completed — 2/2 tasks OK
 ```
 
 ### Step 4 — Apply to the cluster
@@ -165,7 +170,7 @@ wlctl reset job orders-pipeline@1718100000.0 -n analytics
 
 ### Step 6 — Iterate
 
-- Tweak the script → re-run locally with `wlctl run`
+- Tweak the script → re-run locally with `wlrun`
 - When stable → re-apply with `wlctl apply`
 - For `Stateful` jobs: reset the affected task, the Boss replans automatically
 
@@ -1067,7 +1072,7 @@ spec:
 
 ```bash
 # Test all tasks locally first
-wlctl run -f orders-medallion.yaml --params date=2026-06-15
+wlrun -f orders-medallion.yaml --params date=2026-06-15
 
 # Apply JobDefinition to cluster
 wlctl apply -f orders-medallion.yaml
@@ -1175,10 +1180,11 @@ wlctl delete secret <name> [-n ns]
 wlctl delete dataset <id> [-n ns]
 wlctl delete version <version> -d <dataset_id> [-n ns]
 
-# Local run (no cluster needed)
-wlctl run -f job.yaml -t <task_id> [--params KEY=VALUE ...]
-wlctl run -f job.yaml [--params KEY=VALUE ...]
-wlctl run "python script.py" --params date=2026-06-15 -n analytics
+# Local run — isolated, embedded Catalog (no cluster needed)
+wlrun -f job.yaml -t <task_id> [-p KEY=VALUE ...]
+wlrun -f job.yaml [-p KEY=VALUE ...]
+wlrun "python script.py" -p date=2026-06-15 -n analytics
+wlrun -f job.yaml -d ./my-data    # custom data dir (default: ./wlrun-data)
 
 # Catalog
 wlctl preview dataset <id> [-n ns] [-v version] [-l rows]
@@ -1198,5 +1204,5 @@ wlctl dq dataset <id> [-n ns] [-v version]
 | Affinity set but ignored | `affinity` at outer task level, not inside `taskSpec` | Move `affinity` inside `taskSpec:` block |
 | Catalog write fails | Source not created yet | Apply `CatalogCreateSource` first or add `create_source` task before the write |
 | Version already exists, skipped | Metadata dedup triggered (`force=False`) | Pass `force=True` to `create_version()` or change the metadata dict |
-| `wlctl run` fails but cluster works | `WALUIGI_CATALOG_URL` not set locally | `export WALUIGI_CATALOG_URL=http://localhost:9000` |
+| `wlrun` can't connect to catalog | `wlcatalog` not installed or fails to start | Check `wlcatalog --help` works; look for port conflicts |
 | Job ID suffix `@timestamp` | `executionPolicy: Ephemeral` (default) | Use `Stateful` for canonical IDs |
