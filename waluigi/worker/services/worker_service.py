@@ -2,7 +2,9 @@ import asyncio
 import json
 import logging
 import os
+import pathlib
 import re
+import shutil
 
 from waluigi.commons.http import AsyncHttpClient
 from waluigi.worker.config.args import args
@@ -138,6 +140,18 @@ class WorkerService:
         finally:
             await self.slot_manager.release_slot()
 
+
+    def clear_prepare_dir(self) -> int:
+        total = 0
+        if os.path.isdir(self._prepare_dir):
+            total = sum(
+                f.stat().st_size
+                for f in pathlib.Path(self._prepare_dir).rglob("*")
+                if f.is_file()
+            )
+            shutil.rmtree(self._prepare_dir)
+        os.makedirs(self._prepare_dir, exist_ok=True)
+        return total
 
     async def _post(self, endpoint, **kwargs):
         r = await self._boss.post(endpoint, **kwargs)

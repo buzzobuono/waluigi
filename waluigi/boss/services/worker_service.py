@@ -12,3 +12,6 @@ class WorkerService:
 
     def list(self) -> list[dict]:
         return self.repo.list()
+
+    def remove(self, url: str) -> None:
+        self.repo.delete(url)

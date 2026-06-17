@@ -84,3 +84,23 @@ async def dispatch(
 async def get_slots(slot_manager: SlotManager = Depends(get_slot_manager)):
     available = await slot_manager.get_available_slots()
     return ok({"available_slots": available})
+
+
+@worker_router.delete("/prepare",
+    summary="Clear prepare directory",
+    description=(
+        "Wipes the contents of the worker's prepare directory. "
+        "Returns 422 if any tasks are currently running."
+    )
+)
+async def clear_prepare(
+    slot_manager: SlotManager = Depends(get_slot_manager),
+    worker_service: WorkerService = Depends(get_worker_service),
+):
+    available = await slot_manager.get_available_slots()
+    max_slots  = args.slots
+    if available < max_slots:
+        running = max_slots - available
+        return ko(f"Worker is busy ({running} task(s) running — try again later)", 422)
+    cleared = worker_service.clear_prepare_dir()
+    return ok({"cleared_bytes": cleared})

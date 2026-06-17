@@ -23,6 +23,7 @@ from waluigi.cli.commands.catalog   import (
     preview, lineage, dq,
     delete_dataset, delete_version,
 )
+from waluigi.cli.commands.prune     import prune_workers, prune_prepare
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -116,6 +117,13 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("-n", "--namespace", help="Namespace")
     p.add_argument("-d", "--dataset",   help="Dataset ID (required for version)")
 
+    # prune
+    p = sub.add_parser("prune", help="Remove ghost workers or clear prepare directories")
+    p.add_argument("type", choices=["workers", "prepare"],
+                   help="'workers' removes ghost workers from DB; 'prepare' wipes prepare dirs")
+    p.add_argument("-w", "--worker", metavar="URL",
+                   help="Target worker URL (for prepare; default: all workers)")
+
     # logs
     p = sub.add_parser("logs", help="Fetch task logs")
     p.add_argument("task_id")
@@ -197,6 +205,11 @@ def main() -> None:
                 delete_version(session, dataset_id, args.target, namespace=ns)
         else:
             delete(session, args.type, args.target, namespace=ns)
+    elif args.command == "prune":
+        if args.type == "workers":
+            prune_workers(session)
+        elif args.type == "prepare":
+            prune_prepare(session, worker_url=getattr(args, "worker", None))
     elif args.command == "logs":
         get_logs(session, namespace=ns, task_id=args.task_id,
                  limit=args.lines, follow=args.follow)
