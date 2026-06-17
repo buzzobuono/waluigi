@@ -19,7 +19,7 @@ services:
     depends_on:
       - boss
     environment:
-      - WALUIGI_WORKER_BOSS_URL=http://boss:8082q
+      - WALUIGI_WORKER_BOSS_URL=http://boss:8082
       - WALUIGI_WORKER_WORKDIR=/work
       - WALUIGI_WORKER_SLOTS=1
       - WALUIGI_WORKER_AFFINITY=python
