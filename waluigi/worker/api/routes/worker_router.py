@@ -39,6 +39,7 @@ async def dispatch(
     try:
         command    = body.command
         script     = body.script
+        prepare    = body.prepare
         id         = body.id
         job_id     = body.job_id
         params     = body.params
@@ -63,7 +64,7 @@ async def dispatch(
     
         try:
             asyncio.create_task(
-                worker_service.run_command_async(command, id, job_id, namespace, params, attributes, config, resources, script, secrets)
+                worker_service.run_command_async(command, id, job_id, namespace, params, attributes, config, resources, script, secrets, prepare)
             )
         except Exception as e:
             logger.error(f"Error: {e}")

@@ -124,6 +124,7 @@ class BossEngine:
             task.command  = spec_def.get("command", "")
             task.script   = spec_def.get("script")
             task.affinity = spec_def.get("affinity", [])
+            task.prepare  = spec_def.get("prepare")
             task.type = None
 
         task_resources = getattr(task, "resources", _DEFAULT_RESOURCES)
@@ -185,6 +186,7 @@ class BossEngine:
         payload = {
             "command":     task.command,
             "script":      task.script,
+            "prepare":     getattr(task, "prepare", None),
             "id":          task.id,
             "job_id":      job_metadata.get("name", ""),
             "params":      vars(task.params),

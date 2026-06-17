@@ -32,6 +32,7 @@ def parse_definition(definition) -> list[dict]:
             t_flat["script"]   = inner.get("script")
             t_flat["command"]  = inner.get("command", "")
             t_flat["affinity"] = inner.get("affinity", [])
+            t_flat["prepare"]  = inner.get("prepare")
             if "resources" in inner:
                 t_flat["resources"] = inner["resources"]
 
@@ -106,6 +107,7 @@ class DAGTask:
         self.config     = data.get("config", {})
         self.requires: list[str] = data.get("requires", [])
         self.affinity: list[str] = data.get("affinity", [])
+        self.prepare             = data.get("prepare")  # str | list[str] | None
 
     def hash(self, nsdict) -> str:
         return " ".join(f"{k}:{v}" for k, v in sorted(vars(nsdict).items()))

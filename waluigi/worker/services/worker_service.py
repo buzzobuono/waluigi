@@ -31,8 +31,11 @@ class WorkerService:
     def __init__(self, slot_manager: SlotManager):
         self.slot_manager = slot_manager
         self._boss = AsyncHttpClient(args.boss_url, timeout=5)
+        self._worker_dir  = os.path.join(args.default_workdir, args.host)
+        self._prepare_dir = os.path.join(self._worker_dir, "prepare")
+        os.makedirs(self._prepare_dir, exist_ok=True)
 
-    async def run_command_async(self, command, id, job_id, namespace, params, attributes, config, resources, script=None, secrets=None):
+    async def run_command_async(self, command, id, job_id, namespace, params, attributes, config, resources, script=None, secrets=None, prepare=None):
         try:
             await self._update_boss(namespace, id, params, attributes, resources, "RUNNING")
 
@@ -58,13 +61,49 @@ class WorkerService:
                 logger.warning(f"Unexpanded placeholders in config after secret injection: {unexpanded}")
 
             env["WALUIGI_CONFIG"] = json.dumps(expanded_config)
+
+            # Prepare dir — always injected so prepare commands can reference it
+            env["WALUIGI_PREPARE_DIR"] = self._prepare_dir
+            existing_pp = env.get("PYTHONPATH", "")
+            env["PYTHONPATH"] = f"{self._prepare_dir}:{existing_pp}" if existing_pp else self._prepare_dir
+
             if script:
                 env["WALUIGI_SCRIPT"] = script
+
+            # Run prepare steps before the main command
+            if prepare:
+                steps = [prepare] if isinstance(prepare, str) else prepare
+                for step in steps:
+                    logger.info(f"[prepare] {step}")
+                    log_buffer = []
+                    proc = await asyncio.create_subprocess_shell(
+                        step,
+                        cwd=self._worker_dir,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.STDOUT,
+                        env=env,
+                    )
+                    async for line in proc.stdout:
+                        clean_line = line.decode().strip()
+                        if clean_line:
+                            print(f"[{id}][prepare] {clean_line}", flush=True)
+                            log_buffer.append(f"[prepare] {clean_line}")
+                            if len(log_buffer) >= 5:
+                                await self._send_logs(namespace, id, log_buffer)
+                                log_buffer = []
+                    if log_buffer:
+                        await self._send_logs(namespace, id, log_buffer)
+                    await proc.wait()
+                    if proc.returncode != 0:
+                        logger.error(f"Prepare step failed (exit {proc.returncode}): {step}")
+                        await self._update_boss(namespace, id, params, attributes, resources, "FAILED")
+                        return
+
             logger.info(f"🚀 Forking: {'<inline script>' if script else command}")
 
             process = await asyncio.create_subprocess_shell(
                 command,
-                cwd=args.default_workdir,
+                cwd=self._worker_dir,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 env=env

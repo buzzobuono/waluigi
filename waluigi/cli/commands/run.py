@@ -53,7 +53,7 @@ def _load_docs(file_path: str) -> list:
 
 
 def _collect_taskdefs(docs: list) -> dict:
-    """Returns {name: {command, script}} from TaskDefinition docs in the YAML file."""
+    """Returns {name: {command, script, prepare}} from TaskDefinition docs in the YAML file."""
     taskdefs = {}
     for doc in docs:
         if doc.get('kind') != 'TaskDefinition':
@@ -65,6 +65,7 @@ def _collect_taskdefs(docs: list) -> dict:
         taskdefs[name] = {
             'command': spec.get('command'),
             'script':  spec.get('script'),
+            'prepare': spec.get('prepare'),
         }
     return taskdefs
 
@@ -81,11 +82,11 @@ def _find_job(docs: list) -> tuple[list, dict]:
     return [], {}
 
 
-def _resolve_task(task: dict, taskdefs: dict) -> tuple[str | None, str | None]:
-    """Returns (command, script) for a task, resolving taskRef if needed."""
+def _resolve_task(task: dict, taskdefs: dict) -> tuple[str | None, str | None, object]:
+    """Returns (command, script, prepare) for a task, resolving taskRef if needed."""
     task_spec = task.get('taskSpec') or {}
     if task_spec:
-        return task_spec.get('command'), task_spec.get('script')
+        return task_spec.get('command'), task_spec.get('script'), task_spec.get('prepare')
 
     task_ref = task.get('taskRef') or {}
     ref_name = task_ref.get('name')
@@ -93,13 +94,13 @@ def _resolve_task(task: dict, taskdefs: dict) -> tuple[str | None, str | None]:
         # 1. TaskDefinition in the same YAML file
         defn = taskdefs.get(ref_name)
         if defn:
-            return defn.get('command'), defn.get('script')
-        # 2. Built-in task types
+            return defn.get('command'), defn.get('script'), defn.get('prepare')
+        # 2. Built-in task types (no prepare)
         if ref_name in _BUILTIN_COMMANDS:
-            return _BUILTIN_COMMANDS[ref_name], None
-        return None, None   # unresolvable
+            return _BUILTIN_COMMANDS[ref_name], None, None
+        return None, None, None   # unresolvable
 
-    return None, None
+    return None, None, None
 
 
 def _toposort(tasks: list) -> list:
@@ -137,6 +138,28 @@ def _build_base_env(namespace: str | None, catalog_url: str | None) -> tuple[dic
     return env, effective_ns, effective_catalog
 
 
+def _inject_prepare_dir(env: dict, prepare_dir: str | None) -> None:
+    """Inject WALUIGI_PREPARE_DIR and prepend it to PYTHONPATH."""
+    if not prepare_dir:
+        return
+    env['WALUIGI_PREPARE_DIR'] = prepare_dir
+    existing_pp = env.get('PYTHONPATH', '')
+    env['PYTHONPATH'] = f"{prepare_dir}:{existing_pp}" if existing_pp else prepare_dir
+
+
+def _run_prepare(prepare, env: dict, cwd: str | None, task_id: str) -> None:
+    """Run prepare steps sequentially. Exits the process on first failure."""
+    if not prepare:
+        return
+    steps = [prepare] if isinstance(prepare, str) else prepare
+    for step in steps:
+        print(f"[wlrun][prepare] {step}")
+        result = subprocess.run(step, shell=True, env=env, cwd=cwd)
+        if result.returncode != 0:
+            print(f"\n✗ [{task_id}] prepare FAILED (exit {result.returncode})", file=sys.stderr)
+            sys.exit(result.returncode)
+
+
 def _inject_params(env: dict, job_params: dict, task_params: dict,
                    cli_params: dict, attributes: dict, config: dict) -> dict:
     merged = {**job_params, **task_params, **cli_params}
@@ -166,22 +189,24 @@ def _extract_from_yaml(file_path: str, task_id: str) -> tuple:
     for task in tasks:
         if task.get('id') != task_id:
             continue
-        cmd, script = _resolve_task(task, taskdefs)
+        cmd, script, prepare = _resolve_task(task, taskdefs)
         return (
             cmd,
             script,
+            prepare,
             dict(task.get('config', {})),
             job_params,
             dict(task.get('params', {})),
             dict(task.get('attributes', {})),
         )
 
-    return None, None, {}, {}, {}, {}
+    return None, None, None, {}, {}, {}, {}
 
 
-def run_task(cmd, file, task_id, params, namespace, catalog_url):
+def run_task(cmd, file, task_id, params, namespace, catalog_url, prepare_dir=None, worker_dir=None):
     parsed_params    = _parse_params(params)
     script           = None
+    prepare          = None
     config           = {}
     job_params       = {}
     task_params      = {}
@@ -190,9 +215,10 @@ def run_task(cmd, file, task_id, params, namespace, catalog_url):
     if file:
         if not task_id:
             # No task_id → run the whole job
-            run_job(file, params, namespace, catalog_url)
+            run_job(file, params, namespace, catalog_url,
+                    prepare_dir=prepare_dir, worker_dir=worker_dir)
             return
-        extracted_cmd, script, config, job_params, task_params, task_attributes = \
+        extracted_cmd, script, prepare, config, job_params, task_params, task_attributes = \
             _extract_from_yaml(file, task_id)
         if cmd is None:
             cmd = extracted_cmd
@@ -208,21 +234,23 @@ def run_task(cmd, file, task_id, params, namespace, catalog_url):
     env, effective_ns, effective_catalog = _build_base_env(namespace, catalog_url)
     env['WALUIGI_TASK_ID'] = task_id or 'local-run'
 
+    _inject_prepare_dir(env, prepare_dir)
     merged = _inject_params(env, job_params, task_params, parsed_params, task_attributes, config)
-    cmd    = _make_cmd(cmd, script, env)
+    _run_prepare(prepare, env, worker_dir, task_id or 'local-run')
+    cmd = _make_cmd(cmd, script, env)
 
     label = '<inline script>' if script else cmd
     print(f"[wlrun] command       : {label}")
     print(f"[wlrun] params        : {merged or '(none)'}")
     print()
 
-    result = subprocess.run(cmd, shell=True, env=env)
+    result = subprocess.run(cmd, shell=True, env=env, cwd=worker_dir)
     sys.exit(result.returncode)
 
 
 # ── Full job ──────────────────────────────────────────────────────────────────
 
-def run_job(file, params, namespace, catalog_url):
+def run_job(file, params, namespace, catalog_url, prepare_dir=None, worker_dir=None):
     parsed_params = _parse_params(params)
     docs          = _load_docs(file)
     taskdefs      = _collect_taskdefs(docs)
@@ -235,6 +263,7 @@ def run_job(file, params, namespace, catalog_url):
     ordered = _toposort(tasks)
 
     base_env, effective_ns, effective_catalog = _build_base_env(namespace, catalog_url)
+    _inject_prepare_dir(base_env, prepare_dir)
 
     ids_line = " → ".join(t['id'] for t in ordered)
     print(f"[wlrun] file          : {file}")
@@ -244,7 +273,7 @@ def run_job(file, params, namespace, catalog_url):
 
     for i, task in enumerate(ordered, 1):
         task_id = task['id']
-        cmd, script = _resolve_task(task, taskdefs)
+        cmd, script, prepare = _resolve_task(task, taskdefs)
 
         sep = '─' * max(1, 44 - len(task_id))
         print(f"── Task {i}/{len(ordered)}: {task_id} {sep}")
@@ -268,10 +297,12 @@ def run_job(file, params, namespace, catalog_url):
             dict(task.get('attributes', {})),
             task.get('config', {}),
         )
+
+        t0 = time.monotonic()
+        _run_prepare(prepare, task_env, worker_dir, task_id)
         cmd = _make_cmd(cmd, script, task_env)
 
-        t0     = time.monotonic()
-        result = subprocess.run(cmd, shell=True, env=task_env)
+        result = subprocess.run(cmd, shell=True, env=task_env, cwd=worker_dir)
         elapsed = time.monotonic() - t0
 
         if result.returncode == 0:

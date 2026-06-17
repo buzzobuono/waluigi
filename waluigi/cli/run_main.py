@@ -114,10 +114,15 @@ def main() -> None:
 
     _proc, catalog_url = _start_local_catalog(args.data_dir)
 
-    data_path = pathlib.Path(args.data_dir).resolve()
+    data_path   = pathlib.Path(args.data_dir).resolve()
+    worker_dir  = data_path / "work" / socket.gethostname()
+    prepare_dir = worker_dir / "prepare"
+    prepare_dir.mkdir(parents=True, exist_ok=True)
+
     print(f"[wlrun] catalog       : {catalog_url}")
     print(f"[wlrun] data dir      : {data_path}")
     print(f"[wlrun] namespace     : {args.namespace}")
+    print(f"[wlrun] prepare dir   : {prepare_dir}")
     print()
 
     run_task(
@@ -127,6 +132,8 @@ def main() -> None:
         params=args.params,
         namespace=args.namespace,
         catalog_url=catalog_url,
+        prepare_dir=str(prepare_dir),
+        worker_dir=str(worker_dir),
     )
 
 
