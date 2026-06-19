@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: waluigi-data-persistent-volume
+  namespace: waluigi
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 200Gi
+  accessModes:
+    - ReadWriteMany
+  hostPath:
+    path: "/data/volumes/waluigi/data"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: waluigi-data-persistent-volume-claim
+  namespace: waluigi
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 200Gi
+  selector:
+    matchLabels:
+      type: local
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: waluigi-worker-deployment
+  namespace: waluigi
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      waluigi: worker
+  template:
+    metadata:
+      labels:
+        waluigi: worker
+    spec:
+      containers:
+      - name: waluigi-worker-container
+        image: localhost:32000/waluigi:latest
+        imagePullPolicy: IfNotPresent
+        command: ["wlworker"]
+        env:
+        - name: WALUIGI_WORKER_HOST
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: WALUIGI_WORKER_BOSS_URL
+          value: "http://waluigi-boss-service:8082"
+        - name: WALUIGI_WORKER_WORKDIR
+          value: "/work"
+        - name: WALUIGI_WORKER_SLOTS
+          value: "1"
+        - name: WALUIGI_WORKER_AFFINITY
+          value: "python"
+        - name: WALUIGI_CATALOG_URL
+          value: "http://waluigi-catalog-service:9000"
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "8Gi"
+            cpu: "2"
+        volumeMounts:
+        - name: waluigi-data-volume
+          mountPath: /data
+      volumes:
+      - name: waluigi-data-volume
+        persistentVolumeClaim:
+          claimName: waluigi-data-persistent-volume-claim

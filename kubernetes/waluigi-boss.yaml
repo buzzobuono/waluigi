@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: waluigi-boss-deployment
+  namespace: waluigi
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      waluigi: boss
+  template:
+    metadata:
+      labels:
+        waluigi: boss
+    spec:
+      containers:
+      - name: waluigi-boss-container
+        image: localhost:32000/waluigi:latest
+        imagePullPolicy: IfNotPresent
+        command: ["wlboss"]
+        ports:
+        - containerPort: 8082
+        env:
+        - name: WALUIGI_PG_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: waluigi-postgres-secret
+              key: POSTGRES_PASSWORD
+        - name: WALUIGI_BOSS_DB_URL
+          value: "postgresql+psycopg2://waluigi:$(WALUIGI_PG_PASSWORD)@waluigi-postgres-service/waluigi"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: waluigi-boss-service
+  namespace: waluigi
+spec:
+  type: ClusterIP
+  selector:
+    waluigi: boss
+  ports:
+  - port: 8082
+    targetPort: 8082

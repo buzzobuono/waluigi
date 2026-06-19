@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: waluigi-postgres-secret
+  namespace: waluigi
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: "changeme"
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: waluigi-pgdata-persistent-volume
+  namespace: waluigi
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/volumes/waluigi/pgdata"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: waluigi-pgdata-persistent-volume-claim
+  namespace: waluigi
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  selector:
+    matchLabels:
+      type: local
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: waluigi-postgres-deployment
+  namespace: waluigi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      waluigi: postgres
+  template:
+    metadata:
+      labels:
+        waluigi: postgres
+    spec:
+      containers:
+      - name: waluigi-postgres-container
+        image: postgres:16-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: "waluigi"
+        - name: POSTGRES_USER
+          value: "waluigi"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: waluigi-postgres-secret
+              key: POSTGRES_PASSWORD
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1"
+        volumeMounts:
+        - name: waluigi-pgdata-volume
+          mountPath: /var/lib/postgresql/data
+        livenessProbe:
+          exec:
+            command: ["pg_isready", "-U", "waluigi", "-d", "waluigi"]
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+      volumes:
+      - name: waluigi-pgdata-volume
+        persistentVolumeClaim:
+          claimName: waluigi-pgdata-persistent-volume-claim
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: waluigi-postgres-service
+  namespace: waluigi
+spec:
+  type: ClusterIP
+  selector:
+    waluigi: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432

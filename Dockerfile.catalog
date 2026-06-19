@@ -1,4 +1,0 @@
-ARG VERSION
-FROM buzzobuono/waluigi-base:${VERSION:-latest}
-
-CMD ["wlcatalog"]

@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: waluigi-catalog-deployment
+  namespace: waluigi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      waluigi: catalog
+  template:
+    metadata:
+      labels:
+        waluigi: catalog
+    spec:
+      containers:
+      - name: waluigi-catalog-container
+        image: localhost:32000/waluigi:latest
+        imagePullPolicy: IfNotPresent
+        command: ["wlcatalog"]
+        ports:
+        - containerPort: 9000
+        env:
+        - name: WALUIGI_PG_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: waluigi-postgres-secret
+              key: POSTGRES_PASSWORD
+        - name: WALUIGI_CATALOG_DB_URL
+          value: "postgresql+psycopg2://waluigi:$(WALUIGI_PG_PASSWORD)@waluigi-postgres-service/waluigi"
+        - name: WALUIGI_CATALOG_DATA_PATH
+          value: "/data"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1"
+        volumeMounts:
+        - name: waluigi-data-volume
+          mountPath: /data
+      volumes:
+      - name: waluigi-data-volume
+        persistentVolumeClaim:
+          claimName: waluigi-data-persistent-volume-claim
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: waluigi-catalog-service
+  namespace: waluigi
+spec:
+  type: ClusterIP
+  selector:
+    waluigi: catalog
+  ports:
+  - port: 9000
+    targetPort: 9000

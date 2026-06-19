@@ -1,17 +1,10 @@
 #!/bin/bash
-# Deploy Waluigi stack with PostgreSQL-backed Catalog.
-# Requires CATALOG_PG_PASSWORD to be set in the environment or in .env.pg
 
-set -e
-
-if [ -f .env.pg ]; then
-    set -a
-    source .env.pg
-    set +a
-fi
-
-: "${CATALOG_PG_PASSWORD:?Please set CATALOG_PG_PASSWORD (or create .env.pg with CATALOG_PG_PASSWORD=...)}"
+set -a && source .env && set +a
 
 docker stack deploy -c docker-compose.pg.yml waluigi
 
-docker service ls --filter "name=waluigi"
+echo "Waiting for workers to register..."
+sleep 20
+source env/bin/activate && wlctl --url http://127.0.0.1:8080 prune workers
+

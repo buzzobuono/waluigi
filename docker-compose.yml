@@ -1,7 +1,8 @@
 services:
-  
+
   boss:
-    image: buzzobuono/waluigi-boss:latest
+    image: buzzobuono/waluigi:latest
+    command: wlboss
     ports:
     - target: 8082
       published: 8082
@@ -15,7 +16,8 @@ services:
       replicas: 3
 
   worker:
-    image: buzzobuono/waluigi-worker:latest
+    image: buzzobuono/waluigi:latest
+    command: wlworker
     depends_on:
       - boss
     environment:
@@ -25,14 +27,13 @@ services:
       - WALUIGI_WORKER_AFFINITY=python
       - WALUIGI_CATALOG_URL=http://catalog:9000
     volumes:
-      - ./work:/work
-      - ./source:/source
       - ./data:/data
     deploy:
       replicas: 15
-  
+
   catalog:
-    image: buzzobuono/waluigi-catalog:latest
+    image: buzzobuono/waluigi:latest
+    command: wlcatalog
     ports:
     - target: 9000
       published: 9000
@@ -48,7 +49,8 @@ services:
       replicas: 1
 
   console:
-    image: buzzobuono/waluigi-console:latest
+    image: buzzobuono/waluigi:latest
+    command: wlconsole
     depends_on:
       - boss
       - catalog

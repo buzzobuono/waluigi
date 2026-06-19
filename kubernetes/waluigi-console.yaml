@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: waluigi-console-deployment
+  namespace: waluigi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      waluigi: console
+  template:
+    metadata:
+      labels:
+        waluigi: console
+    spec:
+      containers:
+      - name: waluigi-console-container
+        image: localhost:32000/waluigi:latest
+        imagePullPolicy: IfNotPresent
+        command: ["wlconsole"]
+        ports:
+        - containerPort: 8080
+        env:
+        - name: WALUIGI_PG_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: waluigi-postgres-secret
+              key: POSTGRES_PASSWORD
+        - name: WALUIGI_CONSOLE_BOSS_URL
+          value: "http://waluigi-boss-service:8082"
+        - name: WALUIGI_CONSOLE_CATALOG_URL
+          value: "http://waluigi-catalog-service:9000"
+        - name: WALUIGI_CONSOLE_DB_URL
+          value: "postgresql+psycopg2://waluigi:$(WALUIGI_PG_PASSWORD)@waluigi-postgres-service/waluigi"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: waluigi-console-service
+  namespace: waluigi
+spec:
+  type: ClusterIP
+  selector:
+    waluigi: console
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: waluigi-console-ingress
+  namespace: waluigi
+  annotations:
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "2000"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "2000"
+spec:
+  rules:
+  - host: localhost
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: waluigi-console-service
+            port:
+              number: 8080
+  - host: dodiffradel24
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: waluigi-console-service
+            port:
+              number: 8080
