@@ -32,18 +32,18 @@ class ExpectationRepository(BaseRepository):
             tolerance: float = 1.0, position: int = 0) -> Expectation:
         now = _now()
         with self._conn() as conn:
-            result = conn.execute(
+            row_id = conn.execute(
                 text("INSERT INTO expectations"
                      " (dataset_id, rule_id, inputs, params, tolerance, position,"
                      "  username, createdate, updatedate)"
                      " VALUES (:did, :rule, :inputs, :params, :tol, :pos,"
-                     "         :usr, :now, :now)"),
+                     "         :usr, :now, :now)"
+                     " RETURNING id"),
                 {"did": dataset_id, "rule": rule_id,
                  "inputs": json.dumps(inputs), "params": json.dumps(params),
                  "tol": tolerance, "pos": position,
                  "usr": _user(), "now": now},
-            )
-            row_id = result.lastrowid
+            ).scalar()
         return self.get(dataset_id, row_id)
 
     def update(self, dataset_id: str, exp_id: int, **kwargs) -> bool:

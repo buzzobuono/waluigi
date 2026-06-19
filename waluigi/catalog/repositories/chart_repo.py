@@ -47,17 +47,17 @@ class ChartRepository(BaseRepository):
             spec: dict, position: int = 0) -> dict:
         now = _now()
         with self._conn() as conn:
-            result = conn.execute(
+            row_id = conn.execute(
                 text("INSERT INTO charts"
                      " (dataset_id, key, title, spec, position,"
                      "  username, createdate, updatedate)"
                      " VALUES (:did, :key, :title, :spec, :pos,"
-                     "         :usr, :now, :now)"),
+                     "         :usr, :now, :now)"
+                     " RETURNING id"),
                 {"did": dataset_id, "key": key, "title": title,
                  "spec": json.dumps(spec), "pos": position,
                  "usr": _user(), "now": now},
-            )
-            row_id = result.lastrowid
+            ).scalar()
         return self.get(dataset_id, row_id)
 
     def update(self, dataset_id: str, chart_id: int, **kwargs) -> bool:
