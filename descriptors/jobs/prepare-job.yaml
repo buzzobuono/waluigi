@@ -1,0 +1,44 @@
+kind: Job
+metadata:
+  name: test-prepare
+  namespace: analytics
+spec:
+  executionPolicy: Ephemeral
+  jobSpec:
+    tasks:
+      - id: chunker
+        taskSpec:
+          prepare: >
+            pip install
+            git+https://github.com/more-itertools/more-itertools.git@v10.3.0
+            --target ${WALUIGI_PREPARE_DIR}
+            -q
+          script: |
+            import more_itertools
+            nums   = list(range(10))
+            chunks = list(more_itertools.chunked(nums, 3))
+            print(f"more_itertools {more_itertools.__version__} via prepare")
+            print(f"chunked([0..9], 3) → {chunks}")
+          affinity:
+            - python
+        resources:
+          coin: 1
+
+      - id: windowed
+        taskSpec:
+          prepare: >
+            pip install
+            git+https://github.com/more-itertools/more-itertools.git@v10.3.0
+            --target ${WALUIGI_PREPARE_DIR}
+            -q
+          script: |
+            import more_itertools
+            letters  = list("abcde")
+            windows  = list(more_itertools.windowed(letters, 3))
+            print(f"windowed([a..e], 3) → {windows}")
+          affinity:
+            - python
+        requires:
+          - chunker
+        resources:
+          coin: 1

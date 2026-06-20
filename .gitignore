@@ -5,9 +5,10 @@ __pycache__/
 /.venv/
 *.out
 .vscode
-waluigi.egg-info
-work/
+/waluigi.egg-info
+/work/
 /db/
 /data/
 build/
+/wlrun-data/
 /custom/
