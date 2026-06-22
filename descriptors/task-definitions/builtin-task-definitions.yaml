@@ -72,6 +72,22 @@ spec:
 ---
 kind: TaskDefinition
 metadata:
+  name: "AccumulateDataset"
+spec:
+  command: "python -m waluigi.tasks.accumulate_dataset"
+  affinity:
+    - python
+---
+kind: TaskDefinition
+metadata:
+  name: "UpsertDataset"
+spec:
+  command: "python -m waluigi.tasks.upsert_dataset"
+  affinity:
+    - python
+---
+kind: TaskDefinition
+metadata:
   name: "CatalogCreateSource"
 spec:
   command: "python -m waluigi.tasks.catalog_create_source"

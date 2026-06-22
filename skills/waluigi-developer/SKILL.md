@@ -652,6 +652,60 @@ Remove duplicate rows. `keep`: `first` | `last` | `false` (drop all duplicates).
 
 ---
 
+### AccumulateDataset
+
+Append-only **fact table** with per-date idempotency — the go-to built-in for daily fact tables (Bronze→Gold). Reads the previous gold, drops the current day's rows, appends today's input, writes a new version. Re-running the same day is idempotent (row-level drop + `force=False` version dedup). Lineage records both input and previous gold. `date_column` defaults to `"date"`, `date_param` to `"date"`.
+
+```yaml
+- id: accumulate_applications
+  taskRef:
+    name: AccumulateDataset
+  config:
+    input:
+      dataset: analytics/bronze/applications
+      source: *local
+    output:
+      dataset: analytics/gold/applications_all
+      format: parquet
+      description: "Applications accumulated daily"
+      source: *local
+    date_column: date
+    date_param: date
+  resources:
+    coin: 2
+  requires:
+    - bronze_ingest
+```
+
+---
+
+### UpsertDataset
+
+**SCD Type 1** dimension table — the go-to built-in for daily dimension tables. Reads the previous gold, concats today's input, keeps the last record per business `key` (`keep="last"`). Records removed from the source are retained (never deleted). Missing key column → explicit `KeyError`. `key` accepts a string or a list (composite key).
+
+```yaml
+- id: upsert_clienti
+  taskRef:
+    name: UpsertDataset
+  config:
+    input:
+      dataset: analytics/bronze/clienti
+      source: *local
+    output:
+      dataset: analytics/gold/clienti
+      format: parquet
+      description: "Customer master — latest per customer"
+      source: *local
+    key:
+      - IdCliente
+  resources:
+    coin: 1
+  requires:
+    - bronze_ingest
+```
+
+---
+
 ### CatalogCreateSource
 
 Register or update a data source (idempotent).

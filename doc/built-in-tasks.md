@@ -444,6 +444,120 @@ config:
 
 ---
 
+## AccumulateDataset
+
+Append-only **fact table** with per-date idempotency — the canonical built-in for daily fact tables in a Bronze→Silver→Gold (medallion) architecture. Each run reads the previous output (gold) version, drops the rows for the current date, appends today's input, and writes a new output version.
+
+Idempotency is two-layered: re-running the same day removes that day's rows from the previous gold before appending (row-level), and `write_output` reserves with `force=False` so identical metadata skips the write entirely (version-level). Lineage records **both** inputs: today's input and the previous gold version.
+
+```yaml
+taskRef:
+  name: AccumulateDataset
+config:
+  input:
+    dataset: <string>
+    source: <source>
+  output:
+    dataset: <string>
+    format: <string>
+    description: <string>
+    source: <source>
+  date_column: <string>        # date partition column in the dataframe (default: "date")
+  date_param: <string>         # job param holding today's date value   (default: "date")
+```
+
+**Behaviour:**
+
+| Scenario | Result |
+|----------|--------|
+| First run (no previous gold) | Writes today's input as the first gold version |
+| Normal run | Removes rows where `date_column == date_param`, appends input, writes a new version |
+| Same day re-run (same params) | `force=False` skips the write — no duplicate version |
+| `date_column` absent from input | The column is added automatically with the `date_param` value |
+| Empty input | Still writes a gold version (history only) — does not fail |
+
+**Example:**
+
+```yaml
+- id: accumulate_orders
+  taskRef:
+    name: AccumulateDataset
+  config:
+    input:
+      dataset: bronze/myapp/orders_raw
+      source: *local
+    output:
+      dataset: gold/myapp/orders_all
+      format: parquet
+      description: "Orders accumulated — all days"
+      source: *local
+    date_column: date
+    date_param: date
+  resources:
+    coin: 2
+  requires:
+    - bronze_ingest
+```
+
+---
+
+## UpsertDataset
+
+**SCD Type 1** dimension table — the canonical built-in for daily dimension tables in a medallion architecture. Each run reads the previous output (gold) version, concatenates today's input, and keeps the last record per business `key` (`keep="last"`), so newer rows win on a key collision.
+
+Records that disappear from the source are **not** deleted — they remain in the output. Same-day re-runs are idempotent via `force=False` on identical metadata. Lineage records both today's input and the previous gold version.
+
+```yaml
+taskRef:
+  name: UpsertDataset
+config:
+  input:
+    dataset: <string>
+    source: <source>
+  output:
+    dataset: <string>
+    format: <string>
+    description: <string>
+    source: <source>
+  key: <string | list[string]>  # business key column(s) — required; list = composite key
+```
+
+**Behaviour:**
+
+| Scenario | Result |
+|----------|--------|
+| First run | Writes input after internal dedup by `key` |
+| Normal run | Concat previous gold + today → dedup `keep="last"` → new version |
+| Existing key, updated data | Overwrites the previous record (today wins) |
+| New key | Added normally |
+| Key removed from source | **Retained** in gold — the task only updates/adds, never deletes |
+| Key column missing from input | Fails with an explicit `KeyError` |
+
+**Example:**
+
+```yaml
+- id: upsert_clienti
+  taskRef:
+    name: UpsertDataset
+  config:
+    input:
+      dataset: bronze/myapp/clienti_raw
+      source: *local
+    output:
+      dataset: gold/myapp/clienti
+      format: parquet
+      description: "Customer master — latest version per customer"
+      source: *local
+    key:
+      - IdCliente                # list supports composite keys
+  resources:
+    coin: 1
+  requires:
+    - bronze_ingest
+```
+
+---
+
 ## CatalogCreateSource
 
 Registers or updates a data source. Idempotent (upsert by ID).

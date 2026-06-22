@@ -2,6 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Documentation Maintenance (REQUIRED)
+
+**Whenever you change code, you MUST update the documentation in the same change:**
+
+1. **`doc/`** — the user-facing docs (`architecture.md`, `built-in-tasks.md`, `catalog.md`, `cli.md`, `data-quality.md`, `deployment.md`, `sdk.md`, `task-development.md`, `yaml-reference.md`). Update the file(s) covering the area you touched.
+2. **`skills/waluigi-developer/SKILL.md`** — the usage skill. Keep its task/command/workflow references in sync with the code.
+3. **`CLAUDE.md`** — this file, when architecture, commands, APIs, or built-in tables change.
+
+A code change is not complete until `doc/`, the skill, and `CLAUDE.md` reflect it. Adding a built-in task, a CLI command, a REST endpoint, or a config flag always implies a matching doc + skill edit.
+
 ## What This Project Is
 
 **Waluigi** is a lightweight distributed task orchestrator with a **server-push architecture**: the Boss daemon actively schedules and dispatches tasks to Workers via HTTP, rather than workers polling for work. It is designed for data pipeline DAG execution across distributed clusters, with an optional Catalog service for dataset metadata, schema tracking, and data quality.
@@ -416,6 +426,8 @@ These are Python modules invokable from TaskDefinition specs. They are **not aut
 | `waluigi.tasks.merge_datasets` | `MergeDatasets` | Union/concat datasets |
 | `waluigi.tasks.pivot_dataset` | `PivotDataset` | Pivot table |
 | `waluigi.tasks.deduplicate_dataset` | `DeduplicateDataset` | Drop duplicate rows |
+| `waluigi.tasks.accumulate_dataset` | `AccumulateDataset` | Append-only fact table, per-date idempotency (reads gold_prev) |
+| `waluigi.tasks.upsert_dataset` | `UpsertDataset` | SCD Type 1 dimension, keep-last per business key (reads gold_prev) |
 | `waluigi.tasks.catalog_create_source` | `CatalogCreateSource` | Create Catalog source via params |
 | `waluigi.tasks.catalog_create_dataset` | `CatalogCreateDataset` | Create Catalog dataset via params |
 | `waluigi.tasks.catalog_define_schema` | `CatalogDefineSchema` | Define/publish schema |

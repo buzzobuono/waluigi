@@ -17,7 +17,7 @@ Dataset config shape (used in input / output / left / right / inputs[*]):
 from types import SimpleNamespace
 
 from waluigi.sdk.context import context
-from waluigi.sdk.catalog import catalog
+from waluigi.sdk.catalog import catalog, CatalogError
 from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 
 
@@ -51,6 +51,24 @@ def read_input():
     reader = catalog.read_dataset(inp["dataset"])
     df = reader.read()
     print(f"  read {inp['dataset']}: {len(df)} rows @ {reader.version}")
+    return reader, df
+
+
+def read_prev_output():
+    """Read the latest committed version of the *output* dataset (the "gold_prev"
+    pattern used by incremental tasks like AccumulateDataset / UpsertDataset).
+
+    Returns (reader, df) or (None, None) when no prior version exists — a normal
+    condition on the first run, not an error.
+    """
+    out = _to_dict(context.config.output)
+    _ensure_source(out)
+    try:
+        reader = catalog.read_dataset(out["dataset"])
+    except CatalogError:
+        return None, None
+    df = reader.read()
+    print(f"  read previous {out['dataset']}: {len(df)} rows @ {reader.version}")
     return reader, df
 
 
