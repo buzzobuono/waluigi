@@ -501,6 +501,61 @@ config:
 
 ---
 
+## AccumulateDeduplicateDataset
+
+Fact table with **cross-day deduplication by state** — a variant of `AccumulateDataset` for operational-funnel / state-history tables. Instead of appending today's snapshot verbatim, it keeps a single row per unique state (all columns **except** `date_column`), dated with the *first* day that state was observed. Rows that do not change day-to-day are not duplicated, so the dataset grows only on real state changes.
+
+Each run concatenates the previous gold + today's input (prev first), sorts by `date_column`, and drops duplicates on every column except the date with `keep="first"` (oldest date wins). Same-day re-runs are idempotent: the dedup absorbs the repeat and `force=False` skips identical metadata. Lineage records both inputs.
+
+```yaml
+taskRef:
+  name: AccumulateDeduplicateDataset
+config:
+  input:
+    dataset: <string>
+    source: <source>
+  output:
+    dataset: <string>
+    format: <string>
+    description: <string>
+    source: <source>
+  date_column: <string>        # date column used for ordering / partition (default: "date")
+  date_param: <string>         # job param holding today's date value      (default: "date")
+```
+
+**`AccumulateDataset` vs `AccumulateDeduplicateDataset`:**
+
+| | `AccumulateDataset` | `AccumulateDeduplicateDataset` |
+|---|---|---|
+| Unchanged rows day-to-day | kept (duplicated in gold) | collapsed to one row with the first-seen date |
+| Growth | linear (N rows/day) | only on real state changes |
+| Use case | pure daily snapshot | operational funnel / state history |
+
+**Example:**
+
+```yaml
+- id: accumulate_applications
+  taskRef:
+    name: AccumulateDeduplicateDataset
+  config:
+    input:
+      dataset: bronze/universo/applications_raw
+      source: *local
+    output:
+      dataset: gold/universo/applications_all
+      format: parquet
+      description: "Applications with state-change history"
+      source: *local
+    date_column: date
+    date_param: date
+  resources:
+    coin: 2
+  requires:
+    - bronze_ingest
+```
+
+---
+
 ## UpsertDataset
 
 **SCD Type 1** dimension table — the canonical built-in for daily dimension tables in a medallion architecture. Each run reads the previous output (gold) version, concatenates today's input, and keeps the last record per business `key` (`keep="last"`), so newer rows win on a key collision.

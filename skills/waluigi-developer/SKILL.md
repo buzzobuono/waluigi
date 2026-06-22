@@ -679,6 +679,33 @@ Append-only **fact table** with per-date idempotency — the go-to built-in for 
 
 ---
 
+### AccumulateDeduplicateDataset
+
+Fact table with **cross-day dedup by state** — variant of `AccumulateDataset` for funnel / state-history tables. Keeps one row per unique state (all columns except `date_column`), dated with the first day it was seen; unchanged rows are not duplicated, so the dataset grows only on real state changes. Concats prev+today, sorts by `date_column`, dedups `keep="first"`. Same-day re-runs are idempotent. `date_column`/`date_param` default to `"date"`.
+
+```yaml
+- id: accumulate_applications
+  taskRef:
+    name: AccumulateDeduplicateDataset
+  config:
+    input:
+      dataset: analytics/bronze/applications
+      source: *local
+    output:
+      dataset: analytics/gold/applications_all
+      format: parquet
+      description: "Applications with state-change history"
+      source: *local
+    date_column: date
+    date_param: date
+  resources:
+    coin: 2
+  requires:
+    - bronze_ingest
+```
+
+---
+
 ### UpsertDataset
 
 **SCD Type 1** dimension table — the go-to built-in for daily dimension tables. Reads the previous gold, concats today's input, keeps the last record per business `key` (`keep="last"`). Records removed from the source are retained (never deleted). Missing key column → explicit `KeyError`. `key` accepts a string or a list (composite key).

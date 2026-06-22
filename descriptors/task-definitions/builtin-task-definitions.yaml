@@ -80,6 +80,14 @@ spec:
 ---
 kind: TaskDefinition
 metadata:
+  name: "AccumulateDeduplicateDataset"
+spec:
+  command: "python -m waluigi.tasks.accumulate_deduplicate_dataset"
+  affinity:
+    - python
+---
+kind: TaskDefinition
+metadata:
   name: "UpsertDataset"
 spec:
   command: "python -m waluigi.tasks.upsert_dataset"

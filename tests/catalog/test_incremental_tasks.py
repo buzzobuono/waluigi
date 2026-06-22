@@ -9,7 +9,11 @@ import pytest
 from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 from waluigi.sdk.context import context, _to_namespace
 import waluigi.tasks._io as io_mod
-from waluigi.tasks import accumulate_dataset, upsert_dataset
+from waluigi.tasks import (
+    accumulate_dataset,
+    accumulate_deduplicate_dataset,
+    upsert_dataset,
+)
 
 
 SOURCE      = "incr_local"
@@ -134,6 +138,70 @@ def test_accumulate_adds_missing_date_column(catalog):
     _write_bronze(catalog, BRONZE, [{"order": 1}, {"order": 2}], {"date": "2026-06-18"})
     _set_context(BRONZE, GOLD, {"date": "2026-06-18"})
     accumulate_dataset.run()
+
+    gold = _read_gold(catalog, GOLD)
+    assert "date" in gold.columns
+    assert set(gold["date"].astype(str)) == {"2026-06-18"}
+
+
+# ── AccumulateDeduplicateDataset ─────────────────────────────────────────────────
+
+def test_accdedup_first_run(catalog):
+    rows = [{"date": "2026-06-18", "id": 1, "state": "new"},
+            {"date": "2026-06-18", "id": 2, "state": "new"}]
+    _write_bronze(catalog, BRONZE, rows, {"date": "2026-06-18"})
+
+    _set_context(BRONZE, GOLD, {"date": "2026-06-18"})
+    accumulate_deduplicate_dataset.run()
+
+    gold = _read_gold(catalog, GOLD)
+    assert len(gold) == 2
+    assert len(catalog.list_versions(GOLD)) == 1
+
+
+def test_accdedup_drops_unchanged_keeps_oldest_date(catalog):
+    # Day 1: id=1 new, id=2 new
+    _write_bronze(catalog, BRONZE,
+                  [{"date": "2026-06-18", "id": 1, "state": "new"},
+                   {"date": "2026-06-18", "id": 2, "state": "new"}], {"date": "2026-06-18"})
+    _set_context(BRONZE, GOLD, {"date": "2026-06-18"})
+    accumulate_deduplicate_dataset.run()
+
+    # Day 2: id=1 unchanged (state=new), id=2 changed to screening
+    _write_bronze(catalog, BRONZE,
+                  [{"date": "2026-06-19", "id": 1, "state": "new"},
+                   {"date": "2026-06-19", "id": 2, "state": "screening"}], {"date": "2026-06-19"})
+    _set_context(BRONZE, GOLD, {"date": "2026-06-19"})
+    accumulate_deduplicate_dataset.run()
+
+    gold = _read_gold(catalog, GOLD)
+    # id=1/new keeps the first-seen date and is NOT duplicated; id=2 has two states.
+    assert len(gold) == 3
+    id1 = gold[(gold["id"] == 1) & (gold["state"] == "new")]
+    assert id1["date"].astype(str).tolist() == ["2026-06-18"]   # oldest date kept
+    id2_states = set(gold[gold["id"] == 2]["state"])
+    assert id2_states == {"new", "screening"}
+    assert len(catalog.list_versions(GOLD)) == 2
+
+
+def test_accdedup_idempotent_same_day(catalog):
+    rows = [{"date": "2026-06-18", "id": 1, "state": "new"}]
+    _write_bronze(catalog, BRONZE, rows, {"date": "2026-06-18"})
+
+    _set_context(BRONZE, GOLD, {"date": "2026-06-18"})
+    accumulate_deduplicate_dataset.run()
+    accumulate_deduplicate_dataset.run()   # repeat absorbed by dedup + version skip
+
+    gold = _read_gold(catalog, GOLD)
+    assert len(gold) == 1
+    assert len(catalog.list_versions(GOLD)) == 1
+
+
+def test_accdedup_adds_missing_date_column(catalog):
+    _write_bronze(catalog, BRONZE,
+                  [{"id": 1, "state": "new"}], {"date": "2026-06-18"})
+    _set_context(BRONZE, GOLD, {"date": "2026-06-18"})
+    accumulate_deduplicate_dataset.run()
 
     gold = _read_gold(catalog, GOLD)
     assert "date" in gold.columns

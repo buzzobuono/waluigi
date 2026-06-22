@@ -427,6 +427,7 @@ These are Python modules invokable from TaskDefinition specs. They are **not aut
 | `waluigi.tasks.pivot_dataset` | `PivotDataset` | Pivot table |
 | `waluigi.tasks.deduplicate_dataset` | `DeduplicateDataset` | Drop duplicate rows |
 | `waluigi.tasks.accumulate_dataset` | `AccumulateDataset` | Append-only fact table, per-date idempotency (reads gold_prev) |
+| `waluigi.tasks.accumulate_deduplicate_dataset` | `AccumulateDeduplicateDataset` | Fact table with cross-day dedup by state, keeps oldest date per unique state |
 | `waluigi.tasks.upsert_dataset` | `UpsertDataset` | SCD Type 1 dimension, keep-last per business key (reads gold_prev) |
 | `waluigi.tasks.catalog_create_source` | `CatalogCreateSource` | Create Catalog source via params |
 | `waluigi.tasks.catalog_create_dataset` | `CatalogCreateDataset` | Create Catalog dataset via params |
