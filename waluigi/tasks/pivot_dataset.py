@@ -19,26 +19,29 @@ Unpivot (melt) config:
     value_name: str         # (default: "value")
 """
 import pandas as pd
+from waluigi.sdk.catalog import catalog
 from waluigi.sdk.context import context
-from waluigi.tasks._io import read_input, write_output
 
 
 def run():
-    reader, df = read_input()
+    inp_dataset = context.config.input["dataset"]
+    reader = catalog.read_dataset(inp_dataset)
+    df = reader.read()
+    print(f"  read {inp_dataset}: {len(df)} rows @ {reader.version}")
     lineage = [{"dataset_id": reader.dataset_id, "version": reader.version}]
 
     c    = context.config
-    mode = getattr(c, "mode", "pivot")
+    mode = c.get("mode", "pivot")
 
     if mode == "unpivot":
         id_vars    = c.id_vars
-        value_vars = getattr(c, "value_vars", None)
+        value_vars = c.get("value_vars")
         df = pd.melt(
             df,
             id_vars=id_vars,
             value_vars=value_vars,
-            var_name=getattr(c, "var_name", "variable"),
-            value_name=getattr(c, "value_name", "value"),
+            var_name=c.get("var_name", "variable"),
+            value_name=c.get("value_name", "value"),
         )
         print(f"  unpivot id_vars={id_vars} → {len(df)} rows")
     else:
@@ -47,13 +50,28 @@ def run():
             index=c.index,
             columns=c.columns,
             values=c.values,
-            aggfunc=getattr(c, "aggfunc", "sum"),
-            fill_value=getattr(c, "fill_value", 0),
+            aggfunc=c.get("aggfunc", "sum"),
+            fill_value=c.get("fill_value", 0),
         ).reset_index()
         df.columns = [str(col) for col in df.columns]   # flatten MultiIndex
         print(f"  pivot index={c.index} columns={c.columns} → {len(df)} rows, {len(df.columns)} cols")
 
-    write_output(df, lineage)
+    out = context.config.output
+    source_id = out.get("source_id")
+    if not source_id:
+        raise ValueError(f"output.source_id is required (dataset: {out.get('dataset')})")
+    handle = catalog.create_dataset(
+        out["dataset"],
+        format=out.get("format", "parquet"),
+        source_id=source_id,
+        description=out.get("description", ""),
+    )
+    with handle.create_version(metadata=vars(context.params), inputs=lineage) as writer:
+        writer.write(df)
+    if writer.skipped:
+        print(f"Skipped — same metadata: {writer.version}")
+    else:
+        print(f"Done: {writer.dataset_id} @ {writer.version} ({len(df)} rows)")
 
 
 if __name__ == "__main__":

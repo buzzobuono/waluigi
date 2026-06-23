@@ -66,8 +66,8 @@ import io
 import httpx
 import pandas as pd
 
+from waluigi.sdk.catalog import catalog
 from waluigi.sdk.context import context
-from waluigi.tasks._io import read_input
 
 _GRAPH = "https://graph.microsoft.com/v1.0"
 _LOGIN = "https://login.microsoftonline.com"
@@ -172,7 +172,10 @@ def run():
     fmt    = (cfg.get("format") or "csv").lower()
     folder = (cfg.get("folder") or "").strip("/")
 
-    reader, df = read_input()
+    inp_dataset = context.config.input["dataset"]
+    reader = catalog.read_dataset(inp_dataset)
+    df = reader.read()
+    print(f"  read {inp_dataset}: {len(df)} rows @ {reader.version}")
 
     default_name = reader.dataset_id.split("/")[-1] + ("." + fmt)
     filename     = cfg.get("filename") or default_name
