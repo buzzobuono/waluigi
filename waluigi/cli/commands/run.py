@@ -22,6 +22,7 @@ _BUILTIN_COMMANDS = {
     "CatalogDefineSchema":    "python -m waluigi.tasks.catalog_define_schema",
     "CatalogSetExpectations": "python -m waluigi.tasks.catalog_set_expectations",
     "CatalogSetCharts":       "python -m waluigi.tasks.catalog_set_charts",
+    "SharePointExport":       "python -m waluigi.tasks.sharepoint_export",
 }
 
 
