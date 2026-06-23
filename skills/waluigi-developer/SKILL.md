@@ -422,6 +422,34 @@ Reuse `*local` in every `input.source` and `output.source`.
 
 ---
 
+### IngestRest
+
+Fetch a JSON REST API, flatten nested objects, write result as a Catalog dataset. Supports pagination via `next` link or `page` query param.
+
+```yaml
+- id: ingest_users
+  taskRef:
+    name: IngestRest
+  config:
+    output:
+      dataset: analytics/bronze/users
+      format: parquet
+      source: *local
+    http:
+      url: "https://api.example.com/v1/users"
+      method: GET
+      headers:
+        Authorization: "Bearer ${WALUIGI_SECRET_API_TOKEN}"
+      next_key: next
+      page_size: 100
+  resources:
+    coin: 1
+```
+
+`data_key` auto-detected from `data`/`results`/`items`/`records`/`content`/`entries`/`rows`. Nested fields flattened with underscore: `address.city` → `address_city`.
+
+---
+
 ### FilterDataset
 
 Keeps rows matching a pandas `.query()` expression.
@@ -730,6 +758,34 @@ Fact table with **cross-day dedup by state** — variant of `AccumulateDataset` 
   requires:
     - bronze_ingest
 ```
+
+---
+
+### SharePointExport
+
+Publishes a Catalog dataset to a SharePoint document library via Microsoft Graph API (app-only OAuth2). Requires an Azure AD app registration with `Sites.ReadWrite.All` application permission and admin consent. Client secret stored as a Waluigi Secret. Files >4 MB uploaded via chunked upload session automatically.
+
+```yaml
+- id: publish_revenue
+  taskRef:
+    name: SharePointExport
+  requires: [gold_revenue]
+  secrets: [sharepoint]           # must contain CLIENT_SECRET
+  config:
+    input:
+      dataset: gold/kpi_revenue
+      source: *local
+    sharepoint:
+      tenant_id: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+      client_id: "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
+      site_url:  "https://contoso.sharepoint.com/sites/DataTeam"
+      folder:    "PowerBI/Gold"
+      format:    csv              # csv (default, UTF-8 BOM for Excel compat) | parquet
+  resources:
+    coin: 1
+```
+
+`site_id` resolved automatically from `site_url`. To find it manually: `GET https://graph.microsoft.com/v1.0/sites/{hostname}:{/path}` in Graph Explorer.
 
 ---
 
@@ -1270,6 +1326,11 @@ wlctl delete namespace <ns>
 wlctl delete secret <name> [-n ns]
 wlctl delete dataset <id> [-n ns]
 wlctl delete version <version> -d <dataset_id> [-n ns]
+
+# Prune
+wlctl prune workers                  # remove ghost workers (unreachable) from Boss DB
+wlctl prune prepare                  # wipe prepare dir on all live workers
+wlctl prune prepare -w http://host:5001  # target a single worker
 
 # Local run — isolated, embedded Catalog (no cluster needed)
 wlrun -f job.yaml -t <task_id> [-p KEY=VALUE ...]

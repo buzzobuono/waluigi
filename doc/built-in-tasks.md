@@ -823,37 +823,122 @@ config:
 
 ---
 
-## FetchHttp
+## IngestRest
 
-Calls an HTTP JSON endpoint, flattens nested objects, and writes the result as a Catalog dataset.
-Supports pagination via `next` link or `page` query parameter.
+Calls a JSON REST API, flattens nested objects, and writes the result as a Catalog dataset. Supports pagination via `next` link or `page` query parameter.
 
 ```yaml
-- id: fetch_users
+taskRef:
+  name: IngestRest
+config:
+  output:
+    dataset: <string>          # output dataset ID
+    format: <string>           # parquet | csv | json  (default: parquet)
+    description: <string>      # optional
+    source: <source>
+  http:
+    url: <string>              # required — endpoint URL
+    method: <string>           # GET (default) | POST
+    headers: <dict>            # HTTP request headers — ${VAR} placeholders expanded
+    params: <dict>             # query-string params
+    body: <dict>               # request body for POST
+    data_key: <string>         # key in JSON response containing the list (auto-detected)
+    next_key: <string>         # key for next-page URL  (default: "next")
+    page_param: <string>       # query param for page-number pagination
+    page_size: <int>           # value for page_size query param
+```
+
+Nested JSON fields are flattened with underscore separator: `{"address": {"city": "Rome"}}` → column `address_city`.
+
+**Example:**
+
+```yaml
+- id: ingest_users
   taskRef:
-    name: FetchHttp
-  params:
-    url: "https://api.example.com/v1/users"
+    name: IngestRest
   config:
-    dataset_id:   "api/users/raw"        # Catalog dataset path
-    source_id:    "api-local"            # Catalog source for local storage
-    format:       "parquet"              # parquet (default), csv, json
-    description:  "Users from external API"
-    # optional
-    headers:      {}                     # HTTP request headers
-    params:       {}                     # extra query params
-    data_key:     "data"                 # key containing list in response (auto-detected)
-    next_key:     "next"                 # key for next-page URL
-    page_param:   "page"                 # query param for page-number pagination
-    page_size:    100                    # value for page_size query param
+    output:
+      dataset: bronze/api/users
+      format: parquet
+      description: "Users from external API"
+      source: *local
+    http:
+      url: "https://api.example.com/v1/users"
+      method: GET
+      headers:
+        Authorization: "Bearer ${WALUIGI_SECRET_API_TOKEN}"
+      next_key: next
+      page_size: 100
   resources:
     coin: 1
 ```
 
-Nested fields are flattened with underscore separator:
+---
 
-| Raw JSON | Flat column |
-|----------|-------------|
-| `address.city` | `address_city` |
-| `company.name` | `company_name` |
-| `geo.lat` | `address_geo_lat` |
+## SharePointExport
+
+Publishes a Catalog dataset to a SharePoint document library via the Microsoft Graph API (app-only OAuth2). Designed for Microsoft 365 environments — no Azure subscription required beyond the app registration.
+
+**Azure AD prerequisites:**
+1. Register an app in [Azure AD](https://portal.azure.com) → App registrations
+2. Add **Application** permission: `Sites.ReadWrite.All` (not delegated)
+3. Click "Grant admin consent"
+4. Create a client secret → store it as a Waluigi Secret
+
+```yaml
+taskRef:
+  name: SharePointExport
+config:
+  input:
+    dataset: <string>          # Catalog dataset to publish
+    source: <source>
+  sharepoint:
+    tenant_id: <string>        # Azure AD tenant GUID or "contoso.onmicrosoft.com"
+    client_id: <string>        # App registration Application (client) ID
+    site_id: <string>          # SharePoint site ID — get from Graph Explorer
+                               # (omit if you provide site_url)
+    site_url: <string>         # e.g. "https://contoso.sharepoint.com/sites/DataTeam"
+                               # Used to auto-resolve site_id when site_id is absent
+    drive_id: <string>         # Document library ID (optional — defaults to root drive)
+    folder: <string>           # Destination folder path, e.g. "PowerBI/Gold"
+    filename: <string>         # Filename override (default: last segment of dataset id + ext)
+    format: <string>           # csv (default) | parquet
+```
+
+The client secret is read from the Waluigi Secret referenced by `secrets:` on the task. The key name must be `client_secret` or `CLIENT_SECRET`. Files larger than 4 MB are uploaded via Graph API upload sessions automatically.
+
+**How to find `site_id`:**
+In [Graph Explorer](https://developer.microsoft.com/graph/graph-explorer) call `GET https://graph.microsoft.com/v1.0/sites/{hostname}:{/relative-path}` (e.g. `…/sites/contoso.sharepoint.com:/sites/DataTeam`). The `id` field in the response is your `site_id`.
+
+**Example:**
+
+```yaml
+kind: Secret
+metadata:
+  namespace: analytics
+  name: sharepoint
+spec:
+  CLIENT_SECRET: "your-azure-client-secret"
+---
+# In the job task list:
+- id: publish_revenue
+  taskRef:
+    name: SharePointExport
+  requires:
+    - gold_revenue
+  secrets: [sharepoint]
+  config:
+    input:
+      dataset: gold/kpi_revenue
+      source: *local
+    sharepoint:
+      tenant_id: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+      client_id: "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
+      site_url:  "https://contoso.sharepoint.com/sites/DataTeam"
+      folder:    "PowerBI/Gold"
+      format:    csv
+  resources:
+    coin: 1
+```
+
+In Power BI Service, point the SharePoint connector at the `PowerBI/Gold` folder and configure a daily scheduled refresh. No on-premises gateway required.

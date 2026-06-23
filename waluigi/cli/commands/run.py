@@ -17,12 +17,15 @@ _BUILTIN_COMMANDS = {
     "MergeDatasets":          "python -m waluigi.tasks.merge_datasets",
     "PivotDataset":           "python -m waluigi.tasks.pivot_dataset",
     "DeduplicateDataset":     "python -m waluigi.tasks.deduplicate_dataset",
-    "CatalogCreateSource":    "python -m waluigi.tasks.catalog_create_source",
-    "CatalogCreateDataset":   "python -m waluigi.tasks.catalog_create_dataset",
-    "CatalogDefineSchema":    "python -m waluigi.tasks.catalog_define_schema",
-    "CatalogSetExpectations": "python -m waluigi.tasks.catalog_set_expectations",
-    "CatalogSetCharts":       "python -m waluigi.tasks.catalog_set_charts",
-    "SharePointExport":       "python -m waluigi.tasks.sharepoint_export",
+    "AccumulateDataset":           "python -m waluigi.tasks.accumulate_dataset",
+    "AccumulateDeduplicateDataset":"python -m waluigi.tasks.accumulate_deduplicate_dataset",
+    "UpsertDataset":               "python -m waluigi.tasks.upsert_dataset",
+    "CatalogCreateSource":         "python -m waluigi.tasks.catalog_create_source",
+    "CatalogCreateDataset":        "python -m waluigi.tasks.catalog_create_dataset",
+    "CatalogDefineSchema":         "python -m waluigi.tasks.catalog_define_schema",
+    "CatalogSetExpectations":      "python -m waluigi.tasks.catalog_set_expectations",
+    "CatalogSetCharts":            "python -m waluigi.tasks.catalog_set_charts",
+    "SharePointExport":            "python -m waluigi.tasks.sharepoint_export",
 }
 
 
