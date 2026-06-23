@@ -88,11 +88,10 @@ Reference one of Waluigi's built-in reusable task types. No code to write — ju
   config:
     input:
       dataset: sales/raw/orders
-      source: {id: local, type: local}
     output:
       dataset: sales/clean/orders
+      source_id: local
       format: parquet
-      source: {id: local, type: local}
     where: "status == 'completed'"
   resources:
     coin: 1

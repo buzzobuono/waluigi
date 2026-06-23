@@ -18,34 +18,23 @@ Once applied, tasks can reference built-in types via `taskRef.name` without any 
 
 ---
 
-## Source definition
+## Sources
 
-Most tasks reference one or more sources. A source can be declared inline or via a YAML anchor:
+Sources must be registered in the catalog before tasks can write to them. Use `CatalogCreateSource` (as a task in the same job, or via a separate setup job) to register them:
 
 ```yaml
-x-sources:
-  local: &local
+- id: setup_source
+  taskRef:
+    name: CatalogCreateSource
+  config:
     id: analytics-local
-    type: LOCAL
-    description: Local filesystem storage
-
-kind: Job
-...
-  tasks:
-    - id: my_task
-      taskRef:
-        name: FilterDataset
-      config:
-        input:
-          dataset: analytics/raw/orders
-          source: *local                 # reuse anchor
-        output:
-          dataset: analytics/clean/orders
-          format: parquet
-          source: *local
+    type: local
+    config: {}
 ```
 
-Source types: `LOCAL`, `S3`, `SQL`, `SFTP`. See [sdk.md](sdk.md#connectors) for connector config fields.
+Reads do not require a `source` in the task config — the source is already stored in the catalog alongside the dataset. Only **writes** require a `source_id` field pointing to a pre-registered source.
+
+Source types: `local`, `s3`, `sql`, `sftp`. See [sdk.md](sdk.md#connectors) for connector config fields.
 
 ---
 
@@ -59,12 +48,11 @@ taskRef:
 config:
   input:
     dataset: <string>          # input dataset ID
-    source: <source>           # source definition
   output:
     dataset: <string>          # output dataset ID
+    source_id: <string>        # pre-registered source ID
     format: <string>           # parquet | csv | json  (default: parquet)
     description: <string>      # optional
-    source: <source>
   where: <string>              # pandas query expression
 ```
 
@@ -77,11 +65,10 @@ config:
   config:
     input:
       dataset: sales/raw/orders
-      source: *local
     output:
       dataset: sales/clean/orders
+      source_id: analytics-local
       format: parquet
-      source: *local
     where: "status == 'completed' and value > 0"
   resources:
     coin: 1
@@ -101,12 +88,11 @@ taskRef:
 config:
   input:
     dataset: <string>
-    source: <source>
   output:
     dataset: <string>
+    source_id: <string>        # pre-registered source ID
     format: <string>
     description: <string>
-    source: <source>
   columns: <list[string]>      # columns to retain
 ```
 
@@ -119,11 +105,10 @@ config:
   config:
     input:
       dataset: sales/raw/orders
-      source: *local
     output:
       dataset: sales/projected/orders
+      source_id: analytics-local
       format: parquet
-      source: *local
     columns:
       - order_id
       - date
@@ -147,12 +132,11 @@ taskRef:
 config:
   input:
     dataset: <string>
-    source: <source>
   output:
     dataset: <string>
+    source_id: <string>        # pre-registered source ID
     format: <string>
     description: <string>
-    source: <source>
   columns:
     - name: <string>           # new column name
       expr: <string>           # pandas eval expression
@@ -167,11 +151,10 @@ config:
   config:
     input:
       dataset: sales/clean/orders
-      source: *local
     output:
       dataset: sales/enriched/orders
+      source_id: analytics-local
       format: parquet
-      source: *local
     columns:
       - name: revenue
         expr: "quantity * unit_price * (1 - discount)"
@@ -197,12 +180,11 @@ taskRef:
 config:
   input:
     dataset: <string>
-    source: <source>
   output:
     dataset: <string>
+    source_id: <string>        # pre-registered source ID
     format: <string>
     description: <string>
-    source: <source>
   group_by: <list[string]>     # grouping columns
   agg:
     <column>: <function>       # sum | mean | count | min | max | std | first | last
@@ -217,11 +199,10 @@ config:
   config:
     input:
       dataset: sales/enriched/orders
-      source: *local
     output:
       dataset: sales/report/by_region
+      source_id: analytics-local
       format: parquet
-      source: *local
     group_by:
       - region
       - category
@@ -246,19 +227,17 @@ taskRef:
 config:
   left:
     dataset: <string>
-    source: <source>
   right:
     dataset: <string>
-    source: <source>
   join:
     columns: <string | list[string]>  # join key(s)
     how: <string>                     # inner | left | right | outer  (default: inner)
     suffixes: <list[string]>          # default: ["_x", "_y"]
   output:
     dataset: <string>
+    source_id: <string>               # pre-registered source ID
     format: <string>
     description: <string>
-    source: <source>
 ```
 
 **Example:**
@@ -270,18 +249,16 @@ config:
   config:
     left:
       dataset: sales/clean/orders
-      source: *local
     right:
       dataset: simulation/clean/products
-      source: *local
     join:
       columns: product_id
       how: left
       suffixes: ["_order", "_product"]
     output:
       dataset: sales/joined/orders_products
+      source_id: analytics-local
       format: parquet
-      source: *local
   resources:
     coin: 1
 ```
@@ -299,12 +276,11 @@ config:
   inputs:
     - dataset: <string>
       label: <string>        # optional; adds a "source_label" column
-      source: <source>
   output:
     dataset: <string>
+    source_id: <string>      # pre-registered source ID
     format: <string>
     description: <string>
-    source: <source>
 ```
 
 **Example:**
@@ -317,18 +293,15 @@ config:
     inputs:
       - dataset: sales/report/top_regions
         label: top_regions
-        source: *local
       - dataset: sales/report/top_categories
         label: top_categories
-        source: *local
       - dataset: sales/report/top_products
         label: top_products
-        source: *local
     output:
       dataset: sales/report/executive
+      source_id: analytics-local
       format: parquet
       description: "Executive summary"
-      source: *local
   resources:
     coin: 1
 ```
@@ -347,11 +320,10 @@ taskRef:
 config:
   input:
     dataset: <string>
-    source: <source>
   output:
     dataset: <string>
+    source_id: <string>        # pre-registered source ID
     format: <string>
-    source: <source>
   mode: pivot                  # default
   index: <string | list>       # row labels
   columns: <string>            # column labels
@@ -369,11 +341,10 @@ config:
   config:
     input:
       dataset: sales/report/by_region
-      source: *local
     output:
       dataset: sales/report/pivot_region_category
+      source_id: analytics-local
       format: parquet
-      source: *local
     mode: pivot
     index: region
     columns: category
@@ -411,11 +382,10 @@ taskRef:
 config:
   input:
     dataset: <string>
-    source: <source>
   output:
     dataset: <string>
+    source_id: <string>        # pre-registered source ID
     format: <string>
-    source: <source>
   subset: <list[string]>       # columns to consider (optional; all if absent)
   keep: <string>               # first | last | false  (default: first)
                                # false = drop all duplicates
@@ -430,11 +400,10 @@ config:
   config:
     input:
       dataset: simulation/raw/products
-      source: *local
     output:
       dataset: simulation/clean/products
+      source_id: analytics-local
       format: parquet
-      source: *local
     subset:
       - product_id
     keep: first
@@ -456,12 +425,11 @@ taskRef:
 config:
   input:
     dataset: <string>
-    source: <source>
   output:
     dataset: <string>
+    source_id: <string>        # pre-registered source ID
     format: <string>
     description: <string>
-    source: <source>
   date_column: <string>        # date partition column in the dataframe (default: "date")
   date_param: <string>         # job param holding today's date value   (default: "date")
 ```
@@ -485,12 +453,11 @@ config:
   config:
     input:
       dataset: bronze/myapp/orders_raw
-      source: *local
     output:
       dataset: gold/myapp/orders_all
+      source_id: analytics-local
       format: parquet
       description: "Orders accumulated — all days"
-      source: *local
     date_column: date
     date_param: date
   resources:
@@ -513,12 +480,11 @@ taskRef:
 config:
   input:
     dataset: <string>
-    source: <source>
   output:
     dataset: <string>
+    source_id: <string>        # pre-registered source ID
     format: <string>
     description: <string>
-    source: <source>
   date_column: <string>        # date column used for ordering / partition (default: "date")
   date_param: <string>         # job param holding today's date value      (default: "date")
 ```
@@ -540,12 +506,11 @@ config:
   config:
     input:
       dataset: bronze/universo/applications_raw
-      source: *local
     output:
       dataset: gold/universo/applications_all
+      source_id: analytics-local
       format: parquet
       description: "Applications with state-change history"
-      source: *local
     date_column: date
     date_param: date
   resources:
@@ -568,13 +533,12 @@ taskRef:
 config:
   input:
     dataset: <string>
-    source: <source>
   output:
     dataset: <string>
+    source_id: <string>           # pre-registered source ID
     format: <string>
     description: <string>
-    source: <source>
-  key: <string | list[string]>  # business key column(s) — required; list = composite key
+  key: <string | list[string]>    # business key column(s) — required; list = composite key
 ```
 
 **Behaviour:**
@@ -597,12 +561,11 @@ config:
   config:
     input:
       dataset: bronze/myapp/clienti_raw
-      source: *local
     output:
       dataset: gold/myapp/clienti
+      source_id: analytics-local
       format: parquet
       description: "Customer master — latest version per customer"
-      source: *local
     key:
       - IdCliente                # list supports composite keys
   resources:
@@ -833,9 +796,9 @@ taskRef:
 config:
   output:
     dataset: <string>          # output dataset ID
+    source_id: <string>        # pre-registered source ID
     format: <string>           # parquet | csv | json  (default: parquet)
     description: <string>      # optional
-    source: <source>
   http:
     url: <string>              # required — endpoint URL
     method: <string>           # GET (default) | POST
@@ -859,9 +822,9 @@ Nested JSON fields are flattened with underscore separator: `{"address": {"city"
   config:
     output:
       dataset: bronze/api/users
+      source_id: analytics-local
       format: parquet
       description: "Users from external API"
-      source: *local
     http:
       url: "https://api.example.com/v1/users"
       method: GET
@@ -891,7 +854,6 @@ taskRef:
 config:
   input:
     dataset: <string>          # Catalog dataset to publish
-    source: <source>
   sharepoint:
     tenant_id: <string>        # Azure AD tenant GUID or "contoso.onmicrosoft.com"
     client_id: <string>        # App registration Application (client) ID
@@ -930,7 +892,6 @@ spec:
   config:
     input:
       dataset: gold/kpi_revenue
-      source: *local
     sharepoint:
       tenant_id: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
       client_id: "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"

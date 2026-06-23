@@ -146,11 +146,10 @@ spec:
       config:
         input:
           dataset: analytics/erp/clean/erp
-          source: &local {id: analytics-local, type: LOCAL}
         output:
           dataset: analytics/erp/filtered/high_value
+          source_id: analytics-local
           format: parquet
-          source: *local
         where: "value > 1000"
       resources:
         coin: 1
@@ -163,11 +162,10 @@ spec:
       config:
         input:
           dataset: analytics/erp/filtered/high_value
-          source: *local
         output:
           dataset: analytics/erp/enriched/derived
+          source_id: analytics-local
           format: parquet
-          source: *local
         columns:
           - name: value_k
             expr: "value / 1000"
@@ -234,8 +232,8 @@ spec:
         taskRef:
           name: FilterDataset     # must be applied as TaskDefinition in this namespace
         config:
-          input: {dataset: sales/raw/orders, source: *local}
-          output: {dataset: sales/clean/orders, format: parquet, source: *local}
+          input: {dataset: sales/raw/orders}
+          output: {dataset: sales/clean/orders, source_id: analytics-local, format: parquet}
           where: "status == 'completed'"
         resources:
           coin: 1
@@ -415,10 +413,9 @@ spec:
         config:
           input:
             dataset: analytics/raw/orders
-            source: *local            # reuse anchor
           output:
             dataset: analytics/clean/orders
-            source: *local
+            source_id: analytics-local
           where: "status == 'completed'"
         resources:
           coin: 1

@@ -3,8 +3,8 @@ AddDerivedColumns — appends computed columns using pandas eval expressions.
 Columns are applied sequentially, so later expressions can reference earlier ones.
 
 config:
-    input:   {dataset: str, source: {id, type, ...}}
-    output:  {dataset: str, format: str, description: str, source: {id, type, ...}}
+    input:   {dataset: str}
+    output:  {dataset: str, source_id: str, format: str, description: str}
     columns:
         - name: str    # new column name
           expr: str    # pandas eval expression referencing existing columns

@@ -16,8 +16,8 @@ and ``write_output`` reserves with ``force=False`` so identical metadata skips.
 Lineage records both inputs: today's input and the previous gold version.
 
 config:
-    input:   {dataset: str, source: {id, type, ...}}
-    output:  {dataset: str, format: str, description: str, source: {id, type, ...}}
+    input:   {dataset: str}
+    output:  {dataset: str, source_id: str, format: str, description: str}
     date_column: str   # date column used for ordering / partition (default: "date")
     date_param:  str   # job param holding today's date value      (default: "date")
 """

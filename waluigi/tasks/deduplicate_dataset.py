@@ -2,8 +2,8 @@
 DeduplicateDataset — removes duplicate rows.
 
 config:
-    input:   {dataset: str, source: {id, type, ...}}
-    output:  {dataset: str, format: str, description: str, source: {id, type, ...}}
+    input:   {dataset: str}
+    output:  {dataset: str, source_id: str, format: str, description: str}
     subset:  list[str]   # columns to consider — if absent, all columns
     keep:    str         # first | last | false  (default: first)
 """

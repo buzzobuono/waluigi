@@ -21,20 +21,7 @@ def run():
     dataset_id = cfg["dataset"]
     rules      = cfg.get("expectations") or []
 
-    existing = catalog.list_expectations(dataset_id)
-    for exp in existing:
-        catalog._delete(catalog._ns_url(f"/datasets/{dataset_id}/expectations/{exp['id']}"))
-
-    for i, rule in enumerate(rules):
-        catalog.add_expectation(
-            dataset_id,
-            rule_id=rule["rule_id"],
-            inputs=rule.get("inputs", {}),
-            params=rule.get("params", {}),
-            tolerance=rule.get("tolerance", 1.0),
-            position=i,
-        )
-
+    catalog.set_expectations(dataset_id, rules)
     print(f"Dataset '{dataset_id}': {len(rules)} expectation(s) set")
 
 

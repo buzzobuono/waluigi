@@ -5,17 +5,16 @@ config:
     inputs:
         - dataset: str
           label:   str     # optional — added as column 'source_label'
-          source:  {id, type, description, config}
     output:
         dataset:     str
+        source_id:   str   # must already exist in catalog
         format:      str   (default: parquet)
         description: str
-        source:      {id, type, description, config}   # required
 """
 import pandas as pd
 from waluigi.sdk.catalog import catalog
 from waluigi.sdk.context import context
-from waluigi.tasks._io import _ensure_source, write_output
+from waluigi.tasks._io import write_output
 
 
 def run():
@@ -23,7 +22,6 @@ def run():
     lineage = []
 
     for inp in context.config.inputs:     # list of plain dicts
-        _ensure_source(inp)
         reader = catalog.read_dataset(inp["dataset"])
         df = reader.read()
         if "label" in inp:

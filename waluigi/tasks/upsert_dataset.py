@@ -11,8 +11,8 @@ deleted — they remain in the output. Running the same day twice is idempotent:
 Lineage records both inputs: today's bronze and the previous gold version.
 
 config:
-    input:   {dataset: str, source: {id, type, ...}}
-    output:  {dataset: str, format: str, description: str, source: {id, type, ...}}
+    input:   {dataset: str}
+    output:  {dataset: str, source_id: str, format: str, description: str}
     key:     str | list[str]   # business key column(s) — required
 """
 import pandas as pd

@@ -256,11 +256,10 @@ Scripts access params via `context.params.<key>` (always lowercase). Optional pa
   config:
     input:
       dataset: analytics/bronze/orders
-      source: &local {id: local, type: local}
     output:
       dataset: analytics/silver/orders
+      source_id: local         # pre-registered source ID
       format: parquet
-      source: *local
     where: "amount > 0 and status == 'completed'"
   resources:
     coin: 1
@@ -409,16 +408,9 @@ wlctl apply -f descriptors/task-definitions/builtin-task-definitions.yaml -n ana
 
 All built-in tasks automatically use `CatalogClient` for I/O and record lineage. They all require `affinity: [python]` (already set in the TaskDefinition).
 
-### Common source pattern (YAML anchor)
+### Sources must be pre-registered
 
-```yaml
-x-sources:
-  local: &local
-    id: local
-    type: local
-```
-
-Reuse `*local` in every `input.source` and `output.source`.
+Sources must exist in the catalog before tasks can write to them. Register them once using `CatalogCreateSource` (as part of the job or a setup job). Reads do not need `source_id` — the source is stored in the catalog with the dataset. Only **writes** need `source_id`.
 
 ---
 
@@ -433,8 +425,8 @@ Fetch a JSON REST API, flatten nested objects, write result as a Catalog dataset
   config:
     output:
       dataset: analytics/bronze/users
+      source_id: local
       format: parquet
-      source: *local
     http:
       url: "https://api.example.com/v1/users"
       method: GET
@@ -461,11 +453,10 @@ Keeps rows matching a pandas `.query()` expression.
   config:
     input:
       dataset: analytics/bronze/orders   # read from
-      source: *local
     output:
       dataset: analytics/silver/orders   # write to
+      source_id: local
       format: parquet
-      source: *local
     where: "status == 'completed' and amount > 0"
   resources:
     coin: 1
@@ -484,11 +475,10 @@ Project a subset of columns.
   config:
     input:
       dataset: analytics/bronze/orders
-      source: *local
     output:
       dataset: analytics/silver/orders_slim
+      source_id: local
       format: parquet
-      source: *local
     columns:
       - order_id
       - date
@@ -511,11 +501,10 @@ Compute new columns with pandas eval. Later columns can reference earlier ones.
   config:
     input:
       dataset: analytics/silver/orders
-      source: *local
     output:
       dataset: analytics/silver/orders_enriched
+      source_id: local
       format: parquet
-      source: *local
     columns:
       - name: revenue
         expr: "quantity * unit_price * (1 - discount)"
@@ -538,11 +527,10 @@ Group-by aggregation. Functions: `sum`, `mean`, `count`, `min`, `max`, `std`, `f
   config:
     input:
       dataset: analytics/silver/orders_enriched
-      source: *local
     output:
       dataset: analytics/gold/report_by_region
+      source_id: local
       format: parquet
-      source: *local
     group_by:
       - region
       - category
@@ -567,18 +555,16 @@ Horizontal join (`pd.merge`). How: `inner` | `left` | `right` | `outer`.
   config:
     left:
       dataset: analytics/silver/orders
-      source: *local
     right:
       dataset: analytics/silver/products
-      source: *local
     join:
       columns: product_id
       how: left
       suffixes: ["_order", "_product"]
     output:
       dataset: analytics/silver/orders_with_products
+      source_id: local
       format: parquet
-      source: *local
   resources:
     coin: 1
 ```
@@ -597,14 +583,12 @@ Vertical concatenation (`pd.concat`) of multiple datasets. Adds a `source_label`
     inputs:
       - dataset: analytics/silver/orders_north
         label: north
-        source: *local
       - dataset: analytics/silver/orders_south
         label: south
-        source: *local
     output:
       dataset: analytics/silver/orders_all
+      source_id: local
       format: parquet
-      source: *local
   resources:
     coin: 1
 ```
@@ -623,11 +607,10 @@ Pivot table or unpivot (melt).
   config:
     input:
       dataset: analytics/gold/report_by_region
-      source: *local
     output:
       dataset: analytics/gold/pivot_region_category
+      source_id: local
       format: parquet
-      source: *local
     mode: pivot
     index: region
     columns: category
@@ -642,8 +625,8 @@ Pivot table or unpivot (melt).
   taskRef:
     name: PivotDataset
   config:
-    input: {dataset: analytics/gold/pivot, source: *local}
-    output: {dataset: analytics/gold/unpivoted, format: parquet, source: *local}
+    input: {dataset: analytics/gold/pivot}
+    output: {dataset: analytics/gold/unpivoted, source_id: local, format: parquet}
     mode: unpivot
     id_vars: [region]
     value_vars: [electronics, food, apparel]
@@ -666,11 +649,10 @@ Remove duplicate rows. `keep`: `first` | `last` | `false` (drop all duplicates).
   config:
     input:
       dataset: analytics/bronze/customers
-      source: *local
     output:
       dataset: analytics/silver/customers
+      source_id: local
       format: parquet
-      source: *local
     subset:
       - customer_id
     keep: first
@@ -691,12 +673,11 @@ Append-only **fact table** with per-date idempotency — the go-to built-in for 
   config:
     input:
       dataset: analytics/bronze/applications
-      source: *local
     output:
       dataset: analytics/gold/applications_all
+      source_id: local
       format: parquet
       description: "Applications accumulated daily"
-      source: *local
     date_column: date
     date_param: date
   resources:
@@ -718,12 +699,11 @@ Fact table with **cross-day dedup by state** — variant of `AccumulateDataset` 
   config:
     input:
       dataset: analytics/bronze/applications
-      source: *local
     output:
       dataset: analytics/gold/applications_all
+      source_id: local
       format: parquet
       description: "Applications with state-change history"
-      source: *local
     date_column: date
     date_param: date
   resources:
@@ -745,12 +725,11 @@ Fact table with **cross-day dedup by state** — variant of `AccumulateDataset` 
   config:
     input:
       dataset: analytics/bronze/clienti
-      source: *local
     output:
       dataset: analytics/gold/clienti
+      source_id: local
       format: parquet
       description: "Customer master — latest per customer"
-      source: *local
     key:
       - IdCliente
   resources:
@@ -774,7 +753,6 @@ Publishes a Catalog dataset to a SharePoint document library via Microsoft Graph
   config:
     input:
       dataset: gold/kpi_revenue
-      source: *local
     sharepoint:
       tenant_id: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
       client_id: "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
@@ -1173,12 +1151,11 @@ spec:
       config:
         input:
           dataset: orders/silver/clean
-          source: &local {id: local, type: local}
         output:
           dataset: orders/gold/by_customer
+          source_id: local
           format: parquet
           description: "Revenue and order count by customer"
-          source: *local
         group_by:
           - customer_id
         agg:

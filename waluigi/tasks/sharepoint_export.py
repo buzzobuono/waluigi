@@ -18,7 +18,6 @@ Azure AD app registration prerequisites
 config:
   input:
     dataset:  str                # Catalog dataset id (e.g. gold/kpi_revenue)
-    source:   {id, type, ...}    # as usual for built-in tasks
   sharepoint:
     tenant_id:  str   # Azure AD tenant GUID or "contoso.onmicrosoft.com"
     client_id:  str   # App registration Application (client) ID

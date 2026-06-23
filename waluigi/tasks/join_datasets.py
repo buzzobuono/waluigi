@@ -4,32 +4,27 @@ JoinDatasets — joins two datasets horizontally (pd.merge).
 config:
     left:
         dataset: str
-        source:  {id, type, description, config}
     right:
         dataset: str
-        source:  {id, type, description, config}
     join:
         columns:  str | list
         how:      str          # inner | left | right | outer  (default: inner)
         suffixes: list         # (default: ["_x", "_y"])
     output:
         dataset:     str
+        source_id:   str       # must already exist in catalog
         format:      str       (default: parquet)
         description: str
-        source:      {id, type, description, config}   # required
 """
 import pandas as pd
 from waluigi.sdk.catalog import catalog
 from waluigi.sdk.context import context
-from waluigi.tasks._io import _ensure_source, _to_dict, write_output
+from waluigi.tasks._io import _to_dict, write_output
 
 
 def run():
     left  = _to_dict(context.config.left)
     right = _to_dict(context.config.right)
-
-    _ensure_source(left)
-    _ensure_source(right)
 
     left_reader  = catalog.read_dataset(left["dataset"])
     right_reader = catalog.read_dataset(right["dataset"])

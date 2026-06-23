@@ -4,12 +4,11 @@ SelectColumns — projection: keeps only the specified columns.
 config:
     input:
         dataset: str
-        source:  {id, type, description, config}
     output:
-        dataset: str
+        dataset:     str
+        source_id:   str   # must already exist in catalog
         format:      str   (default: parquet)
         description: str
-        source:  {id, type, description, config}   # required
     columns: list[str]
 """
 from waluigi.sdk.context import context

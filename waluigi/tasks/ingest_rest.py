@@ -4,9 +4,7 @@ IngestRest — fetch a paginated JSON REST API and store as a Catalog dataset.
 config:
     output:
         dataset:     str        Catalog dataset path (e.g. bronze/api/users)
-        source:
-            id:      str        Catalog source ID
-            type:    str        LOCAL | S3 | …
+        source_id:   str        Pre-registered source ID
         format:      str        parquet (default) | csv | json
         description: str
     http:

@@ -2,8 +2,8 @@
 PivotDataset — pivot table or unpivot (melt).
 
 Pivot config:
-    input:   {dataset: str, source: {id, type, ...}}
-    output:  {dataset: str, format: str, description: str, source: {id, type, ...}}
+    input:   {dataset: str}
+    output:  {dataset: str, source_id: str, format: str, description: str}
     mode:    "pivot"        # default
     index:   str | list
     columns: str

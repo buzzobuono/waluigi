@@ -241,17 +241,16 @@ Then reference them in jobs with `taskRef.name`:
   config:
     input:
       dataset: analytics/erp/clean/erp
-      source: {id: local, type: local}
     output:
       dataset: analytics/erp/filtered/high_value
+      source_id: local
       format: parquet
-      source: {id: local, type: local}
     where: "value > 1000"
   resources:
     coin: 1
 ```
 
-Available types: `FilterDataset`, `SelectColumns`, `AddDerivedColumns`, `AggregateDataset`, `JoinDatasets`, `MergeDatasets`, `PivotDataset`, `DeduplicateDataset`, `CatalogCreateDataset`, `CatalogCreateSource`, `CatalogDefineSchema`, `CatalogSetExpectations`, `CatalogSetCharts`, `FetchHttp`.
+Available types: `FilterDataset`, `SelectColumns`, `AddDerivedColumns`, `AggregateDataset`, `JoinDatasets`, `MergeDatasets`, `PivotDataset`, `DeduplicateDataset`, `AccumulateDataset`, `AccumulateDeduplicateDataset`, `UpsertDataset`, `CatalogCreateDataset`, `CatalogCreateSource`, `CatalogDefineSchema`, `CatalogSetExpectations`, `CatalogSetCharts`, `IngestRest`, `SharePointExport`.
 
 → Full reference: [doc/built-in-tasks.md](doc/built-in-tasks.md)
 

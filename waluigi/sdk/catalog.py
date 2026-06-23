@@ -2,6 +2,7 @@ from __future__ import annotations
 import os
 import httpx
 import logging
+from urllib.parse import quote
 from waluigi.commons.http import HttpClient
 from typing import Any, Dict, Iterator, List, Union
 import pandas as pd
@@ -163,10 +164,51 @@ class CatalogClient:
             "position":  position,
         })
 
+    def set_expectations(self, dataset_id: str, rules: List[dict]) -> None:
+        """Replace all DQ expectations for a dataset (delete existing, then add new)."""
+        for exp in self.list_expectations(dataset_id):
+            self._delete(self._ns_url(f"/datasets/{dataset_id}/expectations/{exp['id']}"))
+        for i, rule in enumerate(rules):
+            self.add_expectation(
+                dataset_id,
+                rule_id=rule["rule_id"],
+                inputs=rule.get("inputs", {}),
+                params=rule.get("params", {}),
+                tolerance=rule.get("tolerance", 1.0),
+                position=i,
+            )
+
     # ── CHARTS ────────────────────────────────────────────────────────────────
 
     def list_charts(self, dataset_id: str) -> List[dict]:
         return self._get(self._ns_url(f"/datasets/{dataset_id}/charts"))
+
+    def set_charts(self, dataset_id: str, charts: List[dict]) -> None:
+        """Upsert chart definitions on a dataset (create if absent, update if present)."""
+        existing = {c["key"]: c for c in self.list_charts(dataset_id)}
+        for i, chart in enumerate(charts):
+            key  = chart["key"]
+            body = {"key": key, "title": chart["title"],
+                    "spec": chart.get("spec", {}), "position": i}
+            if key in existing:
+                self._patch(self._ns_url(
+                    f"/datasets/{dataset_id}/charts/{existing[key]['id']}"), json=body)
+            else:
+                self._post(self._ns_url(f"/datasets/{dataset_id}/charts"), json=body)
+
+    # ── SCHEMA ────────────────────────────────────────────────────────────────
+
+    def patch_schema_column(self, dataset_id: str, column: str, **fields) -> dict:
+        """Update metadata fields on a single schema column."""
+        encoded = quote(column, safe="")
+        return self._patch(
+            self._ns_url(f"/datasets/{dataset_id}/schema/{encoded}"), json=fields)
+
+    def publish_schema(self, dataset_id: str) -> dict:
+        """Promote all schema columns from draft to published state."""
+        return self._post(
+            self._ns_url(f"/datasets/{dataset_id}/schema/publish"),
+            json={"published_by": "waluigi"})
 
     # ── DATA OPS ──────────────────────────────────────────────────────────────
 

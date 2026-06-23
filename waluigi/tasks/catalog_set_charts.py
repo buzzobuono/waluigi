@@ -20,17 +20,7 @@ def run():
     dataset_id = cfg["dataset"]
     charts     = cfg.get("charts") or []
 
-    existing = {c["key"]: c for c in catalog.list_charts(dataset_id)}
-    for i, chart in enumerate(charts):
-        key   = chart["key"]
-        title = chart["title"]
-        spec  = chart.get("spec", {})
-        body  = {"key": key, "title": title, "spec": spec, "position": i}
-        if key in existing:
-            catalog._patch(catalog._ns_url(f"/datasets/{dataset_id}/charts/{existing[key]['id']}"), json=body)
-        else:
-            catalog._post(catalog._ns_url(f"/datasets/{dataset_id}/charts"), json=body)
-
+    catalog.set_charts(dataset_id, charts)
     print(f"Dataset '{dataset_id}': {len(charts)} chart(s) set")
 
 

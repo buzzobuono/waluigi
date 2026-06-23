@@ -1,24 +1,23 @@
 """
 Shared I/O helpers for all built-in task types.
 
-Source is declared on each dataset individually — not at config root level.
-This allows inputs and output to live on different source systems.
+Each dataset config requires only `dataset` for reads.  Writes additionally
+require `source_id` (a pre-existing source ID string) and optionally
+`format` and `description`.
 
-Dataset config shape (used in input / output / left / right / inputs[*]):
+Dataset config shape for reads:
+    dataset: str
+
+Dataset config shape for writes:
     dataset:     str
-    source:
-        id:          str
-        type:        str    # LOCAL | S3 | SQL | SFTP | API
-        description: str
-        config:      dict   # connector-specific (optional)
-    format:      str        # output only — parquet | csv  (default: parquet)
-    description: str        # output only
+    source_id:   str   # must already exist in catalog
+    format:      str   # parquet | csv  (default: parquet)
+    description: str   # optional
 """
 from types import SimpleNamespace
 
 from waluigi.sdk.context import context
 from waluigi.sdk.catalog import catalog, CatalogError
-from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 
 
 def _to_dict(obj):
@@ -30,24 +29,8 @@ def _to_dict(obj):
     return obj
 
 
-def _ensure_source(dataset_cfg: dict):
-    """Upsert the source declared on a dataset config dict.
-    No-op if 'source' key is absent.
-    Exported for use by multi-input tasks (merge, join)."""
-    src = dataset_cfg.get("source")
-    if not src:
-        return
-    catalog.create_source(SourceCreateRequest(
-        id=src["id"],
-        type=SourceType[src["type"].upper()],
-        config=src.get("config", {}),
-        description=src.get("description", "Waluigi managed source"),
-    ))
-
-
 def read_input():
     inp = _to_dict(context.config.input)
-    _ensure_source(inp)
     reader = catalog.read_dataset(inp["dataset"])
     df = reader.read()
     print(f"  read {inp['dataset']}: {len(df)} rows @ {reader.version}")
@@ -62,7 +45,6 @@ def read_prev_output():
     condition on the first run, not an error.
     """
     out = _to_dict(context.config.output)
-    _ensure_source(out)
     try:
         reader = catalog.read_dataset(out["dataset"])
     except CatalogError:
@@ -74,14 +56,16 @@ def read_prev_output():
 
 def write_output(df, lineage):
     out = _to_dict(context.config.output)
-    _ensure_source(out)
-    src = out.get("source")
-    if not src:
-        raise ValueError(f"output.source is required (dataset: {out.get('dataset')})")
+    source_id = out.get("source_id")
+    if not source_id:
+        raise ValueError(
+            f"output.source_id is required — register the source first "
+            f"(dataset: {out.get('dataset')})"
+        )
     handle = catalog.create_dataset(
         out["dataset"],
         format=out.get("format", "parquet"),
-        source_id=src["id"],
+        source_id=source_id,
         description=out.get("description", ""),
     )
     with handle.create_version(metadata=vars(context.params), inputs=lineage) as writer:

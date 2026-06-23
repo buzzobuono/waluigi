@@ -4,12 +4,11 @@ AggregateDataset — group by + aggregation.
 config:
     input:
         dataset: str
-        source:  {id, type, description, config}
     output:
-        dataset: str
+        dataset:     str
+        source_id:   str   # must already exist in catalog
         format:      str   (default: parquet)
         description: str
-        source:  {id, type, description, config}   # required
     group_by: list[str]
     agg:
         <column>: <func>   # sum | mean | count | min | max | std | first | last

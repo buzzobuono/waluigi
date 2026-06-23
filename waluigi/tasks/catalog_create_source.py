@@ -11,19 +11,18 @@ config:
 """
 from waluigi.sdk.context import context
 from waluigi.sdk.catalog import catalog
-from waluigi.catalog.api.schemas import SourceCreateRequest, SourceType
 from waluigi.tasks._io import _to_dict
 
 
 def run():
     cfg = context.config
     connector_cfg = _to_dict(getattr(cfg, "config", None) or {})
-    catalog.create_source(SourceCreateRequest(
+    catalog.create_source(
         id=cfg.id,
-        type=SourceType[cfg.type.upper()],
+        type=cfg.type,
         config=connector_cfg,
         description=getattr(cfg, "description", "") or "",
-    ))
+    )
     print(f"Source '{cfg.id}' registered (type: {cfg.type})")
 
 

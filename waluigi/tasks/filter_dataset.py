@@ -4,12 +4,11 @@ FilterDataset — keeps rows matching a pandas query expression.
 config:
     input:
         dataset: str
-        source:  {id, type, description, config}
     output:
-        dataset: str
+        dataset:     str
+        source_id:   str   # must already exist in catalog
         format:      str   (default: parquet)
         description: str
-        source:  {id, type, description, config}   # required
     where: str             # pandas query expression, e.g. "value > 1000 and category == 'finance'"
 """
 from waluigi.sdk.context import context
