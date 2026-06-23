@@ -161,7 +161,10 @@ def run():
 
     tenant_id     = cfg.get("tenant_id")
     client_id     = cfg.get("client_id")
-    client_secret = context.secrets.get("client_secret") or context.secrets.get("CLIENT_SECRET")
+    client_secret = (
+        os.environ.get("WALUIGI_SECRET_CLIENT_SECRET")
+        or os.environ.get("WALUIGI_SECRET_client_secret")
+    )
     if not all([tenant_id, client_id, client_secret]):
         raise ValueError(
             "sharepoint.tenant_id, sharepoint.client_id and secret client_secret are required"
