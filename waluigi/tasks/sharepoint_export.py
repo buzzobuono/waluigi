@@ -44,9 +44,6 @@ Job example
   config:
     input:
       dataset: gold/kpi_revenue
-      source:
-        id: catalog_local
-        type: LOCAL
     sharepoint:
       tenant_id:  "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
       client_id:  "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
@@ -62,6 +59,7 @@ How to find site_id
   The "id" field in the response is your site_id.
 """
 import io
+import os
 
 import httpx
 import pandas as pd
