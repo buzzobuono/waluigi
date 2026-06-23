@@ -12,13 +12,11 @@ config:
 """
 from waluigi.sdk.context import context
 from waluigi.sdk.catalog import catalog
-from waluigi.tasks._io import _to_dict
 
 
 def run():
-    cfg        = _to_dict(context.config)
-    dataset_id = cfg["dataset"]
-    charts     = cfg.get("charts") or []
+    dataset_id = context.config["dataset"]
+    charts     = context.config.get("charts") or []
 
     catalog.set_charts(dataset_id, charts)
     print(f"Dataset '{dataset_id}': {len(charts)} chart(s) set")

@@ -9,18 +9,17 @@ config:
 """
 from waluigi.sdk.context import context
 from waluigi.sdk.catalog import catalog
-from waluigi.tasks._io import _to_dict
 
 
 def run():
-    cfg = _to_dict(context.config)
-    dataset_id  = cfg["dataset"]
-    source_id   = cfg.get("source_id", "")
-    fmt         = cfg.get("format", "parquet")
-    description = cfg.get("description", "")
-
-    catalog.create_dataset(dataset_id, format=fmt, source_id=source_id, description=description)
-    print(f"Dataset '{dataset_id}' registered (format: {fmt})")
+    cfg = context.config
+    catalog.create_dataset(
+        cfg["dataset"],
+        format=cfg.get("format", "parquet"),
+        source_id=cfg.get("source_id", ""),
+        description=cfg.get("description", ""),
+    )
+    print(f"Dataset '{cfg['dataset']}' registered (format: {cfg.get('format', 'parquet')})")
 
 
 if __name__ == "__main__":

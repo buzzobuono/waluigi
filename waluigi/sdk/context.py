@@ -2,10 +2,39 @@ import os
 import json
 from types import SimpleNamespace
 
-def _to_namespace(obj):
+
+class AttrDict(dict):
+    """A dict that also supports attribute-style access.
+
+    Returned by context.config for all nested config nodes so that both
+    ``context.config.output.source_id`` and ``context.config.output["source_id"]``
+    (and ``.get()``) work without any conversion helper.
+    """
+    __slots__ = ()
+
+    def __getattr__(self, key):
+        try:
+            return self[key]
+        except KeyError:
+            raise AttributeError(key)
+
+    def __setattr__(self, key, value):
+        self[key] = value
+
+    def __delattr__(self, key):
+        try:
+            del self[key]
+        except KeyError:
+            raise AttributeError(key)
+
+
+def _to_attrdict(obj):
     if isinstance(obj, dict):
-        return SimpleNamespace(**{k: _to_namespace(v) for k, v in obj.items()})
-    return obj  # lists of dicts stay as plain lists — directly usable by SDK calls
+        return AttrDict({k: _to_attrdict(v) for k, v in obj.items()})
+    if isinstance(obj, list):
+        return [_to_attrdict(i) for i in obj]
+    return obj
+
 
 class _Context:
     def __init__(self):
@@ -18,11 +47,12 @@ class _Context:
             for k, v in os.environ.items() if k.startswith("WALUIGI_ATTRIBUTE_")
         })
         raw = os.environ.get("WALUIGI_CONFIG", "{}")
-        self.config = _to_namespace(json.loads(raw))
+        self.config = _to_attrdict(json.loads(raw))
 
     def __repr__(self):
         p_count = len(vars(self.params))
         a_count = len(vars(self.attributes))
         return f"<Context: {p_count} params, {a_count} attributes>"
+
 
 context = _Context()

@@ -18,7 +18,7 @@ from waluigi.sdk.context import context
 |----------|------|----------------|-------------|
 | `context.params` | `SimpleNamespace` | `WALUIGI_PARAM_*` | Task params — lowercase keys |
 | `context.attributes` | `SimpleNamespace` | `WALUIGI_ATTRIBUTE_*` | Task attributes — lowercase keys |
-| `context.config` | `SimpleNamespace` | `WALUIGI_CONFIG` (JSON) | Task config dict, deeply converted to `SimpleNamespace` |
+| `context.config` | `AttrDict` | `WALUIGI_CONFIG` (JSON) | Task config — supports both `.key` and `["key"]` / `.get()` |
 
 Keys in `params` and `attributes` are lowercased: `WALUIGI_PARAM_SOURCE_ID` → `context.params.source_id`.
 
@@ -58,13 +58,15 @@ source = context.params.source
 # Optional param with default
 limit = int(getattr(context.params, 'limit', 1000))
 
-# Structured config (dict → SimpleNamespace recursively)
-url       = context.config.http.url
-page_size = context.config.http.page_size
+# Structured config — AttrDict supports both access styles
+url       = context.config.http.url          # attribute access
+url       = context.config.http["url"]       # dict access — both work
+page_size = context.config.http.get("page_size", 100)
 
-# Config list stays as a plain Python list
-for exp in context.config.expectations:   # list[dict]
-    print(exp["rule_id"])
+# Config lists contain AttrDict items — both styles work
+for exp in context.config.expectations:
+    print(exp["rule_id"])   # dict access
+    print(exp.rule_id)      # attribute access
 
 # Runtime env vars
 job_id = os.environ.get("WALUIGI_JOB_ID", "unknown")
@@ -73,7 +75,7 @@ job_id = os.environ.get("WALUIGI_JOB_ID", "unknown")
 token = os.environ["WALUIGI_SECRET_API_TOKEN"]
 ```
 
-Accessing a non-existent attribute raises `AttributeError`; use `getattr(context.params, 'key', default)` for optional values.
+Accessing a non-existent attribute on `params`/`attributes` raises `AttributeError` — use `getattr(context.params, 'key', default)`. For `context.config`, use `.get('key', default)` since it is an `AttrDict`.
 
 ---
 

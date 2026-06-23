@@ -13,13 +13,11 @@ config:
 """
 from waluigi.sdk.context import context
 from waluigi.sdk.catalog import catalog
-from waluigi.tasks._io import _to_dict
 
 
 def run():
-    cfg        = _to_dict(context.config)
-    dataset_id = cfg["dataset"]
-    rules      = cfg.get("expectations") or []
+    dataset_id = context.config["dataset"]
+    rules      = context.config.get("expectations") or []
 
     catalog.set_expectations(dataset_id, rules)
     print(f"Dataset '{dataset_id}': {len(rules)} expectation(s) set")

@@ -136,16 +136,18 @@ source      = context.params.source       # WALUIGI_PARAM_SOURCE
 owner       = context.attributes.owner    # WALUIGI_ATTRIBUTE_OWNER
 
 # Config (from task config dict)
-cfg         = context.config              # SimpleNamespace from WALUIGI_CONFIG JSON
-limit       = context.config.limit        # context.config.<field>
+cfg         = context.config              # AttrDict from WALUIGI_CONFIG JSON
+limit       = context.config.limit        # attribute access
+limit       = context.config["limit"]     # dict access — both work
+limit       = context.config.get("limit", 100)  # with default
 
 # System IDs
-task_id     = context.task_id             # WALUIGI_TASK_ID
-job_id      = context.job_id             # WALUIGI_JOB_ID
-namespace   = context.namespace           # WALUIGI_CATALOG_NAMESPACE
+task_id     = os.environ.get("WALUIGI_TASK_ID",  "unknown")
+job_id      = os.environ.get("WALUIGI_JOB_ID",   "unknown")
+namespace   = os.environ.get("WALUIGI_CATALOG_NAMESPACE", "")
 ```
 
-`context.params`, `context.attributes`, and `context.config` are all `SimpleNamespace` objects. Accessing an undefined attribute raises `AttributeError` — use `getattr(context.params, 'key', default)` for optional params.
+`context.params` and `context.attributes` are `SimpleNamespace` — use `getattr(context.params, 'key', default)` for optional values. `context.config` is an `AttrDict` (dict subclass) — use `.get('key', default)` for optional config fields.
 
 ```python
 rows_per_source = int(getattr(context.params, 'rows_per_source', 10))
@@ -220,7 +222,7 @@ Rscript analysis.R "$WALUIGI_PARAM_DATE"
 
 ## Task config (`config:`)
 
-The `config` block passes arbitrary structured data to a task without polluting `params`. It is available as `context.config` (a `SimpleNamespace`) or as raw JSON via `WALUIGI_CONFIG`.
+The `config` block passes arbitrary structured data to a task without polluting `params`. It is available as `context.config` (an `AttrDict` — supports both `.key` and `["key"]`) or as raw JSON via `WALUIGI_CONFIG`.
 
 ```yaml
 - id: extract

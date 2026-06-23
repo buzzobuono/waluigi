@@ -17,16 +17,14 @@ config:
 """
 from waluigi.sdk.context import context
 from waluigi.sdk.catalog import catalog
-from waluigi.tasks._io import _to_dict
 
 _PATCH_FIELDS = ("logical_type", "description", "nullable", "pii", "pii_type", "pii_notes")
 
 
 def run():
-    cfg        = _to_dict(context.config)
-    dataset_id = cfg["dataset"]
-    columns    = cfg.get("columns") or []
-    publish    = bool(cfg.get("publish", False))
+    dataset_id = context.config["dataset"]
+    columns    = context.config.get("columns") or []
+    publish    = bool(context.config.get("publish", False))
 
     for col in columns:
         fields = {k: col[k] for k in _PATCH_FIELDS if k in col}

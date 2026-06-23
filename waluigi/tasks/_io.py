@@ -1,9 +1,8 @@
 """
 Shared I/O helpers for all built-in task types.
 
-Each dataset config requires only `dataset` for reads.  Writes additionally
-require `source_id` (a pre-existing source ID string) and optionally
-`format` and `description`.
+context.config is an AttrDict — supports both attribute access (.key) and
+dict access (["key"] / .get("key")) without any conversion.
 
 Dataset config shape for reads:
     dataset: str
@@ -14,26 +13,15 @@ Dataset config shape for writes:
     format:      str   # parquet | csv  (default: parquet)
     description: str   # optional
 """
-from types import SimpleNamespace
-
 from waluigi.sdk.context import context
 from waluigi.sdk.catalog import catalog, CatalogError
 
 
-def _to_dict(obj):
-    """Recursively convert SimpleNamespace → plain dict."""
-    if isinstance(obj, SimpleNamespace):
-        return {k: _to_dict(v) for k, v in vars(obj).items()}
-    if isinstance(obj, list):
-        return [_to_dict(i) for i in obj]
-    return obj
-
-
 def read_input():
-    inp = _to_dict(context.config.input)
-    reader = catalog.read_dataset(inp["dataset"])
+    dataset = context.config.input["dataset"]
+    reader = catalog.read_dataset(dataset)
     df = reader.read()
-    print(f"  read {inp['dataset']}: {len(df)} rows @ {reader.version}")
+    print(f"  read {dataset}: {len(df)} rows @ {reader.version}")
     return reader, df
 
 
@@ -44,18 +32,18 @@ def read_prev_output():
     Returns (reader, df) or (None, None) when no prior version exists — a normal
     condition on the first run, not an error.
     """
-    out = _to_dict(context.config.output)
+    dataset = context.config.output["dataset"]
     try:
-        reader = catalog.read_dataset(out["dataset"])
+        reader = catalog.read_dataset(dataset)
     except CatalogError:
         return None, None
     df = reader.read()
-    print(f"  read previous {out['dataset']}: {len(df)} rows @ {reader.version}")
+    print(f"  read previous {dataset}: {len(df)} rows @ {reader.version}")
     return reader, df
 
 
 def write_output(df, lineage):
-    out = _to_dict(context.config.output)
+    out = context.config.output
     source_id = out.get("source_id")
     if not source_id:
         raise ValueError(

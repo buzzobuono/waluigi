@@ -22,7 +22,7 @@ import httpx
 import pandas as pd
 
 from waluigi.sdk.context import context
-from waluigi.tasks._io import _to_dict, write_output
+from waluigi.tasks._io import write_output
 
 
 # ── JSON traversal helpers ────────────────────────────────────────────────────
@@ -147,7 +147,7 @@ def _fetch_all(http_cfg: dict) -> list[dict]:
 # ── entry point ───────────────────────────────────────────────────────────────
 
 def run():
-    http_cfg = _to_dict(context.config.http)
+    http_cfg = context.config.http
     if not http_cfg.get("url"):
         raise ValueError("config.http.url is required")
 

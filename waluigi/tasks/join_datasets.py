@@ -19,12 +19,12 @@ config:
 import pandas as pd
 from waluigi.sdk.catalog import catalog
 from waluigi.sdk.context import context
-from waluigi.tasks._io import _to_dict, write_output
+from waluigi.tasks._io import write_output
 
 
 def run():
-    left  = _to_dict(context.config.left)
-    right = _to_dict(context.config.right)
+    left  = context.config.left
+    right = context.config.right
 
     left_reader  = catalog.read_dataset(left["dataset"])
     right_reader = catalog.read_dataset(right["dataset"])
@@ -37,11 +37,11 @@ def run():
     j = context.config.join
     joined = pd.merge(
         df_left, df_right,
-        on=j.columns,
-        how=getattr(j, "how", "inner"),
-        suffixes=getattr(j, "suffixes", ["_x", "_y"]),
+        on=j["columns"],
+        how=j.get("how", "inner"),
+        suffixes=j.get("suffixes", ["_x", "_y"]),
     )
-    print(f"After join ({getattr(j, 'how', 'inner')}): {len(joined)} rows")
+    print(f"After join ({j.get('how', 'inner')}): {len(joined)} rows")
 
     lineage = [
         {"dataset_id": left_reader.dataset_id,  "version": left_reader.version},

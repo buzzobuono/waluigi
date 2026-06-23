@@ -67,7 +67,7 @@ import httpx
 import pandas as pd
 
 from waluigi.sdk.context import context
-from waluigi.tasks._io import _to_dict, read_input
+from waluigi.tasks._io import read_input
 
 _GRAPH = "https://graph.microsoft.com/v1.0"
 _LOGIN = "https://login.microsoftonline.com"
@@ -156,7 +156,7 @@ def _serialize(df: pd.DataFrame, fmt: str) -> bytes:
 
 
 def run():
-    cfg = _to_dict(context.config.sharepoint)
+    cfg = context.config.sharepoint
 
     tenant_id     = cfg.get("tenant_id")
     client_id     = cfg.get("client_id")

@@ -22,7 +22,7 @@ def run():
     lineage = [{"dataset_id": reader.dataset_id, "version": reader.version}]
 
     group_by = context.config.group_by
-    agg_dict = vars(context.config.agg)
+    agg_dict = dict(context.config.agg)
 
     df = df.groupby(group_by).agg(agg_dict).reset_index()
     print(f"  group_by={group_by} agg={agg_dict} → {len(df)} groups")

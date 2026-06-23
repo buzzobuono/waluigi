@@ -11,19 +11,17 @@ config:
 """
 from waluigi.sdk.context import context
 from waluigi.sdk.catalog import catalog
-from waluigi.tasks._io import _to_dict
 
 
 def run():
     cfg = context.config
-    connector_cfg = _to_dict(getattr(cfg, "config", None) or {})
     catalog.create_source(
-        id=cfg.id,
-        type=cfg.type,
-        config=connector_cfg,
-        description=getattr(cfg, "description", "") or "",
+        id=cfg["id"],
+        type=cfg["type"],
+        config=cfg.get("config") or {},
+        description=cfg.get("description") or "",
     )
-    print(f"Source '{cfg.id}' registered (type: {cfg.type})")
+    print(f"Source '{cfg['id']}' registered (type: {cfg['type']})")
 
 
 if __name__ == "__main__":
