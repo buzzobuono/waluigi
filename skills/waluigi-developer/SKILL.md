@@ -412,6 +412,44 @@ All built-in tasks automatically use `CatalogClient` for I/O and record lineage.
 
 Sources must exist in the catalog before tasks can write to them. Register them once using `CatalogCreateSource` (as part of the job or a setup job). Reads do not need `source_id` — the source is stored in the catalog with the dataset. Only **writes** need `source_id`.
 
+**Available source types:**
+
+| Type | Connector | Notes |
+|------|-----------|-------|
+| `local` | `LocalConnector` | Files on the Catalog server filesystem |
+| `s3` | `S3Connector` | Amazon S3 or S3-compatible (MinIO, etc.) |
+| `sql` | `SQLConnector` | Any SQLAlchemy-supported database |
+| `sftp` | `SFTPConnector` | Remote file via SSH (register manually) |
+| `sharepoint` | `SharePointConnector` | SharePoint document library via Microsoft Graph API |
+
+**Secrets in source config:** `${VAR}` placeholders are expanded against the task subprocess environment at connector instantiation time, so `${WALUIGI_SECRET_*}` works in any source config:
+
+```yaml
+kind: Source
+metadata:
+  namespace: analytics
+  name: pg-dwh
+spec:
+  type: sql
+  config:
+    url: "postgresql+psycopg2://user:${WALUIGI_SECRET_DB_PASSWORD}@host:5432/mydb"
+```
+
+```yaml
+kind: Source
+metadata:
+  namespace: analytics
+  name: sharepoint-gold
+spec:
+  type: sharepoint
+  config:
+    tenant_id:     "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    client_id:     "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
+    client_secret: "${WALUIGI_SECRET_CLIENT_SECRET}"
+    site_url:      "https://contoso.sharepoint.com/sites/DataTeam"
+    folder:        "PowerBI/Gold"
+```
+
 ---
 
 ### IngestRest
