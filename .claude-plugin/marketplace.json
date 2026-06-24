@@ -1,0 +1,19 @@
+{
+  "name": "waluigi-marketplace",
+  "owner": {
+    "name": "Do Different",
+    "email": "sistemi@dodifferent.it"
+  },
+  "description": "Official Waluigi orchestrator plugins for Claude Code",
+  "plugins": [
+    {
+      "name": "waluigi-developer",
+      "source": "./plugins/waluigi-developer",
+      "description": "Waluigi pipeline developer — design tasks and jobs in YAML, test locally with wlrun, deploy to cluster with wlctl, implement medallion architecture with data quality checks.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Do Different"
+      }
+    }
+  ]
+}
