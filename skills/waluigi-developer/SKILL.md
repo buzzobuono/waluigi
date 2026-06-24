@@ -749,7 +749,6 @@ Publishes a Catalog dataset to a SharePoint document library via Microsoft Graph
   taskRef:
     name: SharePointExport
   requires: [gold_revenue]
-  secrets: [sharepoint]           # must contain CLIENT_SECRET
   config:
     input:
       dataset: gold/kpi_revenue

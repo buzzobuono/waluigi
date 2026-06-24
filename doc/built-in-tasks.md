@@ -867,7 +867,7 @@ config:
     format: <string>           # csv (default) | parquet
 ```
 
-The client secret is read from the Waluigi Secret referenced by `secrets:` on the task. The key name must be `client_secret` or `CLIENT_SECRET`. Files larger than 4 MB are uploaded via Graph API upload sessions automatically.
+The client secret is read from `WALUIGI_SECRET_CLIENT_SECRET`, which is injected automatically from any Secret in the namespace whose key is `CLIENT_SECRET` (or `client_secret`). All namespace Secrets are always injected into every task — no `secrets:` field needed. Files larger than 4 MB are uploaded via Graph API upload sessions automatically.
 
 **How to find `site_id`:**
 In [Graph Explorer](https://developer.microsoft.com/graph/graph-explorer) call `GET https://graph.microsoft.com/v1.0/sites/{hostname}:{/relative-path}` (e.g. `…/sites/contoso.sharepoint.com:/sites/DataTeam`). The `id` field in the response is your `site_id`.
@@ -888,7 +888,6 @@ spec:
     name: SharePointExport
   requires:
     - gold_revenue
-  secrets: [sharepoint]
   config:
     input:
       dataset: gold/kpi_revenue

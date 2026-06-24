@@ -40,7 +40,6 @@ Job example
   taskRef:
     name: SharePointExport
   requires: [gold_revenue]
-  secrets: [sharepoint]
   config:
     input:
       dataset: gold/kpi_revenue
