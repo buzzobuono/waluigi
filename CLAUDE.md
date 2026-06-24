@@ -447,8 +447,9 @@ Located in `waluigi/sdk/connectors/`. All extend `BaseConnector`:
 | `S3Connector` | `s3` | URI format `s3://bucket/key`; supports MinIO via `endpoint_url` |
 | `SQLConnector` | `sql`, `postgresql`, `mysql`, `sqlite` | Location = table or `schema.table`; uses SQLAlchemy |
 | `SFTPConnector` | `sftp` | SSH key or password auth via paramiko |
+| `SharePointConnector` | `sharepoint` | Microsoft Graph API app-only auth; CSV + Parquet; chunked upload for files >4 MB |
 
-`ConnectorFactory.get(source_type, config)` returns the right connector. Write operations return row count. Delete operations clean up physical files (used by dataset and version cascade delete).
+`ConnectorFactory.get(source_type, config)` returns the right connector, expanding `${VAR}` placeholders in config values against `os.environ` (so `${WALUIGI_SECRET_*}` works in any source config). Write operations return row count. Delete operations clean up physical files (used by dataset and version cascade delete).
 
 ## Data Quality
 

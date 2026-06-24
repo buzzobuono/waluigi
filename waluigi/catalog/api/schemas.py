@@ -3,11 +3,12 @@ from typing import Any, Dict, List, Optional
 from enum import Enum
 
 class SourceType(str, Enum):
-    LOCAL = "local"
-    S3 = "s3"
-    SQL = "sql"
-    SFTP = "sftp"
-    API = "api"
+    LOCAL      = "local"
+    S3         = "s3"
+    SQL        = "sql"
+    SFTP       = "sftp"
+    API        = "api"
+    SHAREPOINT = "sharepoint"
 
 class SourceCreateRequest(BaseModel):
     id:          str            = Field(...,  example="pg-dwh")

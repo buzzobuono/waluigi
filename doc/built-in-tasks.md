@@ -34,7 +34,7 @@ Sources must be registered in the catalog before tasks can write to them. Use `C
 
 Reads do not require a `source` in the task config — the source is already stored in the catalog alongside the dataset. Only **writes** require a `source_id` field pointing to a pre-registered source.
 
-Source types: `local`, `s3`, `sql`, `sftp`. See [sdk.md](sdk.md#connectors) for connector config fields.
+Source types: `local`, `s3`, `sql`, `sftp`, `sharepoint`. See [sdk.md](sdk.md#connectors) for connector config fields.
 
 ---
 

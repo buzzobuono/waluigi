@@ -390,6 +390,32 @@ catalog.create_source(
 
 Each committed version writes to an auto-named table `{dataset_last_segment}__{version_compact}`.
 
+### SharePointConnector (`type: sharepoint`)
+
+Reads and writes Catalog datasets as files in a SharePoint document library via Microsoft Graph API (app-only OAuth2). Requires an Azure AD app registration with `Sites.ReadWrite.All` application permission and admin consent.
+
+```python
+catalog.create_source(
+    id="sharepoint-gold",
+    type="sharepoint",
+    config={
+        "tenant_id":     "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+        "client_id":     "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy",
+        "client_secret": "${WALUIGI_SECRET_CLIENT_SECRET}",
+        "site_url":      "https://contoso.sharepoint.com/sites/DataTeam",
+        "folder":        "PowerBI/Gold",   # base folder inside the library (optional)
+    },
+)
+```
+
+**Location:** relative path within the library folder, managed automatically (`<dataset_id>/<version>.<ext>`).
+
+Supported formats: `csv` (UTF-8 BOM, Excel/Power BI compatible), `parquet`.
+
+Files larger than 4 MB are uploaded via Graph API chunked upload sessions automatically.
+
+> **Secrets in source config:** any `${VAR}` placeholder in a source config is expanded against the task subprocess environment at connector instantiation time — so `${WALUIGI_SECRET_*}` values injected by the Worker are available in any connector type.
+
 ### SFTPConnector (`type: sftp`)
 
 > **Note:** The SFTP connector is implemented (`waluigi/sdk/connectors/sftp.py`) but not currently registered in `ConnectorFactory`. Register it manually if needed:

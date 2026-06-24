@@ -3,6 +3,7 @@ from .factory import ConnectorFactory
 from .local import LocalConnector
 from .s3 import S3Connector
 from .sql import SQLConnector
+from .sharepoint import SharePointConnector
 #from .sftp import SFTPConnector
 
 __all__ = [
@@ -11,5 +12,6 @@ __all__ = [
     "LocalConnector",
     "S3Connector",
     "SQLConnector",
+    "SharePointConnector",
     #"SFTPConnector",
 ]
