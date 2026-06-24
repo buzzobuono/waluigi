@@ -6,7 +6,6 @@ description: >
   implement the full Bronze→Silver→Gold medallion architecture with built-in tasks and
   data quality checks. Use whenever working on Waluigi pipelines, task definitions,
   job definitions, cron jobs, or Catalog integrations.
-commands: ["/waluigi-developer"]
 ---
 
 # Waluigi Developer
