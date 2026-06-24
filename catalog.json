@@ -10,8 +10,7 @@
       "skills": [
         {
           "name": "waluigi-developer",
-          "path": "./plugins/waluigi-developer/skills/waluigi-developer",
-          "commands": ["/waluigi-developer"]
+          "path": "./plugins/waluigi-developer/skills/waluigi-developer"
         }
       ]
     }
