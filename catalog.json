@@ -1,0 +1,19 @@
+{
+  "name": "waluigi-marketplace",
+  "version": "1.0.0",
+  "description": "Official Waluigi orchestrator plugins for Claude Code",
+  "plugins": [
+    {
+      "name": "waluigi-developer",
+      "path": "./plugins/waluigi-developer",
+      "namespace": "waluigi-developer",
+      "skills": [
+        {
+          "name": "waluigi-developer",
+          "path": "./plugins/waluigi-developer/skills/waluigi-developer",
+          "commands": ["/waluigi-developer"]
+        }
+      ]
+    }
+  ]
+}

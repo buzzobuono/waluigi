@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Whenever you change code, you MUST update the documentation in the same change:**
 
 1. **`doc/`** — the user-facing docs (`architecture.md`, `built-in-tasks.md`, `catalog.md`, `cli.md`, `data-quality.md`, `deployment.md`, `sdk.md`, `task-development.md`, `yaml-reference.md`). Update the file(s) covering the area you touched.
-2. **`skills/waluigi-developer/SKILL.md`** — the usage skill. Keep its task/command/workflow references in sync with the code.
+2. **`plugins/waluigi-developer/skills/waluigi-developer/SKILL.md`** — the usage skill. Keep its task/command/workflow references in sync with the code.
 3. **`CLAUDE.md`** — this file, when architecture, commands, APIs, or built-in tables change.
 
 A code change is not complete until `doc/`, the skill, and `CLAUDE.md` reflect it. Adding a built-in task, a CLI command, a REST endpoint, or a config flag always implies a matching doc + skill edit.
