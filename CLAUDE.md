@@ -440,7 +440,7 @@ These are Python modules invokable from TaskDefinition specs. They are **not aut
 | `waluigi.tasks.catalog_define_schema` | `CatalogDefineSchema` | Define/publish schema |
 | `waluigi.tasks.catalog_set_expectations` | `CatalogSetExpectations` | Attach DQ expectations |
 | `waluigi.tasks.catalog_set_charts` | `CatalogSetCharts` | Attach chart definitions (bar, line, pie, histogram, scatter, radar, combo) |
-| `waluigi.tasks.reindex_time_series` | `ReindexTimeSeries` | Gap-fill time series to a complete date index (day/week/month/year) |
+| \`waluigi.tasks.reindex_time_series\` | \`ReindexTimeSeries\` | Gap-fill time series to a complete date index (day/week/month/year) |\n| \`waluigi.tasks.reindex_multi_series\` | \`ReindexMultiSeries\` | Gap-fill grouped time series — cross-product group × period, fill per group |
 
 All built-in tasks use `waluigi/tasks/_io.py` helpers (`read_input()` / `write_output()`) which handle source upsert and lineage automatically.
 

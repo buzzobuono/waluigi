@@ -1047,3 +1047,64 @@ spec:
   resources:
     coin: 1
 ```
+
+---
+
+## ReindexMultiSeries
+
+Extends `ReindexTimeSeries` with a `group_by` parameter. Generates the full cross-product of every group × every period, left-joins the input data, and applies fill strategies **independently within each group** — ffill/bfill never bleed values across group boundaries.
+
+Use this when each category (product, year, customer) must have a row for every period in the range, even periods with no data.
+
+```yaml
+taskRef:
+  name: ReindexMultiSeries
+config:
+  input:
+    dataset: <string>              # source dataset ID (required)
+  output:
+    dataset: <string>              # output dataset ID (required)
+    source_id: <string>            # catalog source (required)
+    format: <string>               # parquet | csv | json (default: parquet)
+    description: <string>
+  group_by: <string | list>        # column(s) identifying each series (required)
+  date_column: <string>            # column holding the date value (default: "date")
+  frequency: <string>              # day | week | month | year (default: day)
+  start: <string>                  # optional; default: min date in dataset
+  end: <string>                    # optional; default: max date in dataset
+  fill:
+    strategy: <string>             # ffill | bfill | zero | null | interpolate (default: null)
+    columns:                       # optional per-column overrides
+      <col_name>: <strategy>
+```
+
+**Example — year-on-year comparison with monthly gap-filling:**
+
+```yaml
+- id: reindex_yoy
+  taskRef:
+    name: ReindexMultiSeries
+  config:
+    input:
+      dataset: analytics/gold/revenue-yoy-agg
+    output:
+      dataset: analytics/gold/revenue-yoy
+      source_id: local
+      format: parquet
+      description: "Revenue YoY — all months present for every year, zero-filled"
+    group_by: anno
+    date_column: mese
+    frequency: month
+    start: "2024-01"
+    end: "2024-12"
+    fill:
+      strategy: zero
+      columns:
+        magazzino: ffill
+  resources:
+    coin: 1
+  requires:
+    - gold_aggregate
+```
+
+All fill strategies and frequency formats are identical to `ReindexTimeSeries`. The difference is that the full index is `groups × periods` instead of just `periods`, and fills are applied group by group.

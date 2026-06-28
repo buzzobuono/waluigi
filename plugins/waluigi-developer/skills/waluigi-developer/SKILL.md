@@ -1073,6 +1073,41 @@ Gap-fills a time series dataset to a complete date index. Generates all missing 
 
 ---
 
+### ReindexMultiSeries
+
+Extends `ReindexTimeSeries` with `group_by`. Generates the full cross-product of every group × every period, left-joins the input, and applies fill strategies **independently within each group** (ffill/bfill never bleed across groups).
+
+```yaml
+- id: reindex_yoy
+  taskRef:
+    name: ReindexMultiSeries
+  config:
+    input:
+      dataset: analytics/gold/revenue-yoy-agg
+    output:
+      dataset: analytics/gold/revenue-yoy
+      source_id: local
+      format: parquet
+      description: "Revenue YoY — all months for every year, zero-filled"
+    group_by: anno              # string → single column; list → composite key
+    date_column: mese
+    frequency: month
+    start: "2024-01"
+    end: "2024-12"
+    fill:
+      strategy: zero
+      columns:
+        magazzino: ffill        # per-column override applied before default
+  resources:
+    coin: 1
+  requires:
+    - gold_aggregate
+```
+
+All fill strategies and frequency formats are identical to `ReindexTimeSeries`. The only additions are `group_by` (required) and the per-group fill isolation.
+
+---
+
 ## 5. Catalog: writing datasets from a custom script
 
 Use the SDK inside a `taskSpec.script`. The two-phase commit (reserve → write → commit) is handled automatically by the context manager.
