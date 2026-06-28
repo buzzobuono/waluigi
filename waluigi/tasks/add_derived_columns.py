@@ -22,10 +22,18 @@ config:
           source: str          # column to map from
           mapping: {val: label, ...}
 """
+import builtins
+
 import pandas as pd
 
 from waluigi.sdk.catalog import catalog
 from waluigi.sdk.context import context
+
+_SAFE_BUILTINS = {k: getattr(builtins, k) for k in (
+    "int", "float", "str", "bool", "list", "dict", "tuple", "set",
+    "len", "round", "abs", "min", "max", "sum", "zip", "enumerate",
+    "range", "sorted", "reversed", "any", "all", "isinstance", "type",
+)}
 
 
 def _apply_column(df: pd.DataFrame, col: dict) -> pd.DataFrame:
@@ -50,7 +58,7 @@ def _apply_column(df: pd.DataFrame, col: dict) -> pd.DataFrame:
     # expr mode — expose full DataFrame as `x` so string methods and
     # type casts work (e.g. x['col'].str[5:7].astype(int))
     local_ns = {"x": df, "pd": pd}
-    df[name] = eval(expr, {"__builtins__": {}}, local_ns)  # noqa: S307
+    df[name] = eval(expr, {"__builtins__": _SAFE_BUILTINS}, local_ns)  # noqa: S307
     print(f"  + {name} = {expr}")
     return df
 
