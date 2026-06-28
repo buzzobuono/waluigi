@@ -722,6 +722,31 @@ Pivot table or unpivot (melt).
 
 ---
 
+### LastPerGroup / FirstPerGroup
+
+Sort by `order_by`, then keep only the last (or first) row per group. All columns preserved — no aggregation, no column list required. Use for "latest snapshot per entity" Gold tables.
+
+```yaml
+- id: gold_pellet_stagioni
+  taskRef:
+    name: LastPerGroup
+  config:
+    input:
+      dataset: default/silver/pellet
+    output:
+      dataset: default/gold/pellet-stagioni
+      source_id: local
+      format: parquet
+    group_by: stagione
+    order_by: data
+  resources:
+    coin: 1
+```
+
+`ascending: false` to pick the row with the highest sort value instead of the lowest. Use `FirstPerGroup` for earliest-row semantics.
+
+---
+
 ### DeduplicateDataset
 
 Remove duplicate rows. `keep`: `first` | `last` | `false` (drop all duplicates).

@@ -152,6 +152,22 @@ spec:
 ---
 kind: TaskDefinition
 metadata:
+  name: "LastPerGroup"
+spec:
+  command: "python -m waluigi.tasks.last_per_group"
+  affinity:
+    - python
+---
+kind: TaskDefinition
+metadata:
+  name: "FirstPerGroup"
+spec:
+  command: "python -m waluigi.tasks.first_per_group"
+  affinity:
+    - python
+---
+kind: TaskDefinition
+metadata:
   name: "ReindexTimeSeries"
 spec:
   command: "python -m waluigi.tasks.reindex_time_series"

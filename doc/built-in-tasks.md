@@ -488,6 +488,49 @@ config:
 
 ---
 
+## LastPerGroup / FirstPerGroup
+
+Sort by `order_by`, then keep only the last (or first) row per group. All columns are preserved — no aggregation, no column list required.
+
+```yaml
+taskRef:
+  name: LastPerGroup      # or FirstPerGroup
+config:
+  input:
+    dataset: <string>
+  output:
+    dataset: <string>
+    source_id: <string>
+    format: <string>      # default: parquet
+    description: <string>
+  group_by: <str | list[str]>   # column(s) defining each group
+  order_by: <str | list[str]>   # column(s) to sort by before picking
+  ascending: <bool>             # default: true
+```
+
+**Example — latest snapshot per season:**
+
+```yaml
+- id: gold_pellet_stagioni
+  taskRef:
+    name: LastPerGroup
+  config:
+    input:
+      dataset: default/silver/pellet
+    output:
+      dataset: default/gold/pellet-stagioni
+      source_id: local
+      format: parquet
+    group_by: stagione
+    order_by: data
+  resources:
+    coin: 1
+```
+
+Use `FirstPerGroup` to keep the earliest observation per group instead.
+
+---
+
 ## DeduplicateDataset
 
 Removes duplicate rows.
