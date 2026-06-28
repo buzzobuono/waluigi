@@ -219,6 +219,73 @@ columns:
 
 ---
 
+## TransformDataset
+
+Reads a dataset into `df`, executes an inline Python code block, then writes the result. Use this when the transformation is too complex for `AddDerivedColumns` but not complex enough to justify a dedicated task file.
+
+`df` can be reassigned inside the block. `pd` (pandas) and `context` are available without importing.
+
+```yaml
+taskRef:
+  name: TransformDataset
+config:
+  input:
+    dataset: <string>
+  output:
+    dataset: <string>
+    source_id: <string>
+    format: <string>           # default: parquet
+    description: <string>
+  eval: |
+    # Python code; df is the input DataFrame
+    # reassign df freely
+```
+
+**Example — annual KPI aggregation:**
+
+```yaml
+- id: gold_pellet_anno
+  taskRef:
+    name: TransformDataset
+  config:
+    input:
+      dataset: default/silver/pellet
+    output:
+      dataset: default/gold/pellet-anno
+      source_id: local
+      format: parquet
+      description: "Pellet — KPI per anno solare"
+    eval: |
+      import numpy as np
+
+      df["data"] = pd.to_datetime(df["data"])
+      df["anno"] = df["data"].dt.year
+
+      records = []
+      for anno, grp in df.groupby("anno", sort=True):
+          grp  = grp.sort_values("data")
+          sacchi = grp["qta_acquistata"].sum()
+          spesa  = grp["importo"].sum()
+          giorni = (grp["data"].iloc[-1] - grp["data"].iloc[0]).days + 1
+          records.append({
+              "anno":                   int(anno),
+              "sacchi_acquistati":      sacchi,
+              "spesa_acquisto_eur":     round(spesa, 2),
+              "giorni_anno":            giorni,
+              "costo_unitario_medio":   round(spesa / sacchi, 4) if sacchi else None,
+          })
+
+      df = pd.DataFrame(records)
+  requires:
+    - silver_pellet
+  resources:
+    coin: 1
+```
+
+Lineage is recorded automatically from `input.dataset` to `output.dataset`.
+
+---
+
 ## AggregateDataset
 
 Group-by aggregation.

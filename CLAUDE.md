@@ -427,6 +427,7 @@ These are Python modules invokable from TaskDefinition specs. They are **not aut
 | `waluigi.tasks.filter_dataset` | `FilterDataset` | `df.query(where_clause)` |
 | `waluigi.tasks.select_columns` | `SelectColumns` | Column projection |
 | `waluigi.tasks.add_derived_columns` | `AddDerivedColumns` | Compute new columns via `expr` (full pandas, `x`=DataFrame) or `mapping` (value→label dict) |
+| `waluigi.tasks.transform_dataset` | `TransformDataset` | Inline Python block (`eval`) on `df`; `pd` and `context` pre-injected; `df` reassignable |
 | `waluigi.tasks.aggregate_dataset` | `AggregateDataset` | Group-by aggregation |
 | `waluigi.tasks.join_datasets` | `JoinDatasets` | Join two datasets |
 | `waluigi.tasks.merge_datasets` | `MergeDatasets` | Union/concat datasets |

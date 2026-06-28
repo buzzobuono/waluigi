@@ -567,6 +567,39 @@ Simple arithmetic without `x` also works (e.g. `"quantity * unit_price"`). `mapp
 
 ---
 
+### TransformDataset
+
+Reads a dataset into `df`, executes an inline Python block (`eval`), writes the result. Use when the transformation is too complex for `AddDerivedColumns` but doesn't justify a dedicated task file. `df` can be reassigned freely. `pd` and `context` are available without importing.
+
+```yaml
+- id: gold_pellet_anno
+  taskRef:
+    name: TransformDataset
+  config:
+    input:
+      dataset: default/silver/pellet
+    output:
+      dataset: default/gold/pellet-anno
+      source_id: local
+      format: parquet
+      description: "Pellet — KPI per anno solare"
+    eval: |
+      df["data"] = pd.to_datetime(df["data"])
+      df["anno"] = df["data"].dt.year
+      records = []
+      for anno, grp in df.groupby("anno", sort=True):
+          sacchi = grp["qta_acquistata"].sum()
+          spesa  = grp["importo"].sum()
+          records.append({"anno": int(anno), "sacchi": sacchi, "spesa": round(spesa, 2)})
+      df = pd.DataFrame(records)
+  resources:
+    coin: 1
+```
+
+Lineage recorded automatically. Any extra import can be added inside the `eval` block.
+
+---
+
 ### AggregateDataset
 
 Group-by aggregation. Functions: `sum`, `mean`, `count`, `min`, `max`, `std`, `first`, `last`.
