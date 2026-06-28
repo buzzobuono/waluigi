@@ -149,11 +149,3 @@ spec:
   command: "python -m waluigi.tasks.reindex_time_series"
   affinity:
     - python
----
-kind: TaskDefinition
-metadata:
-  name: "ReindexMultiSeries"
-spec:
-  command: "python -m waluigi.tasks.reindex_multi_series"
-  affinity:
-    - python

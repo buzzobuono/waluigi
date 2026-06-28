@@ -1024,7 +1024,7 @@ Attach ECharts visualisations to a dataset. Types: `bar`, `line`, `pie`, `histog
 
 ### ReindexTimeSeries
 
-Gap-fills a time series dataset to a complete date index. Generates all missing periods (day/week/month/year) in a range and applies a fill strategy on the missing rows. Rows already present are kept unchanged.
+Gap-fills a time series to a complete date index. When `group_by` is set, generates the full cross-product of every group × every period and applies fill strategies **independently within each group** (ffill/bfill never bleed across groups).
 
 ```yaml
 - id: reindex_monthly
@@ -1038,13 +1038,14 @@ Gap-fills a time series dataset to a complete date index. Generates all missing 
       source_id: local
       format: parquet
       description: "Revenue — all months, zero-filled"
-    date_column: month           # column holding the date value (default: "date")
-    frequency: month             # day | week | month | year (default: day)
-    start: "2024-01"             # optional; default = min date in dataset
-    end: "2024-12"               # optional; default = max date in dataset
+    group_by: anno              # optional — string or list; omit for single series
+    date_column: month          # column holding the date value (default: "date")
+    frequency: month            # day | week | month | year (default: day)
+    start: "2024-01"            # optional; default = min date in dataset
+    end: "2024-12"              # optional; default = max date in dataset
     fill:
-      strategy: zero             # ffill | bfill | zero | null | interpolate (default: null)
-      columns:                   # optional per-column overrides
+      strategy: zero            # ffill | bfill | zero | null | interpolate (default: null)
+      columns:                  # optional per-column overrides
         category: ffill
   resources:
     coin: 1
@@ -1070,41 +1071,6 @@ Gap-fills a time series dataset to a complete date index. Generates all missing 
 | `week` | `YYYY-MM-DD` (Monday) | `2024-03-11` |
 | `month` | `YYYY-MM` | `2024-03` |
 | `year` | `YYYY` | `2024` |
-
----
-
-### ReindexMultiSeries
-
-Extends `ReindexTimeSeries` with `group_by`. Generates the full cross-product of every group × every period, left-joins the input, and applies fill strategies **independently within each group** (ffill/bfill never bleed across groups).
-
-```yaml
-- id: reindex_yoy
-  taskRef:
-    name: ReindexMultiSeries
-  config:
-    input:
-      dataset: analytics/gold/revenue-yoy-agg
-    output:
-      dataset: analytics/gold/revenue-yoy
-      source_id: local
-      format: parquet
-      description: "Revenue YoY — all months for every year, zero-filled"
-    group_by: anno              # string → single column; list → composite key
-    date_column: mese
-    frequency: month
-    start: "2024-01"
-    end: "2024-12"
-    fill:
-      strategy: zero
-      columns:
-        magazzino: ffill        # per-column override applied before default
-  resources:
-    coin: 1
-  requires:
-    - gold_aggregate
-```
-
-All fill strategies and frequency formats are identical to `ReindexTimeSeries`. The only additions are `group_by` (required) and the per-group fill isolation.
 
 ---
 

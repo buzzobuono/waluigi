@@ -932,6 +932,9 @@ config:
     source_id: <string>         # catalog source (required)
     format: <string>            # parquet | csv | json (default: parquet)
     description: <string>
+  group_by: <string | list>     # optional — column(s) identifying each series
+                                #   when set, index = cross-product group × period
+                                #   fill strategies are applied independently per group
   date_column: <string>         # column holding the date value (default: "date")
   frequency: <string>           # day | week | month | year (default: day)
   start: <string>               # optional start — ISO format matching frequency
@@ -964,7 +967,7 @@ config:
 | `month` | `YYYY-MM` | `2024-03` |
 | `year` | `YYYY` | `2024` |
 
-**Example — monthly revenue series with gaps:**
+**Example — monthly revenue series with gaps (single series):**
 
 ```yaml
 - id: reindex_monthly_revenue
@@ -983,13 +986,42 @@ config:
     start: "2024-01"
     end: "2024-12"
     fill:
-      strategy: zero             # fill missing numeric values with 0
+      strategy: zero
       columns:
-        category: ffill          # carry category label forward instead
+        category: ffill
   resources:
     coin: 1
   requires:
     - silver_revenue
+```
+
+**Example — year-on-year comparison (multi-series with group_by):**
+
+```yaml
+- id: reindex_yoy
+  taskRef:
+    name: ReindexTimeSeries
+  config:
+    input:
+      dataset: analytics/gold/revenue-yoy-agg
+    output:
+      dataset: analytics/gold/revenue-yoy
+      source_id: local
+      format: parquet
+      description: "Revenue YoY — all months for every year, zero-filled"
+    group_by: anno              # one series per distinct value of 'anno'
+    date_column: mese
+    frequency: month
+    start: "2024-01"
+    end: "2024-12"
+    fill:
+      strategy: zero
+      columns:
+        magazzino: ffill
+  resources:
+    coin: 1
+  requires:
+    - gold_aggregate
 ```
 
 ---
@@ -1048,63 +1080,5 @@ spec:
     coin: 1
 ```
 
----
-
-## ReindexMultiSeries
-
-Extends `ReindexTimeSeries` with a `group_by` parameter. Generates the full cross-product of every group × every period, left-joins the input data, and applies fill strategies **independently within each group** — ffill/bfill never bleed values across group boundaries.
-
-Use this when each category (product, year, customer) must have a row for every period in the range, even periods with no data.
-
-```yaml
-taskRef:
-  name: ReindexMultiSeries
-config:
-  input:
-    dataset: <string>              # source dataset ID (required)
-  output:
-    dataset: <string>              # output dataset ID (required)
-    source_id: <string>            # catalog source (required)
-    format: <string>               # parquet | csv | json (default: parquet)
-    description: <string>
-  group_by: <string | list>        # column(s) identifying each series (required)
-  date_column: <string>            # column holding the date value (default: "date")
-  frequency: <string>              # day | week | month | year (default: day)
-  start: <string>                  # optional; default: min date in dataset
-  end: <string>                    # optional; default: max date in dataset
-  fill:
-    strategy: <string>             # ffill | bfill | zero | null | interpolate (default: null)
-    columns:                       # optional per-column overrides
-      <col_name>: <strategy>
-```
-
-**Example — year-on-year comparison with monthly gap-filling:**
-
-```yaml
-- id: reindex_yoy
-  taskRef:
-    name: ReindexMultiSeries
-  config:
-    input:
-      dataset: analytics/gold/revenue-yoy-agg
-    output:
-      dataset: analytics/gold/revenue-yoy
-      source_id: local
-      format: parquet
-      description: "Revenue YoY — all months present for every year, zero-filled"
-    group_by: anno
-    date_column: mese
-    frequency: month
-    start: "2024-01"
-    end: "2024-12"
-    fill:
-      strategy: zero
-      columns:
-        magazzino: ffill
-  resources:
-    coin: 1
-  requires:
-    - gold_aggregate
-```
 
 All fill strategies and frequency formats are identical to `ReindexTimeSeries`. The difference is that the full index is `groups × periods` instead of just `periods`, and fills are applied group by group.
