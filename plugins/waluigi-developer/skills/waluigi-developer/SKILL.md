@@ -923,9 +923,10 @@ Attach ECharts visualisations to a dataset. Types: `bar`, `line`, `pie`, `histog
 | Field | Level | Values | Description |
 |-------|-------|--------|-------------|
 | `type` | spec | `bar`, `line`, `pie`, `histogram`, `scatter`, `radar` | Chart type |
-| `x.field` | spec | column name | X-axis (category) field |
+| `x.field` | spec | column name | X-axis display field (the label shown on axis) |
 | `x.label` | spec | string | X-axis display label |
-| `x.sort` | spec | `asc`, `desc` | Sort X categories alphabetically; omit to keep data order |
+| `x.sort` | spec | `asc`, `desc` | Sort direction; omit to keep data order |
+| `x.sort_field` | spec | column name | Separate numeric column used only for ordering (e.g. `month_num`); `x.field` is still the displayed label |
 | `y.field` | spec | column name | Y-axis value field |
 | `y.label` | spec | string | Y-axis display label |
 | `y.agg` | spec | `sum`, `mean`, `count`, `min`, `max`, `std`, `first`, `last` | Aggregation function (default: `sum`) |
@@ -945,6 +946,14 @@ Attach ECharts visualisations to a dataset. Types: `bar`, `line`, `pie`, `histog
         spec:
           type: bar
           x: {field: region, label: Region, sort: asc}
+          y: {field: revenue, agg: sum, label: "Total Revenue"}
+
+      - key: revenue_by_month
+        title: Revenue by Month
+        spec:
+          type: bar
+          # month_label = "Gennaio", "Febbraio"...; month_num = 1, 2, 3... (for ordering)
+          x: {field: month_label, label: Month, sort_field: month_num}
           y: {field: revenue, agg: sum, label: "Total Revenue"}
 
       - key: revenue_by_region_and_category

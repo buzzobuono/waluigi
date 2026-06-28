@@ -742,9 +742,10 @@ config:
       spec:
         type: <string>         # bar | line | pie | histogram | scatter | radar
         x:
-          field: <string>      # column name
+          field: <string>      # column name (displayed on axis)
           label: <string>      # optional axis label
-          sort: <string>       # asc | desc — sort X categories alphabetically; omit for data order
+          sort: <string>       # asc | desc — sort direction; omit for data order
+          sort_field: <string> # optional separate numeric column used only for ordering (e.g. month_num)
         y:
           field: <string>
           agg: <string>        # sum | mean | count | min | max | std | first | last (default: sum)
