@@ -426,7 +426,7 @@ These are Python modules invokable from TaskDefinition specs. They are **not aut
 | `waluigi.tasks.ingest_rest` | `IngestRest` | Fetch REST API and store result |
 | `waluigi.tasks.filter_dataset` | `FilterDataset` | `df.query(where_clause)` |
 | `waluigi.tasks.select_columns` | `SelectColumns` | Column projection |
-| `waluigi.tasks.add_derived_columns` | `AddDerivedColumns` | Compute new columns via expressions |
+| `waluigi.tasks.add_derived_columns` | `AddDerivedColumns` | Compute new columns via `expr` (full pandas, `x`=DataFrame) or `mapping` (value→label dict) |
 | `waluigi.tasks.aggregate_dataset` | `AggregateDataset` | Group-by aggregation |
 | `waluigi.tasks.join_datasets` | `JoinDatasets` | Join two datasets |
 | `waluigi.tasks.merge_datasets` | `MergeDatasets` | Union/concat datasets |

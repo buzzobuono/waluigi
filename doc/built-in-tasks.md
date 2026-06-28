@@ -124,7 +124,14 @@ config:
 
 ## AddDerivedColumns
 
-Computes new columns using pandas eval expressions. Columns are added sequentially — later expressions can reference columns added earlier.
+Computes new columns and appends them to a dataset. Columns are applied sequentially — later entries can reference columns added earlier.
+
+Each column entry uses one of two modes:
+
+| Mode | Fields | Description |
+|------|--------|-------------|
+| `expr` | `name`, `expr` | Pandas expression; `x` refers to the full DataFrame |
+| `mapping` | `name`, `source`, `mapping` | Static value→label lookup via dict |
 
 ```yaml
 taskRef:
@@ -139,34 +146,76 @@ config:
     description: <string>
   columns:
     - name: <string>           # new column name
-      expr: <string>           # pandas eval expression
+      expr: <string>           # pandas expression; x = full DataFrame
+    - name: <string>
+      source: <string>         # column to map from
+      mapping: {<val>: <label>, ...}
 ```
 
-**Example:**
+### expr mode
+
+`x` is the full DataFrame, so any pandas operation is available — string methods, type casts, conditionals:
 
 ```yaml
-- id: add_financials
+columns:
+  - name: revenue
+    expr: "x['quantity'] * x['unit_price'] * (1 - x['discount'])"
+  - name: margin_pct
+    expr: "x['gross_profit'] / x['revenue'] * 100"
+  - name: mese
+    expr: "x['anno_mese'].str[5:7].astype(int)"
+  - name: anno
+    expr: "x['anno_mese'].str[:4]"
+```
+
+Simple arithmetic expressions without `x` also work (e.g. `"quantity * unit_price"`).
+
+### mapping mode
+
+Static lookup from one column to a label. Unmatched values become `NaN`.
+
+```yaml
+columns:
+  - name: mese_label
+    source: mese
+    mapping:
+      1: Gen
+      2: Feb
+      3: Mar
+      4: Apr
+      5: Mag
+      6: Giu
+      7: Lug
+      8: Ago
+      9: Set
+      10: Ott
+      11: Nov
+      12: Dic
+```
+
+**Example — combined:**
+
+```yaml
+- id: enrich_yoy
   taskRef:
     name: AddDerivedColumns
   config:
     input:
-      dataset: sales/clean/orders
+      dataset: default/gold/pellet-yoy-pre
     output:
-      dataset: sales/enriched/orders
-      source_id: analytics-local
+      dataset: default/gold/pellet-yoy
+      source_id: local
       format: parquet
     columns:
-      - name: revenue
-        expr: "quantity * unit_price * (1 - discount)"
-      - name: gross_profit
-        expr: "revenue - quantity * cost_price"
-      - name: margin_pct
-        expr: "gross_profit / revenue * 100"
+      - name: mese
+        expr: "x['anno_mese'].str[5:7].astype(int)"
+      - name: mese_label
+        source: mese
+        mapping: {1: Gen, 2: Feb, 3: Mar, 4: Apr, 5: Mag, 6: Giu,
+                  7: Lug, 8: Ago, 9: Set, 10: Ott, 11: Nov, 12: Dic}
   resources:
     coin: 1
 ```
-
-Expressions are evaluated with `df.eval(expr, inplace=False)` and appended to the DataFrame.
 
 ---
 

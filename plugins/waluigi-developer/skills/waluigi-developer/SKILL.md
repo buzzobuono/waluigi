@@ -530,7 +530,12 @@ Project a subset of columns.
 
 ### AddDerivedColumns
 
-Compute new columns with pandas eval. Later columns can reference earlier ones.
+Compute new columns and append them to a dataset. Columns are applied sequentially — later entries can reference columns added earlier.
+
+Two modes per column (mutually exclusive):
+
+- **`expr`** — pandas expression; `x` refers to the full DataFrame (string methods, type casts, conditionals all work)
+- **`mapping`** — static value→label lookup; `source` names the input column
 
 ```yaml
 - id: enrich
@@ -545,12 +550,20 @@ Compute new columns with pandas eval. Later columns can reference earlier ones.
       format: parquet
     columns:
       - name: revenue
-        expr: "quantity * unit_price * (1 - discount)"
+        expr: "x['quantity'] * x['unit_price'] * (1 - x['discount'])"
       - name: margin_pct
-        expr: "gross_profit / revenue * 100"
+        expr: "x['gross_profit'] / x['revenue'] * 100"
+      - name: mese
+        expr: "x['anno_mese'].str[5:7].astype(int)"
+      - name: mese_label
+        source: mese
+        mapping: {1: Gen, 2: Feb, 3: Mar, 4: Apr, 5: Mag, 6: Giu,
+                  7: Lug, 8: Ago, 9: Set, 10: Ott, 11: Nov, 12: Dic}
   resources:
     coin: 1
 ```
+
+Simple arithmetic without `x` also works (e.g. `"quantity * unit_price"`). `mapping` requires `source`; unmatched values → `NaN`.
 
 ---
 

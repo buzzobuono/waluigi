@@ -1,16 +1,58 @@
 """
-AddDerivedColumns — appends computed columns using pandas eval expressions.
-Columns are applied sequentially, so later expressions can reference earlier ones.
+AddDerivedColumns — appends computed columns to a dataset.
+
+Each column entry supports three modes (mutually exclusive):
+  expr    — pandas expression; `x` refers to the full DataFrame, enabling
+             string methods, type casts, and any pandas operation.
+             Pure arithmetic expressions (e.g. "a + b") continue to work.
+  mapping — static value→label lookup via dict. `source` names the input
+             column; unmatched values become NaN.
+  (both)  — not allowed; raises ValueError.
+
+Columns are applied sequentially, so later entries can reference columns
+defined earlier.
 
 config:
     input:   {dataset: str}
     output:  {dataset: str, source_id: str, format: str, description: str}
     columns:
-        - name: str    # new column name
-          expr: str    # pandas eval expression referencing existing columns
+        - name:   str          # new column name
+          expr:   str          # pandas expression; x = full DataFrame
+        - name:   str
+          source: str          # column to map from
+          mapping: {val: label, ...}
 """
+import pandas as pd
+
 from waluigi.sdk.catalog import catalog
 from waluigi.sdk.context import context
+
+
+def _apply_column(df: pd.DataFrame, col: dict) -> pd.DataFrame:
+    name    = col["name"]
+    expr    = col.get("expr")
+    mapping = col.get("mapping")
+    source  = col.get("source")
+
+    if expr and mapping:
+        raise ValueError(
+            f"AddDerivedColumns: column '{name}' — use either 'expr' or 'mapping', not both")
+
+    if mapping is not None:
+        if not source:
+            raise ValueError(
+                f"AddDerivedColumns: column '{name}' with 'mapping' requires 'source'")
+        # YAML keys are often ints already; keep them as-is for .map()
+        df[name] = df[source].map(mapping)
+        print(f"  + {name} = map({source}, {len(mapping)} entries)")
+        return df
+
+    # expr mode — expose full DataFrame as `x` so string methods and
+    # type casts work (e.g. x['col'].str[5:7].astype(int))
+    local_ns = {"x": df, "pd": pd}
+    df[name] = eval(expr, {"__builtins__": {}}, local_ns)  # noqa: S307
+    print(f"  + {name} = {expr}")
+    return df
 
 
 def run():
@@ -21,8 +63,7 @@ def run():
     lineage = [{"dataset_id": reader.dataset_id, "version": reader.version}]
 
     for col in context.config.columns:
-        df = df.eval(f"{col['name']} = {col['expr']}")
-        print(f"  + {col['name']} = {col['expr']}")
+        df = _apply_column(df, col)
 
     out = context.config.output
     source_id = out.get("source_id")
