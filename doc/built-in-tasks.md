@@ -914,3 +914,136 @@ spec:
 ```
 
 In Power BI Service, point the SharePoint connector at the `PowerBI/Gold` folder and configure a daily scheduled refresh. No on-premises gateway required.
+
+---
+
+## ReindexTimeSeries
+
+Generates a complete date index for the given frequency and range, left-joins the input dataset onto it, and fills missing values using the configured strategy. Rows already present are kept as-is; only gaps get new rows. Useful for time series that skip months/days with no data (e.g. products with zero sales in a month).
+
+```yaml
+taskRef:
+  name: ReindexTimeSeries
+config:
+  input:
+    dataset: <string>           # source dataset ID (required)
+  output:
+    dataset: <string>           # output dataset ID (required)
+    source_id: <string>         # catalog source (required)
+    format: <string>            # parquet | csv | json (default: parquet)
+    description: <string>
+  date_column: <string>         # column holding the date value (default: "date")
+  frequency: <string>           # day | week | month | year (default: day)
+  start: <string>               # optional start — ISO format matching frequency
+                                #   day/week: "YYYY-MM-DD", month: "YYYY-MM", year: "YYYY"
+                                #   default: min date found in the dataset
+  end: <string>                 # optional end — same format as start
+                                #   default: max date found in the dataset
+  fill:
+    strategy: <string>          # ffill | bfill | zero | null | interpolate (default: null)
+    columns:                    # optional per-column overrides (applied before default)
+      <col_name>: <strategy>
+```
+
+**Fill strategies:**
+
+| Strategy | Behaviour |
+|----------|-----------|
+| `null` | Leave gaps as `NaN` / `None` (default) |
+| `ffill` | Carry the last known value forward |
+| `bfill` | Fill from the next known value backward |
+| `zero` | Fill numeric columns with `0`, string columns with `""` |
+| `interpolate` | Linear interpolation for numeric columns; others left null |
+
+**Date column format by frequency:**
+
+| Frequency | Expected format | Example |
+|-----------|----------------|---------|
+| `day` | `YYYY-MM-DD` | `2024-03-15` |
+| `week` | `YYYY-MM-DD` (Monday) | `2024-03-11` |
+| `month` | `YYYY-MM` | `2024-03` |
+| `year` | `YYYY` | `2024` |
+
+**Example — monthly revenue series with gaps:**
+
+```yaml
+- id: reindex_monthly_revenue
+  taskRef:
+    name: ReindexTimeSeries
+  config:
+    input:
+      dataset: analytics/silver/revenue_by_month
+    output:
+      dataset: analytics/gold/revenue_by_month_complete
+      source_id: local
+      format: parquet
+      description: "Monthly revenue — all months present, zero-filled"
+    date_column: month
+    frequency: month
+    start: "2024-01"
+    end: "2024-12"
+    fill:
+      strategy: zero             # fill missing numeric values with 0
+      columns:
+        category: ffill          # carry category label forward instead
+  resources:
+    coin: 1
+  requires:
+    - silver_revenue
+```
+
+---
+
+## CatalogSetCharts — combo type
+
+In addition to the standard chart types (`bar`, `line`, `pie`, `histogram`, `scatter`, `radar`), `CatalogSetCharts` supports `type: combo` for mixed bar+line charts with an optional dual Y axis.
+
+```yaml
+spec:
+  type: combo
+  x:
+    field: <string>             # display label column
+    label: <string>             # optional axis label
+    sort: asc | desc            # optional sort direction
+    sort_field: <string>        # optional separate numeric column for ordering
+  limit: <int>                  # max categories (default: 200)
+  series:                       # one entry per data series (required, ≥1)
+    - field: <string>           # dataset column
+      type: bar | line          # series render type
+      agg: <string>             # sum | mean | count | min | max (default: sum)
+      label: <string>           # series name shown in legend
+      y_axis: 0 | 1             # 0 = left Y axis (default), 1 = right Y axis
+      y_label: <string>         # axis label (taken from first series on that axis)
+```
+
+**Example — revenue bars + margin % line on dual axis:**
+
+```yaml
+- id: set_combo_chart
+  taskRef:
+    name: CatalogSetCharts
+  config:
+    dataset: analytics/gold/monthly_kpi
+    charts:
+      - key: revenue_and_margin
+        title: Revenue and Margin by Month
+        spec:
+          type: combo
+          x:
+            field: month_label
+            sort_field: month_num
+          series:
+            - field: revenue
+              type: bar
+              agg: sum
+              label: Revenue (€)
+              y_axis: 0
+            - field: margin_pct
+              type: line
+              agg: mean
+              label: Margin %
+              y_axis: 1
+              y_label: "Margin %"
+  resources:
+    coin: 1
+```

@@ -141,3 +141,11 @@ spec:
   command: "python -m waluigi.tasks.sharepoint_export"
   affinity:
     - python
+---
+kind: TaskDefinition
+metadata:
+  name: "ReindexTimeSeries"
+spec:
+  command: "python -m waluigi.tasks.reindex_time_series"
+  affinity:
+    - python

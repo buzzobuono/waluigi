@@ -115,6 +115,9 @@ class ChartService:
             "grid":    {"containLabel": True},
         }
 
+        if chart_type == "combo":
+            return self._build_combo(df, spec, base)
+
         if chart_type == "pie":
             grouped = (df.groupby(x_field)[y_field].agg(agg)
                        .reset_index().head(limit))
@@ -257,4 +260,91 @@ class ChartService:
                "series":  series}
         if legend:
             opt["legend"] = legend
+        return opt
+
+    def _build_combo(self, df: pd.DataFrame, spec: dict, base: dict) -> dict:
+        """Build a mixed bar+line chart with optional dual Y axis."""
+        x_conf     = spec.get("x", {})
+        x_field    = x_conf.get("field")
+        x_label    = x_conf.get("label", x_field or "")
+        sort_field = x_conf.get("sort_field")
+        sort       = x_conf.get("sort")
+        limit      = int(spec.get("limit", 200))
+        series_cfg = spec.get("series", [])
+
+        if not series_cfg:
+            raise ValueError("combo chart requires at least one entry in 'series'")
+        if not x_field:
+            raise ValueError("combo chart requires x.field")
+
+        # Build category order — use sort_field if provided, else sort by x_field or data order
+        all_group_cols = [x_field]
+        if sort_field and sort_field in df.columns:
+            all_group_cols.append(sort_field)
+
+        cats_df = df[all_group_cols].drop_duplicates()
+        ascending = sort != "desc"
+        if sort_field and sort_field in cats_df.columns:
+            cats_df = cats_df.sort_values(sort_field, ascending=ascending)
+        elif sort in ("asc", "desc"):
+            cats_df = cats_df.sort_values(x_field, ascending=ascending)
+        cats_df = cats_df.head(limit)
+        cats = [str(v) for v in cats_df[x_field]]
+
+        y_axes  = []
+        series  = []
+        legend  = []
+
+        for s in series_cfg:
+            field     = s.get("field")
+            stype     = s.get("type", "bar")
+            agg       = s.get("agg", "sum")
+            label     = s.get("label", field or "")
+            y_axis_i  = int(s.get("y_axis", 0))
+
+            if stype not in ("bar", "line"):
+                raise ValueError(f"combo series type must be 'bar' or 'line', got '{stype}'")
+
+            # Ensure y_axes list is long enough
+            while len(y_axes) <= y_axis_i:
+                y_axes.append(None)
+
+            if y_axes[y_axis_i] is None:
+                axis_label = s.get("y_label", label)
+                y_axes[y_axis_i] = {
+                    "type": "value",
+                    "name": axis_label,
+                    **({"position": "right", "alignTicks": True} if y_axis_i > 0 else {}),
+                }
+
+            if agg == "count":
+                grouped = df.groupby(x_field).size().reset_index(name=field or "_count")
+                field   = field or "_count"
+            else:
+                grouped = df.groupby(x_field)[field].agg(agg).reset_index()
+
+            grouped = grouped.set_index(x_field).reindex(cats)
+            vals    = [_safe(v) for v in grouped[field]]
+
+            series.append({
+                "name":       label,
+                "type":       stype,
+                "data":       vals,
+                "yAxisIndex": y_axis_i,
+                **({"smooth": True} if stype == "line" else {}),
+            })
+            legend.append(label)
+
+        # Fill any gap in y_axes (shouldn't happen but guard against it)
+        y_axes = [a or {"type": "value"} for a in y_axes]
+
+        opt = {
+            **base,
+            "tooltip": {"trigger": "axis"},
+            "legend":  {"data": legend},
+            "xAxis":   {"type": "category", "data": cats,
+                        "name": x_label, "axisLabel": {"rotate": 30}},
+            "yAxis":   y_axes if len(y_axes) > 1 else y_axes[0],
+            "series":  series,
+        }
         return opt

@@ -981,6 +981,96 @@ Attach ECharts visualisations to a dataset. Types: `bar`, `line`, `pie`, `histog
     coin: 1
 ```
 
+**Combo (mixed bar + line, dual Y axis):**
+
+```yaml
+      - key: revenue_and_margin
+        title: Revenue and Margin by Month
+        spec:
+          type: combo
+          x:
+            field: month_label       # display label column
+            sort_field: month_num    # separate numeric column used only for ordering
+          series:
+            - field: revenue
+              type: bar
+              agg: sum
+              label: Revenue (€)
+              y_axis: 0              # left axis
+            - field: margin_pct
+              type: line
+              agg: mean
+              label: Margin %
+              y_axis: 1              # right axis
+              y_label: "Margin %"
+```
+
+**Combo spec fields:**
+
+| Field | Description |
+|-------|-------------|
+| `x.field` | Category (label) column shown on X axis |
+| `x.sort_field` | Separate numeric column used only for ordering |
+| `x.sort` | `asc` \| `desc` — sort direction |
+| `limit` | Max categories (default: 200) |
+| `series[].field` | Data column |
+| `series[].type` | `bar` or `line` |
+| `series[].agg` | Aggregation: `sum`, `mean`, `count`, `min`, `max` (default: `sum`) |
+| `series[].label` | Series name in legend |
+| `series[].y_axis` | `0` = left Y axis (default), `1` = right Y axis |
+| `series[].y_label` | Y axis label (first series on that axis wins) |
+
+---
+
+### ReindexTimeSeries
+
+Gap-fills a time series dataset to a complete date index. Generates all missing periods (day/week/month/year) in a range and applies a fill strategy on the missing rows. Rows already present are kept unchanged.
+
+```yaml
+- id: reindex_monthly
+  taskRef:
+    name: ReindexTimeSeries
+  config:
+    input:
+      dataset: analytics/silver/revenue_by_month
+    output:
+      dataset: analytics/gold/revenue_complete
+      source_id: local
+      format: parquet
+      description: "Revenue — all months, zero-filled"
+    date_column: month           # column holding the date value (default: "date")
+    frequency: month             # day | week | month | year (default: day)
+    start: "2024-01"             # optional; default = min date in dataset
+    end: "2024-12"               # optional; default = max date in dataset
+    fill:
+      strategy: zero             # ffill | bfill | zero | null | interpolate (default: null)
+      columns:                   # optional per-column overrides
+        category: ffill
+  resources:
+    coin: 1
+  requires:
+    - silver_revenue
+```
+
+**Fill strategies:**
+
+| Strategy | Behaviour |
+|----------|-----------|
+| `null` | Leave gaps as NaN (default) |
+| `ffill` | Carry last known value forward |
+| `bfill` | Fill from next known value backward |
+| `zero` | Numeric → `0`, string → `""` |
+| `interpolate` | Linear interpolation (numeric only) |
+
+**Date column format by frequency:**
+
+| Frequency | Expected format | Example |
+|-----------|----------------|---------|
+| `day` | `YYYY-MM-DD` | `2024-03-15` |
+| `week` | `YYYY-MM-DD` (Monday) | `2024-03-11` |
+| `month` | `YYYY-MM` | `2024-03` |
+| `year` | `YYYY` | `2024` |
+
 ---
 
 ## 5. Catalog: writing datasets from a custom script
