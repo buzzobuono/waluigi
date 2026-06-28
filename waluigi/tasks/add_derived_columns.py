@@ -50,7 +50,12 @@ def _apply_column(df: pd.DataFrame, col: dict) -> pd.DataFrame:
         if not source:
             raise ValueError(
                 f"AddDerivedColumns: column '{name}' with 'mapping' requires 'source'")
-        # YAML keys are often ints already; keep them as-is for .map()
+        # YAML parses all dict keys as strings; coerce to match source dtype
+        dtype = df[source].dtype
+        if pd.api.types.is_integer_dtype(dtype):
+            mapping = {int(k): v for k, v in mapping.items()}
+        elif pd.api.types.is_float_dtype(dtype):
+            mapping = {float(k): v for k, v in mapping.items()}
         df[name] = df[source].map(mapping)
         print(f"  + {name} = map({source}, {len(mapping)} entries)")
         return df
