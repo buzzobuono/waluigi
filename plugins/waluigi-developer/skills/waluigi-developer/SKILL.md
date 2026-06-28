@@ -54,7 +54,7 @@ spec:
 EOF
 
 # 3. Apply all built-in task definitions
-wlctl apply -f descriptors/task-definitions/builtin-task-definitions.yaml -n analytics
+wlctl apply-builtins -n analytics
 
 # 4. Verify
 wlctl get namespaces
@@ -403,7 +403,7 @@ In task config use `${WALUIGI_SECRET_API_TOKEN}`. In scripts use `os.environ["WA
 
 Apply to namespace first:
 ```bash
-wlctl apply -f descriptors/task-definitions/builtin-task-definitions.yaml -n analytics
+wlctl apply-builtins -n analytics
 ```
 
 All built-in tasks automatically use `CatalogClient` for I/O and record lineage. They all require `affinity: [python]` (already set in the TaskDefinition).
@@ -1414,6 +1414,9 @@ wlctl --url http://localhost:8080 login -u admin
 # Apply any descriptor
 wlctl apply -f descriptor.yaml [-n namespace]
 
+# Apply all built-in TaskDefinitions to a namespace (idempotent — run once per namespace)
+wlctl apply-builtins -n <namespace>
+
 # Inspect
 wlctl get namespaces
 wlctl get jobs [-n ns] [-s status]
@@ -1488,7 +1491,7 @@ wlctl dq dataset <id> [-n ns] [-v version]
 |---------|-------|-----|
 | Task stuck in `PENDING` | No worker with matching affinity | `wlctl get workers` — check affinity column; start worker with `--affinity python` |
 | Task goes to `FAILED` immediately | Script error or unknown `taskRef` | `wlctl logs <task_id>` — read the exception |
-| `taskRef` fails with "Unknown task type" | TaskDefinition not applied in namespace | `wlctl apply -f descriptors/task-definitions/builtin-task-definitions.yaml -n <ns>` |
+| `taskRef` fails with "Unknown task type" | TaskDefinition not applied in namespace | `wlctl apply-builtins -n <ns>` |
 | Affinity set but ignored | `affinity` at outer task level, not inside `taskSpec` | Move `affinity` inside `taskSpec:` block |
 | Catalog write fails | Source not created yet | Apply `CatalogCreateSource` first or add `create_source` task before the write |
 | Version already exists, skipped | Metadata dedup triggered (`force=False`) | Pass `force=True` to `create_version()` or change the metadata dict |

@@ -24,6 +24,7 @@ from waluigi.cli.commands.catalog   import (
     delete_dataset, delete_version,
 )
 from waluigi.cli.commands.prune     import prune_workers, prune_prepare
+from waluigi.cli.commands.builtins  import apply_builtins
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -117,6 +118,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("-n", "--namespace", help="Namespace")
     p.add_argument("-d", "--dataset",   help="Dataset ID (required for version)")
 
+    # apply-builtins
+    p = sub.add_parser("apply-builtins",
+                       help="Apply all built-in TaskDefinitions to a namespace")
+    p.add_argument("-n", "--namespace", required=True,
+                   help="Target namespace")
+
     # prune
     p = sub.add_parser("prune", help="Remove ghost workers or clear prepare directories")
     p.add_argument("type", choices=["workers", "prepare"],
@@ -205,6 +212,8 @@ def main() -> None:
                 delete_version(session, dataset_id, args.target, namespace=ns)
         else:
             delete(session, args.type, args.target, namespace=ns)
+    elif args.command == "apply-builtins":
+        apply_builtins(session, namespace=ns)
     elif args.command == "prune":
         if args.type == "workers":
             prune_workers(session)

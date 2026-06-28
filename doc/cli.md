@@ -38,6 +38,24 @@ Supported kinds: `Namespace`, `NamespaceResources`, `Job`, `JobDefinition`, `Tas
 
 ---
 
+## apply-builtins
+
+Register all built-in TaskDefinitions in a namespace. The YAML is bundled inside the `waluigi` package — no repo or external file needed.
+
+```bash
+wlctl apply-builtins -n <namespace>
+```
+
+```bash
+wlctl apply-builtins -n analytics
+```
+
+Run this once per namespace before using any `taskRef` that references a built-in task type (`IngestRest`, `FilterDataset`, `AccumulateDataset`, etc.). The operation is idempotent — safe to run again after installing a new version of Waluigi to pick up newly added built-ins.
+
+The bundled YAML is at `waluigi/tasks/data/builtin-task-definitions.yaml` inside the installed package and is kept in sync with the installed version automatically.
+
+---
+
 ## get
 
 Retrieve and display cluster state.

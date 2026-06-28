@@ -28,6 +28,7 @@ namespaces = true
 
 [tool.setuptools.package-data]
 "waluigi.console" = ["static/**/*", "static/*"]
+"waluigi.tasks.data" = ["*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

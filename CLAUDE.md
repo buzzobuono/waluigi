@@ -28,6 +28,7 @@ wlconsole --port 8080   # web console with JWT auth, proxies Boss + Catalog
 # CLI client (all commands go through wlconsole by default)
 wlctl --url http://localhost:8080 login -u admin
 wlctl apply -f descriptor.yaml [-n namespace]
+wlctl apply-builtins -n <namespace>   # register all built-in TaskDefinitions (idempotent)
 
 wlctl get namespaces
 wlctl get jobs [-n ns] [-s status]
@@ -245,11 +246,13 @@ spec:
     - python
 ```
 
-All built-in task definitions are in `descriptors/task-definitions/builtin-task-definitions.yaml`. Apply to a namespace before using built-in types:
+All built-in task definitions are bundled in the package at `waluigi/tasks/data/builtin-task-definitions.yaml` (mirrored from `descriptors/task-definitions/builtin-task-definitions.yaml`). Apply to a namespace before using built-in types:
 
 ```bash
-wlctl apply -f descriptors/task-definitions/builtin-task-definitions.yaml -n analytics
+wlctl apply-builtins -n analytics
 ```
+
+The command is idempotent. Run it again after upgrading Waluigi to pick up newly added built-ins. The `descriptors/task-definitions/builtin-task-definitions.yaml` in the repo is the authoritative source — keep it in sync when adding new built-in tasks.
 
 ### SQLite Concurrency
 
