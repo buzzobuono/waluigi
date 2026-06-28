@@ -27,8 +27,10 @@ sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" "$MARKETPLACE"
 echo "→ Staging manifest files"
 git add "$MANIFEST" "$MARKETPLACE"
 
-# Stage any other already-tracked modified files
+# Stage all changes: modified tracked files + new untracked files in the repo
 git add -u
+git add "$REPO_ROOT/waluigi" "$REPO_ROOT/doc" "$REPO_ROOT/descriptors" \
+        "$REPO_ROOT/plugins" "$REPO_ROOT/.claude-plugin" 2>/dev/null || true
 
 if git diff --cached --quiet; then
   echo "Nothing to commit."
