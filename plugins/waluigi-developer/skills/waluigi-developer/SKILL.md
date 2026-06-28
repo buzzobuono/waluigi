@@ -68,6 +68,30 @@ wlworker --boss-url http://localhost:8082 --port 5001 --slots 4 --affinity pytho
 
 ---
 
+## 1b. Local dev cluster — cluster.sh
+
+> **Solo sviluppo locale.** Per operare su un cluster centrale usa `wlctl --url http://<host>:8080 <command>` — non serve nessuno script aggiuntivo.
+
+Il repo include `cluster.sh`, uno script che avvia tutti e quattro i processi Waluigi in background sul host locale, scrive i PID in `~/wlprj/.cluster.pids` e i log in `~/wlprj/logs/`.
+
+```bash
+bash cluster.sh start     # avvia catalog → boss → console → worker, poi wlctl login
+bash cluster.sh stop      # termina tutti i processi dal PID file
+bash cluster.sh restart   # stop + start
+bash cluster.sh status    # wlctl get workers
+bash cluster.sh logs                  # tail -f su tutti i log
+bash cluster.sh logs boss             # tail -f solo su wlboss
+bash cluster.sh logs catalog
+bash cluster.sh logs console
+bash cluster.sh logs worker
+```
+
+`start` fa il login automatico come `admin/admin` sulla console locale e stampa `wlctl get workers` per confermare che il worker è registrato. Usa `bash cluster.sh` (non `./`) se il filesystem è montato con `noexec` (es. Termux/Android).
+
+Dopo `start` il cluster locale è raggiungibile su `http://localhost:8080` e `wlctl` (senza `--url`) punta già lì per default.
+
+---
+
 ## 2. Pipeline development workflow: local → cluster
 
 This is the recommended cycle. **Always test locally before applying to the cluster.**

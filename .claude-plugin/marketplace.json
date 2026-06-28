@@ -10,7 +10,7 @@
       "name": "waluigi-developer",
       "source": "./plugins/waluigi-developer",
       "description": "Waluigi pipeline developer — design tasks and jobs in YAML, test locally with wlrun, deploy to cluster with wlctl, implement medallion architecture with data quality checks.",
-      "version": "1.7.0",
+      "version": "1.7.1",
       "author": {
         "name": "Do Different"
       }
