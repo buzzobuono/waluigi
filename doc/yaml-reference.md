@@ -213,10 +213,10 @@ spec:
 Built-in task types (FilterDataset, AggregateDataset, etc.) are shipped as Python modules. They are **not** automatically available — you must apply the corresponding `TaskDefinition` to each namespace where you want to use them:
 
 ```bash
-wlctl apply -f descriptors/task-definitions/builtin-task-definitions.yaml -n <namespace>
+wlctl apply-builtins -n <namespace>
 ```
 
-The file `descriptors/task-definitions/builtin-task-definitions.yaml` in the repo contains all built-in definitions ready to apply. Once applied, tasks can reference them via `taskRef.name`.
+Built-in task definitions are bundled in the package at `waluigi/tasks/data/builtin-task-definitions.yaml`. Once applied, tasks can reference them via `taskRef.name`.
 
 ### Example — referencing a built-in
 

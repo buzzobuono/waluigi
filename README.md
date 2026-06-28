@@ -107,7 +107,7 @@ wlctl apply -f descriptors/namespaces/analytics.yaml
 wlctl apply -f descriptors/resources/resources.yaml
 
 # Apply built-in task definitions if you plan to use taskRef
-wlctl apply -f descriptors/task-definitions/builtin-task-definitions.yaml -n analytics
+wlctl apply-builtins -n analytics
 ```
 
 ### 3. Submit a job
@@ -229,7 +229,7 @@ print(f"Extracting {source} for {date}")
 Reference reusable transformations without writing any code. First, apply the built-in `TaskDefinition` descriptors to the namespace:
 
 ```bash
-wlctl apply -f descriptors/task-definitions/builtin-task-definitions.yaml -n analytics
+wlctl apply-builtins -n analytics
 ```
 
 Then reference them in jobs with `taskRef.name`:

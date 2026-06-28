@@ -91,7 +91,7 @@ terminal task
 All `taskRef` types are resolved at dispatch time against `TaskDefinition` records stored in the namespace. There is no built-in registry — built-in task types (FilterDataset, etc.) must be explicitly applied as `TaskDefinition` descriptors in each namespace where they will be used:
 
 ```bash
-wlctl apply -f descriptors/task-definitions/builtin-task-definitions.yaml -n analytics
+wlctl apply-builtins -n analytics
 ```
 
 The `TaskDefinition` spec contains `command` (or `script`) and `affinity`. Resources are **never** part of a `TaskDefinition` — they are declared on the task in the `Job`/`JobDefinition` YAML.

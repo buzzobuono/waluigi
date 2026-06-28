@@ -246,13 +246,13 @@ spec:
     - python
 ```
 
-All built-in task definitions are bundled in the package at `waluigi/tasks/data/builtin-task-definitions.yaml` (mirrored from `descriptors/task-definitions/builtin-task-definitions.yaml`). Apply to a namespace before using built-in types:
+All built-in task definitions are bundled in the package at `waluigi/tasks/data/builtin-task-definitions.yaml`. Apply to a namespace before using built-in types:
 
 ```bash
 wlctl apply-builtins -n analytics
 ```
 
-The command is idempotent. Run it again after upgrading Waluigi to pick up newly added built-ins. The `descriptors/task-definitions/builtin-task-definitions.yaml` in the repo is the authoritative source — keep it in sync when adding new built-in tasks.
+The command is idempotent — safe to run again after upgrading Waluigi to pick up newly added built-ins. When adding a new built-in task, update `waluigi/tasks/data/builtin-task-definitions.yaml` directly (it is the authoritative source).
 
 ### SQLite Concurrency
 
