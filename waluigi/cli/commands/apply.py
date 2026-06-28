@@ -98,6 +98,23 @@ def _apply_one(session: WaluigiSession, doc: dict,
             r = session.http.post(f"/boss/namespaces/{_ns}/secrets/{_name}",
                                   json=spec, headers=session.headers())
 
+        elif kind == "Source":
+            _ns   = namespace_override or meta.get("namespace") \
+                    or session.resolve_namespace(None)
+            _name = meta.get("name", "").strip()
+            if not _ns:   return
+            if not _name:
+                print("Error: metadata.name (source id) is required"); return
+            spec = doc.get("spec", {})
+            body = {
+                "id":          _name,
+                "type":        spec.get("type", "local"),
+                "config":      spec.get("config", {}),
+                "description": spec.get("description"),
+            }
+            r = session.http.post(f"/catalog/namespaces/{_ns}/sources",
+                                  json=body, headers=session.headers())
+
         else:
             print(f"Error: kind '{kind}' not supported"); return
 
@@ -139,5 +156,8 @@ def _print_applied(kind: str, doc: dict, r, ns: str = "", name: str = "") -> Non
         print(f"namespaceresources/{ns} {verb}")
     elif kind == "Secret":
         print(f"secret/{ns}/{name} {verb}")
+    elif kind == "Source":
+        ref = d.get("id") or name
+        print(f"source/{ns}/{ref} {verb}")
     else:
         print(f"{kind.lower()}/{name} {verb}")

@@ -319,11 +319,15 @@ class DatasetHandle:
             self._client._ns_url(f"/datasets/{self.id}/charts"), json=body)
 
     def create_version(self, metadata: Dict[str, Any] = None,
-                       inputs: List[dict] = None,
+                       inputs: List = None,
                        force: bool = False) -> "DatasetWriter":
         """Open a DatasetWriter to write a new dataset version."""
         metadata = {k: str(v) for k, v in (metadata or {}).items()}
-        inputs   = inputs or []
+        inputs   = [
+            {"dataset_id": i.dataset_id, "version": i.version}
+            if isinstance(i, DatasetReader) else i
+            for i in (inputs or [])
+        ]
         result   = self._client._post(
             self._client._ns_url(f"/datasets/{self.id}/_reserve"),
             json={"metadata": metadata, "force": force},

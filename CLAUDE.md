@@ -169,6 +169,7 @@ Tasks are keyed by `id + params_hash` — the same task ID with different params
 | `CronJob` | Scheduled job (cron expression + `jobRef`) |
 | `NamespaceResources` / `ClusterResources` | Define named resource pools |
 | `Secret` | Namespace-scoped key-value secrets injected as env vars |
+| `Source` | Catalog data source — routed to Catalog, not Boss |
 | `User` | Console user (admin only) |
 
 ### YAML Job Format
@@ -403,12 +404,14 @@ job_id = context.job_id   # WALUIGI_JOB_ID
 catalog = CatalogClient()   # reads WALUIGI_CATALOG_URL, WALUIGI_CATALOG_NAMESPACE
 
 # Read a dataset
-reader = catalog.resolve("raw/transactions")
+reader = catalog.read_dataset("raw/transactions")
 df = reader.read()
 
-# Write a dataset
-with catalog.produce("clean/transactions", metadata={"date": date}, inputs=[reader]) as writer:
+# Write a dataset (two-phase commit)
+handle = catalog.create_dataset("clean/transactions", format="parquet", source_id="local")
+with handle.create_version(metadata={"date": date}, inputs=[reader]) as writer:
     writer.write(df)
+# inputs accepts DatasetReader objects or dicts {"dataset_id": ..., "version": ...}
 ```
 
 ### Built-in Tasks (`waluigi/tasks/`)

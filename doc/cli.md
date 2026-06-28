@@ -32,7 +32,9 @@ wlctl apply -f descriptors/jobs/erp-daily.yaml
 wlctl apply -f descriptors/full/full.yaml          # multi-document YAML
 ```
 
-Supported kinds: `Namespace`, `NamespaceResources`, `Job`, `JobDefinition`, `TaskDefinition`, `CronJob`, `User`.
+Supported kinds: `Namespace`, `NamespaceResources`, `Job`, `JobDefinition`, `TaskDefinition`, `CronJob`, `Secret`, `Source`, `User`.
+
+`Source` descriptors are routed to the Catalog. All other kinds are routed to the Boss.
 
 ---
 

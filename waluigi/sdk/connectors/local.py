@@ -1,4 +1,5 @@
 import os
+import warnings
 import hashlib
 import pandas as pd
 import pyarrow as pa
@@ -19,6 +20,22 @@ def _to_df(chunk) -> pd.DataFrame:
 
 def _is_stream(data) -> bool:
     return not isinstance(data, (pd.DataFrame, pa.Table, list, dict))
+
+
+def _coerce_mixed_types(df: pd.DataFrame) -> pd.DataFrame:
+    """Coerce object columns with mixed types to string so PyArrow can write Parquet."""
+    mixed = [c for c in df.select_dtypes(include="object").columns
+             if df[c].apply(type).nunique() > 1]
+    if not mixed:
+        return df
+    df = df.copy()
+    for col in mixed:
+        warnings.warn(
+            f"Column '{col}' has mixed types — coercing to string for Parquet write",
+            stacklevel=4,
+        )
+        df[col] = df[col].astype(str)
+    return df
 
 
 class LocalConnector(BaseConnector):
@@ -71,6 +88,7 @@ class LocalConnector(BaseConnector):
         elif format == DatasetFormat.TSV:
             df.to_csv(location, index=False, sep="\t")
         elif format == DatasetFormat.PARQUET:
+            df = _coerce_mixed_types(df)
             df.to_parquet(location, index=False)
         elif format == DatasetFormat.JSON:
             df.to_json(location, orient="records", lines=True)
@@ -103,7 +121,7 @@ class LocalConnector(BaseConnector):
         writer, count = None, 0
         try:
             for chunk in stream:
-                df = _to_df(chunk)
+                df = _coerce_mixed_types(_to_df(chunk))
                 table = pa.Table.from_pandas(df, preserve_index=False)
                 if writer is None:
                     writer = pq.ParquetWriter(location, table.schema)

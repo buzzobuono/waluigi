@@ -916,7 +916,22 @@ Available rule IDs:
 
 ### CatalogSetCharts
 
-Attach ECharts visualisations to a dataset. Types: `bar`, `line`, `pie`, `histogram`, `scatter`.
+Attach ECharts visualisations to a dataset. Types: `bar`, `line`, `pie`, `histogram`, `scatter`, `radar`.
+
+**Full spec fields:**
+
+| Field | Level | Values | Description |
+|-------|-------|--------|-------------|
+| `type` | spec | `bar`, `line`, `pie`, `histogram`, `scatter`, `radar` | Chart type |
+| `x.field` | spec | column name | X-axis (category) field |
+| `x.label` | spec | string | X-axis display label |
+| `x.sort` | spec | `asc`, `desc` | Sort X categories alphabetically; omit to keep data order |
+| `y.field` | spec | column name | Y-axis value field |
+| `y.label` | spec | string | Y-axis display label |
+| `y.agg` | spec | `sum`, `mean`, `count`, `min`, `max`, `std`, `first`, `last` | Aggregation function (default: `sum`) |
+| `color` | spec | column name | Split into multi-series by this column (bar/line only) |
+| `limit` | spec | integer | Max categories shown (default: 200) |
+| `bins` | spec | integer | Histogram bin count (default: 20) |
 
 ```yaml
 - id: set_charts
@@ -929,8 +944,16 @@ Attach ECharts visualisations to a dataset. Types: `bar`, `line`, `pie`, `histog
         title: Revenue by Region
         spec:
           type: bar
-          x: {field: region, label: Region}
+          x: {field: region, label: Region, sort: asc}
           y: {field: revenue, agg: sum, label: "Total Revenue"}
+
+      - key: revenue_by_region_and_category
+        title: Revenue by Region and Category
+        spec:
+          type: bar
+          x: {field: region, label: Region, sort: asc}
+          y: {field: revenue, agg: sum, label: "Total Revenue"}
+          color: category          # splits into one series per category value
 
       - key: category_share
         title: Category Share

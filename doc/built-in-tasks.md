@@ -740,15 +740,18 @@ config:
     - key: <string>            # unique chart key
       title: <string>
       spec:
-        type: <string>         # bar | line | pie | histogram | scatter
+        type: <string>         # bar | line | pie | histogram | scatter | radar
         x:
           field: <string>      # column name
           label: <string>      # optional axis label
+          sort: <string>       # asc | desc — sort X categories alphabetically; omit for data order
         y:
           field: <string>
-          agg: <string>        # sum | mean | count | min | max
+          agg: <string>        # sum | mean | count | min | max | std | first | last (default: sum)
           label: <string>
-        bins: <int>            # histogram only
+        color: <string>        # column name — splits bar/line into one series per value
+        limit: <int>           # max categories shown (default: 200)
+        bins: <int>            # histogram only (default: 20)
 ```
 
 **Example:**
@@ -764,8 +767,16 @@ config:
         title: Revenue by Category
         spec:
           type: bar
-          x: {field: category, label: Category}
+          x: {field: category, label: Category, sort: asc}
           y: {field: revenue, agg: sum, label: "Total Revenue"}
+
+      - key: revenue_by_category_and_region
+        title: Revenue by Category and Region
+        spec:
+          type: bar
+          x: {field: category, label: Category, sort: asc}
+          y: {field: revenue, agg: sum, label: "Total Revenue"}
+          color: region          # one series per region value
 
       - key: category_share
         title: Category Share

@@ -106,6 +106,7 @@ class ChartService:
         agg         = y_conf.get("agg", "sum")
         color_field = spec.get("color")
         limit       = int(spec.get("limit", 200))
+        sort        = x_conf.get("sort")  # "asc", "desc", or None (data order)
 
         base = {
             "tooltip": {},
@@ -196,8 +197,12 @@ class ChartService:
             else:
                 agged = (df.groupby([x_field, color_field])[y_field]
                          .agg(agg).reset_index())
-            pivot  = (agged.pivot(index=x_field, columns=color_field, values=y_field)
-                      .fillna(0).head(limit))
+            pivot  = agged.pivot(index=x_field, columns=color_field, values=y_field).fillna(0)
+            if sort == "asc":
+                pivot = pivot.sort_index(ascending=True)
+            elif sort == "desc":
+                pivot = pivot.sort_index(ascending=False)
+            pivot  = pivot.head(limit)
             cats   = [str(c) for c in pivot.index]
             series = [{"name": str(col), "type": chart_type,
                        "data": [_safe(v) for v in pivot[col]]}
@@ -205,13 +210,22 @@ class ChartService:
             legend = {"data": [str(c) for c in pivot.columns]}
         else:
             if agg == "count":
-                grouped         = df[x_field].value_counts().reset_index().head(limit)
+                grouped         = df[x_field].value_counts().reset_index()
                 grouped.columns = [x_field, "_count"]
+                if sort == "asc":
+                    grouped = grouped.sort_values(x_field, ascending=True)
+                elif sort == "desc":
+                    grouped = grouped.sort_values(x_field, ascending=False)
+                grouped = grouped.head(limit)
                 cats = [str(v) for v in grouped[x_field]]
                 vals = [int(v) for v in grouped["_count"]]
             else:
-                grouped = (df.groupby(x_field)[y_field]
-                           .agg(agg).reset_index().head(limit))
+                grouped = df.groupby(x_field)[y_field].agg(agg).reset_index()
+                if sort == "asc":
+                    grouped = grouped.sort_values(x_field, ascending=True)
+                elif sort == "desc":
+                    grouped = grouped.sort_values(x_field, ascending=False)
+                grouped = grouped.head(limit)
                 cats = [str(v) for v in grouped[x_field]]
                 vals = [_safe(v) for v in grouped[y_field]]
             series = [{"type": chart_type, "data": vals, "name": y_label}]
