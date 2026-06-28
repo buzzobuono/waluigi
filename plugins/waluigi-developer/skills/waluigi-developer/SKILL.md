@@ -923,7 +923,7 @@ Attach ECharts visualisations to a dataset. Types: `bar`, `line`, `pie`, `histog
 | Field | Level | Values | Description |
 |-------|-------|--------|-------------|
 | `type` | spec | `bar`, `line`, `pie`, `histogram`, `scatter`, `radar` | Chart type |
-| `x.field` | spec | column name | X-axis display field (the label shown on axis) |
+| \`x.field\` | spec | column name | X-axis display field; numeric types (int, float) are auto-cast to string |
 | `x.label` | spec | string | X-axis display label |
 | `x.sort` | spec | `asc`, `desc` | Sort direction; omit to keep data order |
 | `x.sort_field` | spec | column name | Separate numeric column used only for ordering (e.g. `month_num`); `x.field` is still the displayed label |

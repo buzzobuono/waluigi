@@ -109,6 +109,18 @@ class ChartService:
         sort        = x_conf.get("sort")        # "asc", "desc", or None (data order)
         sort_field  = x_conf.get("sort_field")  # separate numeric column used only for ordering
 
+        # Cast categorical fields to string so numeric types (int year, month, ID, etc.)
+        # group correctly — avoids silent empty charts with no exception.
+        numeric_cats = [
+            f for f in [x_field, color_field]
+            if f and f in df.columns and pd.api.types.is_numeric_dtype(df[f])
+        ]
+        if numeric_cats:
+            df = df.copy()
+            for f in numeric_cats:
+                logger.warning("chart: field '%s' is numeric — casting to string for grouping", f)
+                df[f] = df[f].astype(str)
+
         base = {
             "tooltip": {},
             "toolbox": {"feature": {"saveAsImage": {}, "dataZoom": {}}},

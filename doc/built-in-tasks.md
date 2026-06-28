@@ -742,7 +742,7 @@ config:
       spec:
         type: <string>         # bar | line | pie | histogram | scatter | radar
         x:
-          field: <string>      # column name (displayed on axis)
+          field: <string>      # column name (displayed on axis); numeric types are auto-cast to string
           label: <string>      # optional axis label
           sort: <string>       # asc | desc — sort direction; omit for data order
           sort_field: <string> # optional separate numeric column used only for ordering (e.g. month_num)
