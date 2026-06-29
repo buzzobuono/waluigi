@@ -173,6 +173,7 @@ Tasks are keyed by `id + params_hash` — the same task ID with different params
 | `NamespaceResources` / `ClusterResources` | Define named resource pools |
 | `Secret` | Namespace-scoped key-value secrets injected as env vars |
 | `Source` | Catalog data source — routed to Catalog, not Boss |
+| `Chart` | Full-replace chart definitions on a dataset — `metadata.dataset` + `spec.charts[]` |
 | `User` | Console user (admin only) |
 
 ### YAML Job Format

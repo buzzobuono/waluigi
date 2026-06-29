@@ -115,6 +115,29 @@ def _apply_one(session: WaluigiSession, doc: dict,
             r = session.http.post(f"/catalog/namespaces/{_ns}/sources",
                                   json=body, headers=session.headers())
 
+        elif kind == "Chart":
+            _ns        = namespace_override or meta.get("namespace") \
+                         or session.resolve_namespace(None)
+            dataset_id = meta.get("dataset", "").strip()
+            if not _ns:        return
+            if not dataset_id:
+                print("Error: metadata.dataset is required"); return
+            charts  = (doc.get("spec") or {}).get("charts") or []
+            base    = f"/catalog/namespaces/{_ns}/datasets/{dataset_id}/charts"
+            headers = session.headers()
+            # full replace: delete all existing, then add new ones
+            existing = session.http.get(base, headers=headers)
+            if existing.status_code == 200:
+                for c in (existing.json().get("data") or []):
+                    session.http.delete(f"{base}/{c['id']}", headers=headers)
+            for i, chart in enumerate(charts):
+                body = {"key": chart["key"], "title": chart["title"],
+                        "spec": chart.get("spec", {}), "position": i}
+                session.http.post(base, json=body, headers=headers)
+            _name = dataset_id
+            r = type("R", (), {"status_code": 200,
+                               "json": lambda self: {"data": {"id": dataset_id}}})()
+
         else:
             print(f"Error: kind '{kind}' not supported"); return
 
@@ -159,5 +182,8 @@ def _print_applied(kind: str, doc: dict, r, ns: str = "", name: str = "") -> Non
     elif kind == "Source":
         ref = d.get("id") or name
         print(f"source/{ns}/{ref} {verb}")
+    elif kind == "Chart":
+        charts = (doc.get("spec") or {}).get("charts") or []
+        print(f"chart/{ns}/{name} {verb} ({len(charts)} chart(s))")
     else:
         print(f"{kind.lower()}/{name} {verb}")

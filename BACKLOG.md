@@ -15,6 +15,7 @@
 - [x] `wl-cluster.sh` nella skill per gestione cluster locale
 - [x] `SendGmail` built-in Google vendor + `wlctl apply-builtins -n <ns> google`
 - [x] `SharePointExport` spostato da core a vendor Microsoft (`wlctl apply-builtins -n <ns> microsoft`)
+- [x] `kind: Chart` in `wlctl apply` — full replace chart definitions su un dataset da YAML
 - [x] `IngestGoogleSheet` built-in Google vendor (parametric: skip_rows, key_column, coercion, multi-sheet)
   - **limite**: solo fogli pubblici ("chiunque con il link") — fogli privati → OAuth2 Device Flow (vedi backlog lungo termine)
   - **limite**: nessun supporto range nominato o notazione A1

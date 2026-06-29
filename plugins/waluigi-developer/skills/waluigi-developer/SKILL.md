@@ -493,6 +493,42 @@ spec:
 
 ---
 
+### kind: Chart — declarative chart definitions
+
+Apply chart definitions to a dataset outside a pipeline. **Full replace**: all existing charts on the dataset are deleted and replaced with the ones in the file.
+
+```yaml
+kind: Chart
+metadata:
+  namespace: analytics
+  dataset: gold/kpi_revenue      # dataset ID (path format)
+spec:
+  charts:
+    - key: revenue_by_month
+      title: Revenue by Month
+      spec:
+        type: bar
+        x: {field: month_label, sort_field: month_num}
+        y: {field: revenue, agg: sum, label: "Revenue (€)"}
+    - key: margin_combo
+      title: Revenue and Margin
+      spec:
+        type: combo
+        x: {field: month_label, sort_field: month_num}
+        series:
+          - {field: revenue, type: bar, agg: sum, label: "Revenue (€)", y_axis: 0}
+          - {field: margin_pct, type: line, agg: mean, label: "Margin %", y_axis: 1}
+```
+
+```bash
+wlctl apply -f charts.yaml -n analytics
+# chart/analytics/gold/kpi_revenue configured (2 chart(s))
+```
+
+Use `CatalogSetCharts` inside a pipeline when charts must be updated as part of a job run. Use `kind: Chart` for standalone setup or when versionig chart definitions in the repo.
+
+---
+
 ### IngestRest
 
 Fetch a JSON REST API, flatten nested objects, write result as a Catalog dataset. Supports pagination via `next` link or `page` query param.
