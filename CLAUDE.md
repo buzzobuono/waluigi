@@ -28,8 +28,9 @@ wlconsole --port 8080   # web console with JWT auth, proxies Boss + Catalog
 # CLI client (all commands go through wlconsole by default)
 wlctl --url http://localhost:8080 login -u admin
 wlctl apply -f descriptor.yaml [-n namespace]
-wlctl apply-builtins -n <namespace>            # register core built-in TaskDefinitions (idempotent)
-wlctl apply-builtins -n <namespace> google     # register Google vendor TaskDefinitions
+wlctl apply-builtins -n <namespace>              # register core built-in TaskDefinitions (idempotent)
+wlctl apply-builtins -n <namespace> google      # register Google vendor TaskDefinitions
+wlctl apply-builtins -n <namespace> microsoft   # register Microsoft vendor TaskDefinitions
 
 wlctl get namespaces
 wlctl get jobs [-n ns] [-s status]
@@ -257,7 +258,9 @@ wlctl apply-builtins -n analytics            # core built-ins
 wlctl apply-builtins -n analytics google     # Google vendor built-ins (SendGmail, ...)
 ```
 
-Both commands are idempotent. When adding a new built-in task, add it to the appropriate YAML file (core or vendor). Vendor files follow the naming convention `builtin-task-definitions-{vendor}.yaml`.
+All commands are idempotent. When adding a new built-in task, add it to the appropriate YAML file (core or vendor). Vendor files follow the naming convention `builtin-task-definitions-{vendor}.yaml`.
+
+Available vendors: `google` (SendGmail, IngestGoogleSheet), `microsoft` (SharePointExport).
 
 ### SQLite Concurrency
 
@@ -451,6 +454,7 @@ These are Python modules invokable from TaskDefinition specs. They are **not aut
 | `waluigi.tasks.reindex_time_series` | `ReindexTimeSeries` | Gap-fill time series; optional `group_by` for multi-series cross-product (day/week/month/year) |
 | `waluigi.tasks.send_gmail` | `SendGmail` | Send email via Gmail SMTP + App Password (**vendor: google**) |
 | `waluigi.tasks.ingest_google_sheet` | `IngestGoogleSheet` | Ingest public Google Sheet (all sheets or single, parametric coercion/filter) (**vendor: google**) |
+| `waluigi.tasks.sharepoint_export` | `SharePointExport` | Publish Catalog dataset to SharePoint via Microsoft Graph API (**vendor: microsoft**) |
 
 All built-in tasks use `waluigi/tasks/_io.py` helpers (`read_input()` / `write_output()`) which handle source upsert and lineage automatically.
 

@@ -136,14 +136,6 @@ spec:
 ---
 kind: TaskDefinition
 metadata:
-  name: "SharePointExport"
-spec:
-  command: "python -m waluigi.tasks.sharepoint_export"
-  affinity:
-    - python
----
-kind: TaskDefinition
-metadata:
   name: "TransformDataset"
 spec:
   command: "python -m waluigi.tasks.transform_dataset"

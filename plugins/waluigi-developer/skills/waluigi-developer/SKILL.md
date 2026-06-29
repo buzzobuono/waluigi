@@ -442,8 +442,9 @@ Built-ins are split into two categories:
 - **Vendor** — vendor-specific integrations; apply only when needed
 
 ```bash
-wlctl apply-builtins -n analytics             # core built-ins
-wlctl apply-builtins -n analytics google      # Google vendor built-ins
+wlctl apply-builtins -n analytics              # core built-ins
+wlctl apply-builtins -n analytics google       # Google: SendGmail, IngestGoogleSheet
+wlctl apply-builtins -n analytics microsoft    # Microsoft: SharePointExport
 ```
 
 Both commands are idempotent. All built-in tasks require `affinity: [python]` (already set in the TaskDefinition).
@@ -889,7 +890,7 @@ Fact table with **cross-day dedup by state** — variant of `AccumulateDataset` 
 
 ---
 
-### SharePointExport
+### SharePointExport *(vendor: microsoft)*
 
 Publishes a Catalog dataset to a SharePoint document library via Microsoft Graph API (app-only OAuth2). Requires an Azure AD app registration with `Sites.ReadWrite.All` application permission and admin consent. Client secret stored as a Waluigi Secret. Files >4 MB uploaded via chunked upload session automatically.
 
