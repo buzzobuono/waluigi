@@ -14,6 +14,7 @@
 - [x] `LastPerGroup` / `FirstPerGroup`
 - [x] `wl-cluster.sh` nella skill per gestione cluster locale
 - [x] `SendGmail` built-in Google vendor + `wlctl apply-builtins -n <ns> google`
+- [x] `IngestGoogleSheet` built-in Google vendor (parametric: skip_rows, key_column, coercion, multi-sheet)
 
 ## Da fare
 

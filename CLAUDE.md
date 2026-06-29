@@ -450,6 +450,7 @@ These are Python modules invokable from TaskDefinition specs. They are **not aut
 | `waluigi.tasks.catalog_set_charts` | `CatalogSetCharts` | Attach chart definitions (bar, line, pie, histogram, scatter, radar, combo) |
 | `waluigi.tasks.reindex_time_series` | `ReindexTimeSeries` | Gap-fill time series; optional `group_by` for multi-series cross-product (day/week/month/year) |
 | `waluigi.tasks.send_gmail` | `SendGmail` | Send email via Gmail SMTP + App Password (**vendor: google**) |
+| `waluigi.tasks.ingest_google_sheet` | `IngestGoogleSheet` | Ingest public Google Sheet (all sheets or single, parametric coercion/filter) (**vendor: google**) |
 
 All built-in tasks use `waluigi/tasks/_io.py` helpers (`read_input()` / `write_output()`) which handle source upsert and lineage automatically.
 

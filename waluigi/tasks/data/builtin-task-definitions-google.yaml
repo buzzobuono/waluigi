@@ -5,3 +5,11 @@ spec:
   command: "python -m waluigi.tasks.send_gmail"
   affinity:
     - python
+---
+kind: TaskDefinition
+metadata:
+  name: "IngestGoogleSheet"
+spec:
+  command: "python -m waluigi.tasks.ingest_google_sheet"
+  affinity:
+    - python

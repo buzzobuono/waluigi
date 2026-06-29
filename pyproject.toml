@@ -19,6 +19,8 @@ dependencies = [
     "psycopg2-binary",
     "croniter",
     "tzdata",
+    "openpyxl",
+    "requests",
 ]
 
 [tool.setuptools.packages.find]

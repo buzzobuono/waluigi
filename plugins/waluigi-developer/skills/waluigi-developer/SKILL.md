@@ -1185,6 +1185,38 @@ Gap-fills a time series to a complete date index. When `group_by` is set, genera
 
 ---
 
+### IngestGoogleSheet *(vendor: google)*
+
+Ingest a public Google Sheet into the Catalog. Works with sheets shared as "anyone with the link can view". Private sheets require OAuth2 (not yet supported).
+
+```yaml
+- id: ingest_sheet
+  taskRef:
+    name: IngestGoogleSheet
+  config:
+    input:
+      spreadsheet_id: "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"
+      sheet_name: Foglio1          # optional — omit to ingest all sheets
+      skip_rows: 0                 # rows to skip before header (default: 0)
+      key_column: 0                # column for null-row filter: int index or column name
+                                   # set to null to disable filter (default: 0)
+      add_sheet_column: true       # add "sheet" column (auto: true if multi-sheet)
+      numeric_coerce: true         # auto-cast object columns to numeric (default: true)
+      numeric_coerce_exclude:      # columns to skip from coercion
+        - Note
+    output:
+      dataset: default/bronze/mysheet
+      source_id: local
+      format: parquet
+    force: true                    # always write new version (default: true)
+  resources:
+    coin: 1
+```
+
+`spreadsheet_id` is the long ID in the Google Sheets URL. The `sheet` column (when added) contains the sheet name — useful when merging multiple sheets.
+
+---
+
 ### SendGmail *(vendor: google)*
 
 Send an email via Gmail SMTP. Requires `wlctl apply-builtins -n <ns> google`.
