@@ -28,7 +28,8 @@ wlconsole --port 8080   # web console with JWT auth, proxies Boss + Catalog
 # CLI client (all commands go through wlconsole by default)
 wlctl --url http://localhost:8080 login -u admin
 wlctl apply -f descriptor.yaml [-n namespace]
-wlctl apply-builtins -n <namespace>   # register all built-in TaskDefinitions (idempotent)
+wlctl apply-builtins -n <namespace>            # register core built-in TaskDefinitions (idempotent)
+wlctl apply-builtins -n <namespace> google     # register Google vendor TaskDefinitions
 
 wlctl get namespaces
 wlctl get jobs [-n ns] [-s status]
@@ -246,13 +247,17 @@ spec:
     - python
 ```
 
-All built-in task definitions are bundled in the package at `waluigi/tasks/data/builtin-task-definitions.yaml`. Apply to a namespace before using built-in types:
+Built-in task definitions are bundled in the package under `waluigi/tasks/data/`. Two categories:
+
+- **Core** (`builtin-task-definitions.yaml`) — always applicable, no external dependencies
+- **Vendor** (`builtin-task-definitions-{vendor}.yaml`) — vendor-specific; apply only when needed
 
 ```bash
-wlctl apply-builtins -n analytics
+wlctl apply-builtins -n analytics            # core built-ins
+wlctl apply-builtins -n analytics google     # Google vendor built-ins (SendGmail, ...)
 ```
 
-The command is idempotent — safe to run again after upgrading Waluigi to pick up newly added built-ins. When adding a new built-in task, update `waluigi/tasks/data/builtin-task-definitions.yaml` directly (it is the authoritative source).
+Both commands are idempotent. When adding a new built-in task, add it to the appropriate YAML file (core or vendor). Vendor files follow the naming convention `builtin-task-definitions-{vendor}.yaml`.
 
 ### SQLite Concurrency
 
@@ -444,6 +449,7 @@ These are Python modules invokable from TaskDefinition specs. They are **not aut
 | `waluigi.tasks.catalog_set_expectations` | `CatalogSetExpectations` | Attach DQ expectations |
 | `waluigi.tasks.catalog_set_charts` | `CatalogSetCharts` | Attach chart definitions (bar, line, pie, histogram, scatter, radar, combo) |
 | `waluigi.tasks.reindex_time_series` | `ReindexTimeSeries` | Gap-fill time series; optional `group_by` for multi-series cross-product (day/week/month/year) |
+| `waluigi.tasks.send_gmail` | `SendGmail` | Send email via Gmail SMTP + App Password (**vendor: google**) |
 
 All built-in tasks use `waluigi/tasks/_io.py` helpers (`read_input()` / `write_output()`) which handle source upsert and lineage automatically.
 

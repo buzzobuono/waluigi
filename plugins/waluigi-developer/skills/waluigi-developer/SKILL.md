@@ -436,12 +436,17 @@ In task config use `${WALUIGI_SECRET_API_TOKEN}`. In scripts use `os.environ["WA
 
 ## 4. Built-in task types
 
-Apply to namespace first:
+Built-ins are split into two categories:
+
+- **Core** — no external dependencies; apply to every namespace
+- **Vendor** — vendor-specific integrations; apply only when needed
+
 ```bash
-wlctl apply-builtins -n analytics
+wlctl apply-builtins -n analytics             # core built-ins
+wlctl apply-builtins -n analytics google      # Google vendor built-ins
 ```
 
-All built-in tasks automatically use `CatalogClient` for I/O and record lineage. They all require `affinity: [python]` (already set in the TaskDefinition).
+Both commands are idempotent. All built-in tasks require `affinity: [python]` (already set in the TaskDefinition).
 
 ### Sources must be pre-registered
 
@@ -1177,6 +1182,31 @@ Gap-fills a time series to a complete date index. When `group_by` is set, genera
 | `week` | `YYYY-MM-DD` (Monday) | `2024-03-11` |
 | `month` | `YYYY-MM` | `2024-03` |
 | `year` | `YYYY` | `2024` |
+
+---
+
+### SendGmail *(vendor: google)*
+
+Send an email via Gmail SMTP. Requires `wlctl apply-builtins -n <ns> google`.
+
+Secrets required: `GMAIL_USER`, `GMAIL_APP_PASSWORD` (16-char App Password from Google Account → Security → App Passwords).
+
+```yaml
+- id: notify
+  taskRef:
+    name: SendGmail
+  params:
+    to: "team@example.com"
+    subject: "Pipeline completata"
+    body: "Il job è terminato con successo."
+    body_type: plain        # plain | html (default: plain)
+    cc: ""                  # optional
+    bcc: ""                 # optional
+  resources:
+    coin: 1
+```
+
+If `to` is not set, falls back to secret `GMAIL_NOTIFY_TO` — useful for fixed recurring notification jobs.
 
 ---
 

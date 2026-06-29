@@ -120,9 +120,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # apply-builtins
     p = sub.add_parser("apply-builtins",
-                       help="Apply all built-in TaskDefinitions to a namespace")
+                       help="Apply built-in TaskDefinitions to a namespace")
     p.add_argument("-n", "--namespace", required=True,
                    help="Target namespace")
+    p.add_argument("vendor", nargs="?", default=None,
+                   help="Vendor/category name (e.g. google). Omit for core built-ins.")
 
     # prune
     p = sub.add_parser("prune", help="Remove ghost workers or clear prepare directories")
@@ -213,7 +215,7 @@ def main() -> None:
         else:
             delete(session, args.type, args.target, namespace=ns)
     elif args.command == "apply-builtins":
-        apply_builtins(session, namespace=ns)
+        apply_builtins(session, namespace=ns, vendor=getattr(args, "vendor", None))
     elif args.command == "prune":
         if args.type == "workers":
             prune_workers(session)

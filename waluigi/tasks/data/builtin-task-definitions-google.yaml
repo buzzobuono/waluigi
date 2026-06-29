@@ -1,0 +1,7 @@
+kind: TaskDefinition
+metadata:
+  name: "SendGmail"
+spec:
+  command: "python -m waluigi.tasks.send_gmail"
+  affinity:
+    - python

@@ -13,6 +13,7 @@
 - [x] `TransformDataset`: eval block su `df` con I/O e lineage automatici
 - [x] `LastPerGroup` / `FirstPerGroup`
 - [x] `wl-cluster.sh` nella skill per gestione cluster locale
+- [x] `SendGmail` built-in Google vendor + `wlctl apply-builtins -n <ns> google`
 
 ## Da fare
 
