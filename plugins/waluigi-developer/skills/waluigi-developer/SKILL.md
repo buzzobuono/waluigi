@@ -6,6 +6,18 @@ description: >
   implement the full Bronze→Silver→Gold medallion architecture with built-in tasks and
   data quality checks. Use whenever working on Waluigi pipelines, task definitions,
   job definitions, cron jobs, or Catalog integrations.
+allowed-tools:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Bash(wlrun *)
+  - Bash(wlctl *)
+  - Bash(bash */wl-wl-cluster.sh *)
+  - Bash(pytest *)
+  - Bash(git status)
+  - Bash(git diff *)
+  - Bash(git log *)
 ---
 
 # Waluigi Developer
@@ -68,21 +80,21 @@ wlworker --boss-url http://localhost:8082 --port 5001 --slots 4 --affinity pytho
 
 ---
 
-## 1b. Local dev cluster — cluster.sh
+## 1b. Local dev cluster — wl-cluster.sh
 
 > **Solo sviluppo locale.** Per un cluster centrale usa `wlctl --url http://<host>:8080 <command>` — nessuno script necessario.
 
-`cluster.sh` è incluso in questa skill. Eseguilo direttamente dalla sua posizione nella skill directory — non serve copiarlo nel progetto.
+`wl-cluster.sh` è incluso in questa skill. Eseguilo direttamente dalla sua posizione nella skill directory — non serve copiarlo nel progetto.
 
 Quando l'utente chiede di avviare, fermare o controllare il cluster locale, esegui:
 
 ```bash
-bash <SKILL_BASE_DIR>/cluster.sh start     # avvia catalog → boss → console → worker
-bash <SKILL_BASE_DIR>/cluster.sh stop      # ferma tutti i processi
-bash <SKILL_BASE_DIR>/cluster.sh restart
-bash <SKILL_BASE_DIR>/cluster.sh status    # wlctl get workers
-bash <SKILL_BASE_DIR>/cluster.sh logs      # tail -f tutti i log
-bash <SKILL_BASE_DIR>/cluster.sh logs boss|catalog|console|worker
+bash <SKILL_BASE_DIR>/wl-cluster.sh start     # avvia catalog → boss → console → worker
+bash <SKILL_BASE_DIR>/wl-cluster.sh stop      # ferma tutti i processi
+bash <SKILL_BASE_DIR>/wl-cluster.sh restart
+bash <SKILL_BASE_DIR>/wl-cluster.sh status    # wlctl get workers
+bash <SKILL_BASE_DIR>/wl-cluster.sh logs      # tail -f tutti i log
+bash <SKILL_BASE_DIR>/wl-cluster.sh logs boss|catalog|console|worker
 ```
 
 `<SKILL_BASE_DIR>` è la base directory di questa skill, iniettata nel system prompt. Lo script scrive i PID in `~/wlprj/.cluster.pids` e i log in `~/wlprj/logs/`. `start` esegue il login automatico come `admin/admin` e stampa `wlctl get workers` a conferma.
