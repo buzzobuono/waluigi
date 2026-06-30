@@ -99,9 +99,9 @@ def get_schema(session: WaluigiSession, dataset_id: str, namespace=None, output=
         r = _cat(session, f"namespaces/{ns}/datasets/{dataset_id}/schema")
         if not ok(r):
             return
-        rows = data(r)
+        rows = (data(r) or {}).get("columns", [])
         table(
-            [[c.get("column_name"), c.get("column_type"), c.get("pii", False),
+            [[c.get("column_name"), c.get("logical_type"), c.get("pii", False),
               c.get("status"), c.get("description") or "—"] for c in rows],
             headers=["COLUMN", "TYPE", "PII", "STATUS", "DESCRIPTION"],
             output_arg=output, raw=rows,
