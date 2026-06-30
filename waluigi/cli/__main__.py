@@ -50,8 +50,8 @@ def _build_parser() -> argparse.ArgumentParser:
     # get
     p = sub.add_parser("get", help="List resources")
     p.add_argument("type", choices=["namespaces", "jobs", "tasks", "resources",
-                                    "workers", "taskdefinitions", "jobdefinitions",
-                                    "cronjobs", "users", "secrets",
+                                    "workers", "task-definitions", "job-definitions",
+                                    "cron-jobs", "users", "secrets",
                                     "sources", "datasets", "versions", "schema", "metadata"])
     p.add_argument("-n", "--namespace", help="Namespace (auto-detected if token has one)")
     p.add_argument("-j", "--job_id",    help="Filter tasks by job ID")
@@ -62,8 +62,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # describe
     p = sub.add_parser("describe", help="Show full details of a resource")
-    p.add_argument("type",   choices=["namespace", "job", "task", "taskdefinition",
-                                      "jobdefinition", "cronjob", "dataset", "source", "secret"])
+    p.add_argument("type",   choices=["namespace", "job", "task", "task-definition",
+                                      "job-definition", "cron-job", "dataset", "source", "secret"])
     p.add_argument("target", help="Resource ID or name")
     p.add_argument("-n", "--namespace", help="Namespace (auto-detected if token has one)")
     p.add_argument("-o", "--output",    choices=["json"])
@@ -106,13 +106,13 @@ def _build_parser() -> argparse.ArgumentParser:
     # enable / disable
     for cmd, help_text in (("enable", "Enable a CronJob"), ("disable", "Disable a CronJob")):
         p = sub.add_parser(cmd, help=help_text)
-        p.add_argument("type",   choices=["cronjob"])
+        p.add_argument("type",   choices=["cron-job"])
         p.add_argument("target", help="CronJob name")
         p.add_argument("-n", "--namespace")
 
     # delete
     p = sub.add_parser("delete", help="Delete a resource")
-    p.add_argument("type",   choices=["job", "cronjob", "taskdefinition", "jobdefinition",
+    p.add_argument("type",   choices=["job", "cron-job", "task-definition", "job-definition",
                                       "namespace", "secret", "dataset", "version"])
     p.add_argument("target", help="Resource ID / version / namespace name")
     p.add_argument("-n", "--namespace", help="Namespace")
@@ -168,9 +168,9 @@ def main() -> None:
             "tasks":           lambda: get_tasks(session, namespace=ns, job_id=args.job_id, output=out),
             "resources":       lambda: get_resources(session, namespace=ns, output=out),
             "workers":         lambda: get_workers(session, output=out),
-            "taskdefinitions": lambda: get_task_definitions(session, namespace=ns, output=out),
-            "jobdefinitions":  lambda: get_job_definitions(session, namespace=ns, output=out),
-            "cronjobs":        lambda: get_cron_jobs(session, namespace=ns, output=out),
+            "task-definitions": lambda: get_task_definitions(session, namespace=ns, output=out),
+            "job-definitions":  lambda: get_job_definitions(session, namespace=ns, output=out),
+            "cron-jobs":        lambda: get_cron_jobs(session, namespace=ns, output=out),
             "users":           lambda: get_users(session, output=out),
             "secrets":         lambda: get_secrets(session, namespace=ns, output=out),
             "sources":         lambda: get_sources(session, namespace=ns, output=out),
@@ -184,9 +184,9 @@ def main() -> None:
             "namespace":      lambda: describe_namespace(session, namespace=args.target, output=out),
             "job":            lambda: describe_job(session, namespace=ns, job_id=args.target, output=out),
             "task":           lambda: describe_task(session, namespace=ns, task_id=args.target, output=out),
-            "taskdefinition": lambda: describe_task_definition(session, namespace=ns, defn_id=args.target, output=out),
-            "jobdefinition":  lambda: describe_job_definition(session, namespace=ns, defn_id=args.target, output=out),
-            "cronjob":        lambda: describe_cron_job(session, namespace=ns, cron_id=args.target, output=out),
+            "task-definition": lambda: describe_task_definition(session, namespace=ns, defn_id=args.target, output=out),
+            "job-definition":  lambda: describe_job_definition(session, namespace=ns, defn_id=args.target, output=out),
+            "cron-job":        lambda: describe_cron_job(session, namespace=ns, cron_id=args.target, output=out),
             "dataset":        lambda: describe_dataset(session, args.target, namespace=ns, output=out),
             "source":         lambda: describe_source(session, args.target, namespace=ns, output=out),
             "secret":         lambda: describe_secret(session, namespace=ns, name=args.target, output=out),

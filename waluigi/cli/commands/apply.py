@@ -168,13 +168,13 @@ def _print_applied(kind: str, doc: dict, r, ns: str = "", name: str = "") -> Non
         print(f"job/{ref} {verb}")
     elif kind == "CronJob":
         ref = d.get("id") or name
-        print(f"cronjob/{ref} {verb}")
+        print(f"cron-job/{ref} {verb}")
     elif kind == "JobDefinition":
         ref = d.get("id") or name
-        print(f"jobdefinition/{ref} {verb}")
+        print(f"job-definition/{ref} {verb}")
     elif kind == "TaskDefinition":
         ref = d.get("id") or name
-        print(f"taskdefinition/{ref} {verb}")
+        print(f"task-definition/{ref} {verb}")
     elif kind in ("NamespaceResources", "ClusterResources"):
         print(f"namespaceresources/{ns} {verb}")
     elif kind == "Secret":

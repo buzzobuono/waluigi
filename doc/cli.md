@@ -119,7 +119,7 @@ wlctl get job-definitions [--namespace <ns>]
 ### CronJobs
 
 ```bash
-wlctl get cronjobs [--namespace <ns>]
+wlctl get cron-jobs [--namespace <ns>]
 ```
 
 Columns: `ID`, `SCHEDULE`, `TIMEZONE`, `ENABLED`, `LAST_RUN`, `NEXT_RUN`.
@@ -165,13 +165,13 @@ Show detailed information about a definition or job.
 ### Job Definition
 
 ```bash
-wlctl describe jobdefinition <name> [--namespace <ns>]
+wlctl describe job-definition <name> [--namespace <ns>]
 ```
 
 ### Task Definition
 
 ```bash
-wlctl describe taskdefinition <name> [--namespace <ns>]
+wlctl describe task-definition <name> [--namespace <ns>]
 ```
 
 ### Job
@@ -307,22 +307,22 @@ wlctl delete job <job_id> [--namespace <ns>]
 
 Returns an error if the job is still active. Use `reset` + wait, or `cancel` first.
 
-### Delete a cronjob
+### Delete a CronJob
 
 ```bash
-wlctl delete cronjob <id> [--namespace <ns>]
+wlctl delete cron-job <id> [--namespace <ns>]
 ```
 
 ### Delete a TaskDefinition
 
 ```bash
-wlctl delete taskdefinition <name> [--namespace <ns>]
+wlctl delete task-definition <name> [--namespace <ns>]
 ```
 
 ### Delete a JobDefinition
 
 ```bash
-wlctl delete jobdefinition <name> [--namespace <ns>]
+wlctl delete job-definition <name> [--namespace <ns>]
 ```
 
 ### Delete a namespace
@@ -364,8 +364,8 @@ wlctl cancel job <job_id> [--namespace <ns>]
 ## CronJob lifecycle
 
 ```bash
-wlctl enable cronjob <id> [--namespace <ns>]
-wlctl disable cronjob <id> [--namespace <ns>]
+wlctl enable cron-job <id> [--namespace <ns>]
+wlctl disable cron-job <id> [--namespace <ns>]
 ```
 
 ---

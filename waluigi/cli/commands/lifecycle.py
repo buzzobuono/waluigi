@@ -41,7 +41,7 @@ def enable_cron_job(session: WaluigiSession, namespace=None, cron_id=None) -> No
     try:
         r = session.http.post(f"/boss/namespaces/{ns}/cron-jobs/{cron_id}/_enable",
                               headers=session.headers())
-        if ok(r): print(f"cronjob/{cron_id} enabled")
+        if ok(r): print(f"cron-job/{cron_id} enabled")
     except Exception as e:
         print(f"Error: {e}")
 
@@ -52,7 +52,7 @@ def disable_cron_job(session: WaluigiSession, namespace=None, cron_id=None) -> N
     try:
         r = session.http.post(f"/boss/namespaces/{ns}/cron-jobs/{cron_id}/_disable",
                               headers=session.headers())
-        if ok(r): print(f"cronjob/{cron_id} disabled")
+        if ok(r): print(f"cron-job/{cron_id} disabled")
     except Exception as e:
         print(f"Error: {e}")
 
@@ -84,17 +84,17 @@ def delete(session: WaluigiSession, scope: str, target: str, namespace=None) -> 
             if not ns: return
             r = session.http.delete(f"/boss/namespaces/{ns}/jobs/{target}",
                                     headers=session.headers())
-        elif scope == "cronjob":
+        elif scope == "cron-job":
             ns = session.resolve_namespace(namespace)
             if not ns: return
             r = session.http.delete(f"/boss/namespaces/{ns}/cron-jobs/{target}",
                                     headers=session.headers())
-        elif scope == "taskdefinition":
+        elif scope == "task-definition":
             ns = session.resolve_namespace(namespace)
             if not ns: return
             r = session.http.delete(f"/boss/namespaces/{ns}/task-definitions/{target}",
                                     headers=session.headers())
-        elif scope == "jobdefinition":
+        elif scope == "job-definition":
             ns = session.resolve_namespace(namespace)
             if not ns: return
             r = session.http.delete(f"/boss/namespaces/{ns}/job-definitions/{target}",
