@@ -371,8 +371,8 @@ spec:
 
 Enable / disable without deleting:
 ```bash
-wlctl enable cronjob daily-orders-etl -n analytics
-wlctl disable cronjob daily-orders-etl -n analytics
+wlctl enable cron-job daily-orders-etl -n analytics
+wlctl disable cron-job daily-orders-etl -n analytics
 ```
 
 ### Custom TaskDefinition
@@ -1629,9 +1629,9 @@ wlctl get jobs [-n ns] [-s status]
 wlctl get tasks [-n ns] [--job-id job_id]
 wlctl get workers
 wlctl get resources [-n ns]
-wlctl get taskdefinitions [-n ns]
-wlctl get jobdefinitions [-n ns]
-wlctl get cronjobs [-n ns]
+wlctl get task-definitions [-n ns]
+wlctl get job-definitions [-n ns]
+wlctl get cron-jobs [-n ns]
 wlctl get secrets [-n ns]
 wlctl get sources [-n ns]
 wlctl get datasets [-n ns] [--status draft|in_review|approved|deprecated]
@@ -1641,8 +1641,8 @@ wlctl get schema -d <dataset_id> [-n ns]
 # Describe
 wlctl describe job <job_id> [-n ns]
 wlctl describe task <task_id> [-n ns]
-wlctl describe taskdefinition <name> [-n ns]
-wlctl describe jobdefinition <name> [-n ns]
+wlctl describe task-definition <name> [-n ns]
+wlctl describe job-definition <name> [-n ns]
 wlctl describe dataset <id> [-n ns]
 wlctl describe source <id> [-n ns]
 wlctl describe secret <name> [-n ns]
@@ -1659,14 +1659,14 @@ wlctl resume job <job_id> [-n ns]
 wlctl cancel job <job_id> [-n ns]
 
 # CronJob lifecycle
-wlctl enable cronjob <name> [-n ns]
-wlctl disable cronjob <name> [-n ns]
+wlctl enable cron-job <name> [-n ns]
+wlctl disable cron-job <name> [-n ns]
 
 # Delete
 wlctl delete job <job_id> [-n ns]
-wlctl delete cronjob <name> [-n ns]
-wlctl delete taskdefinition <name> [-n ns]
-wlctl delete jobdefinition <name> [-n ns]
+wlctl delete cron-job <name> [-n ns]
+wlctl delete task-definition <name> [-n ns]
+wlctl delete job-definition <name> [-n ns]
 wlctl delete namespace <ns>
 wlctl delete secret <name> [-n ns]
 wlctl delete dataset <id> [-n ns]
