@@ -229,7 +229,7 @@ def _print_applied(kind: str, doc: dict, r, ns: str = "", name: str = "") -> Non
         ref = d.get("id") or name
         print(f"source/{ns}/{ref} {verb}")
     elif kind == "Dataset":
-        print(f"dataset/{ns}/{name} {verb}")
+        print(f"dataset/{name} {verb}")
     elif kind == "Chart":
         charts = (doc.get("spec") or {}).get("charts") or []
         print(f"chart/{ns}/{name} {verb} ({len(charts)} chart(s))")
