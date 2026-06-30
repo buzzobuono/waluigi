@@ -43,7 +43,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("logout", help="Remove saved token")
 
     # apply
-    p = sub.add_parser("apply", help="Apply a YAML descriptor (Namespace, Job, CronJob, JobDefinition, TaskDefinition, NamespaceResources, Secret, User)")
+    p = sub.add_parser("apply", help="Apply a YAML descriptor (Namespace, Job, CronJob, JobDefinition, TaskDefinition, NamespaceResources, Secret, Source, Dataset, Chart, User)")
     p.add_argument("-f", "--file",      required=True, help="Path to YAML file")
     p.add_argument("-n", "--namespace", help="Override namespace from descriptor metadata")
 

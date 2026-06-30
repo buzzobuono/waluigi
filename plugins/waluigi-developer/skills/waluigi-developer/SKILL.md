@@ -493,6 +493,41 @@ spec:
 
 ---
 
+### kind: Dataset — register dataset and define schema
+
+Register or update a Catalog dataset. `format` is dataset-level (not per-version). If the dataset exists already, description is updated via PATCH. Schema columns are always patched; `publish: true` promotes all columns to `published`.
+
+```yaml
+kind: Dataset
+metadata:
+  namespace: analytics
+  name: bronze/orders
+spec:
+  source_id: local
+  format: parquet
+  description: "Raw orders from ERP"
+  schema:
+    publish: true
+    columns:
+      - name: order_id
+        logical_type: string
+        description: "Unique order identifier"
+        nullable: false
+      - name: amount
+        logical_type: float
+        description: "Order amount in EUR"
+        pii: false
+```
+
+```bash
+wlctl apply -f dataset.yaml -n analytics
+# dataset/analytics/bronze/orders created
+```
+
+Errors if `source_id` does not exist or `metadata.name` is missing.
+
+---
+
 ### kind: Chart — declarative chart definitions
 
 Apply chart definitions to a dataset outside a pipeline. **Full replace**: all existing charts on the dataset are deleted and replaced with the ones in the file.

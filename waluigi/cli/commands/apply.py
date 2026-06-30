@@ -115,6 +115,47 @@ def _apply_one(session: WaluigiSession, doc: dict,
             r = session.http.post(f"/catalog/namespaces/{_ns}/sources",
                                   json=body, headers=session.headers())
 
+        elif kind == "Dataset":
+            _ns   = namespace_override or meta.get("namespace") \
+                    or session.resolve_namespace(None)
+            _name = meta.get("name", "").strip()
+            if not _ns:   return
+            if not _name:
+                print("Error: metadata.name (dataset id) is required"); return
+            spec      = doc.get("spec", {})
+            base      = f"/catalog/namespaces/{_ns}/datasets"
+            headers   = session.headers()
+            ds_body   = {
+                "id":          _name,
+                "format":      spec.get("format", "parquet"),
+                "description": spec.get("description", ""),
+                "source_id":   spec.get("source_id", "local"),
+            }
+            r = session.http.post(base, json=ds_body, headers=headers)
+            if r.status_code == 409:
+                patch_body = {k: v for k, v in {
+                    "description": spec.get("description"),
+                    "dq_suite":    spec.get("dq_suite"),
+                }.items() if v is not None}
+                r = session.http.patch(f"{base}/{_name}", json=patch_body, headers=headers)
+            schema_spec = spec.get("schema") or {}
+            for col in schema_spec.get("columns") or []:
+                col_name = col.get("name")
+                if not col_name: continue
+                patch = {k: v for k, v in {
+                    "logical_type": col.get("logical_type"),
+                    "description":  col.get("description"),
+                    "nullable":     col.get("nullable"),
+                    "pii":          col.get("pii"),
+                    "pii_type":     col.get("pii_type"),
+                    "tags":         col.get("tags"),
+                }.items() if v is not None}
+                session.http.patch(f"{base}/{_name}/schema/{col_name}",
+                                   json=patch, headers=headers)
+            if schema_spec.get("publish"):
+                session.http.post(f"{base}/{_name}/schema/publish",
+                                  json={"published_by": "wlctl"}, headers=headers)
+
         elif kind == "Chart":
             _ns        = namespace_override or meta.get("namespace") \
                          or session.resolve_namespace(None)
@@ -125,6 +166,11 @@ def _apply_one(session: WaluigiSession, doc: dict,
             charts  = (doc.get("spec") or {}).get("charts") or []
             base    = f"/catalog/namespaces/{_ns}/datasets/{dataset_id}/charts"
             headers = session.headers()
+            check = session.http.get(f"/catalog/namespaces/{_ns}/datasets/{dataset_id}",
+                                     headers=headers)
+            if check.status_code == 404:
+                print(f"Error from server (NotFound): dataset '{dataset_id}' not found in namespace '{_ns}'")
+                return
             # full replace: delete all existing, then add new ones
             existing = session.http.get(base, headers=headers)
             if existing.status_code == 200:
@@ -182,6 +228,8 @@ def _print_applied(kind: str, doc: dict, r, ns: str = "", name: str = "") -> Non
     elif kind == "Source":
         ref = d.get("id") or name
         print(f"source/{ns}/{ref} {verb}")
+    elif kind == "Dataset":
+        print(f"dataset/{ns}/{name} {verb}")
     elif kind == "Chart":
         charts = (doc.get("spec") or {}).get("charts") or []
         print(f"chart/{ns}/{name} {verb} ({len(charts)} chart(s))")

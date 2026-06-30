@@ -173,6 +173,7 @@ Tasks are keyed by `id + params_hash` — the same task ID with different params
 | `NamespaceResources` / `ClusterResources` | Define named resource pools |
 | `Secret` | Namespace-scoped key-value secrets injected as env vars |
 | `Source` | Catalog data source — routed to Catalog, not Boss |
+| `Dataset` | Register/update a Catalog dataset; optionally define and publish schema columns |
 | `Chart` | Full-replace chart definitions on a dataset — `metadata.dataset` + `spec.charts[]` |
 | `User` | Console user (admin only) |
 
@@ -290,6 +291,32 @@ spec:
 ```
 
 In task config, reference secrets with `${WALUIGI_SECRET_API_TOKEN}`. The worker expands them before running the task. Use `wlctl describe secret <name> -n <ns>` to list keys (values are never shown).
+
+## Dataset Kind
+
+`kind: Dataset` registers or updates a Catalog dataset and optionally defines its schema. `format` is a dataset-level attribute (not per-version). If the dataset already exists, description and dq_suite are updated via PATCH; schema columns are always patched.
+
+```yaml
+kind: Dataset
+metadata:
+  namespace: analytics
+  name: bronze/orders          # dataset ID (path)
+spec:
+  source_id: local             # pre-registered source
+  format: parquet              # csv | parquet | json | ... (dataset-level, not per-version)
+  description: "Raw orders from ERP"
+  schema:
+    publish: true              # promote all columns to published after patching
+    columns:
+      - name: order_id
+        logical_type: string
+        description: "Unique order identifier"
+        nullable: false
+      - name: amount
+        logical_type: float
+        description: "Order amount in EUR"
+        pii: false
+```
 
 ## API Response Envelope
 
