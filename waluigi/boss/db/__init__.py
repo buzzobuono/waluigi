@@ -17,6 +17,7 @@ class BossDB:
         from waluigi.boss.repositories.cron_job_repo import CronJobRepository
         from waluigi.boss.repositories.namespace_repo import NamespaceRepository
         from waluigi.boss.repositories.secret_repo import SecretRepository
+        from waluigi.boss.repositories.job_hook_repo import JobHookRepository
 
         engine = create_boss_engine(url)
         _set_engine(engine)
@@ -32,3 +33,4 @@ class BossDB:
         self.cron_jobs        = CronJobRepository(engine)
         self.namespaces       = NamespaceRepository(engine)
         self.secrets          = SecretRepository(engine)
+        self.job_hooks        = JobHookRepository(engine)

@@ -13,6 +13,7 @@ from waluigi.boss.cron_scheduler import cron_scheduler_loop
 from waluigi.boss.services.job_service import JobService
 from waluigi.boss.services.cron_job_service import CronJobService
 from waluigi.boss.services.job_definition_service import JobDefinitionService
+from waluigi.boss.services.job_hook_service import JobHookService
 
 from waluigi.boss.api.routes.namespace_router         import router as namespace_router
 from waluigi.boss.api.routes.task_router              import router as task_router
@@ -23,6 +24,7 @@ from waluigi.boss.api.routes.task_definition_router   import router as task_defi
 from waluigi.boss.api.routes.job_definition_router    import router as job_definition_router
 from waluigi.boss.api.routes.cron_job_router          import router as cron_job_router
 from waluigi.boss.api.routes.secret_router            import router as secret_router
+from waluigi.boss.api.routes.job_hook_router          import router as job_hook_router
 
 logger = logging.getLogger("waluigi")
 
@@ -41,6 +43,7 @@ app.include_router(task_definition_router)
 app.include_router(job_definition_router)
 app.include_router(cron_job_router)
 app.include_router(secret_router)
+app.include_router(job_hook_router)
 
 
 def main():
@@ -61,14 +64,16 @@ def main():
     init_db(args.db_url)
     db = get_db()
 
-    engine      = BossEngine(db.tasks, db.workers, db.resources, db.task_definitions, db.task_deps, db.secrets)
-    job_svc     = JobService(db.jobs)
-    cron_svc    = CronJobService(db.cron_jobs)
-    job_def_svc = JobDefinitionService(db.job_definitions)
+    engine       = BossEngine(db.tasks, db.workers, db.resources, db.task_definitions, db.task_deps, db.secrets)
+    job_svc      = JobService(db.jobs)
+    cron_svc     = CronJobService(db.cron_jobs)
+    job_def_svc  = JobDefinitionService(db.job_definitions)
+    job_hook_svc = JobHookService(db.job_hooks)
 
     threading.Thread(
         target=planner_loop,
         args=(args.id, args.tick, job_svc, engine),
+        kwargs={"hook_svc": job_hook_svc, "job_def_svc": job_def_svc, "task_repo": db.tasks},
         daemon=True,
         name="planner",
     ).start()

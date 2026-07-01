@@ -57,6 +57,28 @@ def disable_cron_job(session: WaluigiSession, namespace=None, cron_id=None) -> N
         print(f"Error: {e}")
 
 
+def enable_job_hook(session: WaluigiSession, namespace=None, hook_id=None) -> None:
+    ns = session.resolve_namespace(namespace)
+    if not ns: return
+    try:
+        r = session.http.post(f"/boss/namespaces/{ns}/job-hooks/{hook_id}/_enable",
+                              headers=session.headers())
+        if ok(r): print(f"job-hook/{hook_id} enabled")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+def disable_job_hook(session: WaluigiSession, namespace=None, hook_id=None) -> None:
+    ns = session.resolve_namespace(namespace)
+    if not ns: return
+    try:
+        r = session.http.post(f"/boss/namespaces/{ns}/job-hooks/{hook_id}/_disable",
+                              headers=session.headers())
+        if ok(r): print(f"job-hook/{hook_id} disabled")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
 def reset(session: WaluigiSession, scope: str, target: str, namespace=None) -> None:
     try:
         if scope == "task":
@@ -98,6 +120,11 @@ def delete(session: WaluigiSession, scope: str, target: str, namespace=None) -> 
             ns = session.resolve_namespace(namespace)
             if not ns: return
             r = session.http.delete(f"/boss/namespaces/{ns}/job-definitions/{target}",
+                                    headers=session.headers())
+        elif scope == "job-hook":
+            ns = session.resolve_namespace(namespace)
+            if not ns: return
+            r = session.http.delete(f"/boss/namespaces/{ns}/job-hooks/{target}",
                                     headers=session.headers())
         elif scope == "secret":
             ns = session.resolve_namespace(namespace)

@@ -108,6 +108,15 @@ _t_secrets = Table("secrets", _meta,
     PrimaryKeyConstraint("namespace", "name"),
 )
 
+_t_job_hooks = Table("job_hooks", _meta,
+    Column("namespace",  Text, nullable=False),
+    Column("id",         Text, nullable=False),
+    Column("spec",       Text, nullable=False, default="{}"),
+    Column("enabled",    Integer, nullable=False, default=1),
+    Column("created_at", Text, nullable=False),
+    PrimaryKeyConstraint("namespace", "id"),
+)
+
 
 def create_boss_engine(url: str):
     kwargs = {"pool_pre_ping": True}

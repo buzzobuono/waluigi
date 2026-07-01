@@ -375,6 +375,49 @@ wlctl enable cron-job daily-orders-etl -n analytics
 wlctl disable cron-job daily-orders-etl -n analytics
 ```
 
+### JobHook (event-driven trigger)
+
+JobHooks are observers that fire a triggered job when a watched job (matched by definition name, all runs) reaches a terminal event.
+
+```yaml
+kind: JobHook
+metadata:
+  name: notify-on-etl-done
+  namespace: analytics
+spec:
+  watch:
+    job: orders-etl           # job definition name (base_name) — matches all runs
+    on:
+      - success
+      - failure               # valid: success, failure
+  trigger:
+    jobRef:
+      name: send-notification
+    executionPolicy: Ephemeral
+    concurrencyPolicy: Allow
+    params:
+      subject: "ETL finished: ${event.status}"
+      body: "Job ${event.job_id} — status: ${event.status}. Failed tasks: ${event.failed_tasks}"
+```
+
+**Event context variables** (expand in trigger params):
+
+| Variable | Value |
+|----------|-------|
+| `${event.status}` | `success` or `failure` |
+| `${event.job_id}` | Full job ID of the completed run |
+| `${event.job_name}` | Base name of the watched job |
+| `${event.namespace}` | Namespace of the completed job |
+| `${event.failed_tasks}` | Comma-separated FAILED task IDs (empty on success) |
+
+```bash
+wlctl enable job-hook notify-on-etl-done -n analytics
+wlctl disable job-hook notify-on-etl-done -n analytics
+wlctl get job-hooks -n analytics
+wlctl describe job-hook notify-on-etl-done -n analytics
+wlctl delete job-hook notify-on-etl-done -n analytics
+```
+
 ### Custom TaskDefinition
 
 ```yaml
@@ -1667,6 +1710,7 @@ wlctl get resources [-n ns]
 wlctl get task-definitions [-n ns]
 wlctl get job-definitions [-n ns]
 wlctl get cron-jobs [-n ns]
+wlctl get job-hooks [-n ns]
 wlctl get secrets [-n ns]
 wlctl get sources [-n ns]
 wlctl get datasets [-n ns] [--status draft|in_review|approved|deprecated]
@@ -1678,6 +1722,8 @@ wlctl describe job <job_id> [-n ns]
 wlctl describe task <task_id> [-n ns]
 wlctl describe task-definition <name> [-n ns]
 wlctl describe job-definition <name> [-n ns]
+wlctl describe cron-job <name> [-n ns]
+wlctl describe job-hook <name> [-n ns]
 wlctl describe dataset <id> [-n ns]
 wlctl describe source <id> [-n ns]
 wlctl describe secret <name> [-n ns]
@@ -1697,9 +1743,14 @@ wlctl cancel job <job_id> [-n ns]
 wlctl enable cron-job <name> [-n ns]
 wlctl disable cron-job <name> [-n ns]
 
+# JobHook lifecycle
+wlctl enable job-hook <name> [-n ns]
+wlctl disable job-hook <name> [-n ns]
+
 # Delete
 wlctl delete job <job_id> [-n ns]
 wlctl delete cron-job <name> [-n ns]
+wlctl delete job-hook <name> [-n ns]
 wlctl delete task-definition <name> [-n ns]
 wlctl delete job-definition <name> [-n ns]
 wlctl delete namespace <ns>

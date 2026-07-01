@@ -6,15 +6,17 @@ from waluigi.cli.commands.auth      import login, logout
 from waluigi.cli.commands.apply     import apply
 from waluigi.cli.commands.get       import (
     get_namespaces, get_jobs, get_tasks, get_resources,
-    get_workers, get_task_definitions, get_job_definitions, get_cron_jobs, get_users,
+    get_workers, get_task_definitions, get_job_definitions, get_cron_jobs, get_job_hooks, get_users,
     get_secrets,
 )
 from waluigi.cli.commands.describe  import (
     describe_job, describe_task, describe_task_definition,
-    describe_job_definition, describe_cron_job, describe_namespace, describe_secret,
+    describe_job_definition, describe_cron_job, describe_job_hook, describe_namespace, describe_secret,
 )
 from waluigi.cli.commands.lifecycle import (
-    pause, resume, cancel, reset, delete, enable_cron_job, disable_cron_job,
+    pause, resume, cancel, reset, delete,
+    enable_cron_job, disable_cron_job,
+    enable_job_hook, disable_job_hook,
 )
 from waluigi.cli.commands.logs      import get_logs
 from waluigi.cli.commands.catalog   import (
@@ -43,7 +45,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("logout", help="Remove saved token")
 
     # apply
-    p = sub.add_parser("apply", help="Apply a YAML descriptor (Namespace, Job, CronJob, JobDefinition, TaskDefinition, NamespaceResources, Secret, Source, Dataset, Chart, User)")
+    p = sub.add_parser("apply", help="Apply a YAML descriptor (Namespace, Job, CronJob, JobDefinition, TaskDefinition, NamespaceResources, Secret, Source, Dataset, Chart, JobHook, User)")
     p.add_argument("-f", "--file",      required=True, help="Path to YAML file")
     p.add_argument("-n", "--namespace", help="Override namespace from descriptor metadata")
 
@@ -51,7 +53,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("get", help="List resources")
     p.add_argument("type", choices=["namespaces", "jobs", "tasks", "resources",
                                     "workers", "task-definitions", "job-definitions",
-                                    "cron-jobs", "users", "secrets",
+                                    "cron-jobs", "job-hooks", "users", "secrets",
                                     "sources", "datasets", "versions", "schema", "metadata"])
     p.add_argument("-n", "--namespace", help="Namespace (auto-detected if token has one)")
     p.add_argument("-j", "--job_id",    help="Filter tasks by job ID")
@@ -63,7 +65,8 @@ def _build_parser() -> argparse.ArgumentParser:
     # describe
     p = sub.add_parser("describe", help="Show full details of a resource")
     p.add_argument("type",   choices=["namespace", "job", "task", "task-definition",
-                                      "job-definition", "cron-job", "dataset", "source", "secret"])
+                                      "job-definition", "cron-job", "job-hook",
+                                      "dataset", "source", "secret"])
     p.add_argument("target", help="Resource ID or name")
     p.add_argument("-n", "--namespace", help="Namespace (auto-detected if token has one)")
     p.add_argument("-o", "--output",    choices=["json"])
@@ -104,15 +107,15 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("-n", "--namespace", help="Namespace for task/job")
 
     # enable / disable
-    for cmd, help_text in (("enable", "Enable a CronJob"), ("disable", "Disable a CronJob")):
+    for cmd, help_text in (("enable", "Enable a CronJob or JobHook"), ("disable", "Disable a CronJob or JobHook")):
         p = sub.add_parser(cmd, help=help_text)
-        p.add_argument("type",   choices=["cron-job"])
-        p.add_argument("target", help="CronJob name")
+        p.add_argument("type",   choices=["cron-job", "job-hook"])
+        p.add_argument("target", help="Resource name")
         p.add_argument("-n", "--namespace")
 
     # delete
     p = sub.add_parser("delete", help="Delete a resource")
-    p.add_argument("type",   choices=["job", "cron-job", "task-definition", "job-definition",
+    p.add_argument("type",   choices=["job", "cron-job", "job-hook", "task-definition", "job-definition",
                                       "namespace", "secret", "dataset", "version"])
     p.add_argument("target", help="Resource ID / version / namespace name")
     p.add_argument("-n", "--namespace", help="Namespace")
@@ -171,6 +174,7 @@ def main() -> None:
             "task-definitions": lambda: get_task_definitions(session, namespace=ns, output=out),
             "job-definitions":  lambda: get_job_definitions(session, namespace=ns, output=out),
             "cron-jobs":        lambda: get_cron_jobs(session, namespace=ns, output=out),
+            "job-hooks":        lambda: get_job_hooks(session, namespace=ns, output=out),
             "users":           lambda: get_users(session, output=out),
             "secrets":         lambda: get_secrets(session, namespace=ns, output=out),
             "sources":         lambda: get_sources(session, namespace=ns, output=out),
@@ -187,14 +191,21 @@ def main() -> None:
             "task-definition": lambda: describe_task_definition(session, namespace=ns, defn_id=args.target, output=out),
             "job-definition":  lambda: describe_job_definition(session, namespace=ns, defn_id=args.target, output=out),
             "cron-job":        lambda: describe_cron_job(session, namespace=ns, cron_id=args.target, output=out),
+            "job-hook":        lambda: describe_job_hook(session, namespace=ns, hook_id=args.target, output=out),
             "dataset":        lambda: describe_dataset(session, args.target, namespace=ns, output=out),
             "source":         lambda: describe_source(session, args.target, namespace=ns, output=out),
             "secret":         lambda: describe_secret(session, namespace=ns, name=args.target, output=out),
         }[args.type]()
     elif args.command == "enable":
-        enable_cron_job(session, namespace=ns, cron_id=args.target)
+        if args.type == "job-hook":
+            enable_job_hook(session, namespace=ns, hook_id=args.target)
+        else:
+            enable_cron_job(session, namespace=ns, cron_id=args.target)
     elif args.command == "disable":
-        disable_cron_job(session, namespace=ns, cron_id=args.target)
+        if args.type == "job-hook":
+            disable_job_hook(session, namespace=ns, hook_id=args.target)
+        else:
+            disable_cron_job(session, namespace=ns, cron_id=args.target)
     elif args.command == "cancel":
         cancel(session, namespace=ns, job_id=args.target)
     elif args.command == "pause":

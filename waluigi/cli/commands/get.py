@@ -139,6 +139,31 @@ def get_cron_jobs(session: WaluigiSession, namespace=None, output=None) -> None:
         print(f"Error: {e}")
 
 
+def get_job_hooks(session: WaluigiSession, namespace=None, output=None) -> None:
+    ns = session.resolve_namespace(namespace)
+    if not ns: return
+    try:
+        r = session.http.get(f"/boss/namespaces/{ns}/job-hooks", headers=session.headers())
+        if not ok(r): return
+        rows = data(r)
+        table(
+            [
+                [
+                    h.get("id"),
+                    (h.get("spec") or {}).get("watch", {}).get("job", "-"),
+                    ", ".join((h.get("spec") or {}).get("watch", {}).get("on", [])),
+                    ((h.get("spec") or {}).get("trigger", {}).get("jobRef") or {}).get("name", "-"),
+                    "yes" if h.get("enabled") else "no",
+                ]
+                for h in rows
+            ],
+            headers=["ID", "WATCH JOB", "ON", "TRIGGER JOB", "ENABLED"],
+            output_arg=output, raw=rows,
+        )
+    except Exception as e:
+        print(f"Error: {e}")
+
+
 def get_job_definitions(session: WaluigiSession, namespace=None, output=None) -> None:
     ns = session.resolve_namespace(namespace)
     if not ns: return

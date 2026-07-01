@@ -175,6 +175,7 @@ Tasks are keyed by `id + params_hash` — the same task ID with different params
 | `Source` | Catalog data source — routed to Catalog, not Boss |
 | `Dataset` | Register/update a Catalog dataset; optionally define and publish schema columns |
 | `Chart` | Full-replace chart definitions on a dataset — `metadata.dataset` + `spec.charts[]` |
+| `JobHook` | Observer: triggers a job when another job (by definition name) reaches a terminal event (`success`, `failure`) |
 | `User` | Console user (admin only) |
 
 ### YAML Job Format
@@ -292,6 +293,47 @@ spec:
 
 In task config, reference secrets with `${WALUIGI_SECRET_API_TOKEN}`. The worker expands them before running the task. Use `wlctl describe secret <name> -n <ns>` to list keys (values are never shown).
 
+### JobHooks
+
+JobHooks are observers that fire a triggered job when a watched job reaches a terminal event. The hook watches a **job definition name** (all runs, regardless of execution policy or trigger). When fired, `event.*` context variables are injected as params into the triggered job.
+
+```yaml
+kind: JobHook
+metadata:
+  name: notify-on-etl-done
+  namespace: analytics
+spec:
+  watch:
+    job: orders-etl          # job definition name (base_name) to watch
+    on:
+      - success
+      - failure              # events to react to; valid: success, failure
+  trigger:
+    jobRef:
+      name: send-notification   # job definition to fire
+    executionPolicy: Ephemeral  # default: Ephemeral
+    concurrencyPolicy: Allow    # default: Allow
+    params:
+      subject: "ETL finished: ${event.status}"
+      body: "Job ${event.job_id} in ${event.namespace} — status: ${event.status}. Failed tasks: ${event.failed_tasks}"
+```
+
+**Event context variables** (available as `${event.*}` in trigger params):
+
+| Variable | Value |
+|----------|-------|
+| `${event.status}` | `success` or `failure` |
+| `${event.job_id}` | Full job ID of the completed run |
+| `${event.job_name}` | Base name (`job_id.rsplit('@',1)[0]`) |
+| `${event.namespace}` | Namespace of the completed job |
+| `${event.failed_tasks}` | Comma-separated list of FAILED task IDs (empty string on success) |
+
+Enable / disable without deleting:
+```bash
+wlctl enable job-hook notify-on-etl-done -n analytics
+wlctl disable job-hook notify-on-etl-done -n analytics
+```
+
 ## Dataset Kind
 
 `kind: Dataset` registers or updates a Catalog dataset and optionally defines its schema. `format` is a dataset-level attribute (not per-version). If the dataset already exists, description and dq_suite are updated via PATCH; schema columns are always patched.
@@ -370,6 +412,12 @@ All Boss and Catalog endpoints return:
 | GET | `/namespaces/{ns}/secrets/{name}` | List secret keys (no values) |
 | POST | `/namespaces/{ns}/secrets/{name}` | Upsert secret |
 | DELETE | `/namespaces/{ns}/secrets/{name}` | Delete secret |
+| GET | `/namespaces/{ns}/job-hooks` | List job hooks |
+| GET | `/namespaces/{ns}/job-hooks/{id}` | Get job hook |
+| POST | `/namespaces/{ns}/job-hooks` | Upsert job hook |
+| POST | `/namespaces/{ns}/job-hooks/{id}/_enable` | Enable job hook |
+| POST | `/namespaces/{ns}/job-hooks/{id}/_disable` | Disable job hook |
+| DELETE | `/namespaces/{ns}/job-hooks/{id}` | Delete job hook |
 | GET | `/workers` | List registered workers |
 | POST | `/workers` | Register/heartbeat worker |
 

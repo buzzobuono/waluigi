@@ -93,6 +93,17 @@ class TaskRepository(BaseRepository):
                 .values(status="PENDING")
             )
 
+    def list_failed_for_job(self, namespace: str, job_id: str) -> list[str]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                select(_t_tasks.c.id).where(and_(
+                    _t_tasks.c.namespace == namespace,
+                    _t_tasks.c.job_id   == job_id,
+                    _t_tasks.c.status   == "FAILED",
+                ))
+            ).fetchall()
+            return [r[0] for r in rows]
+
     def delete(self, namespace: str, task_id: str) -> None:
         with self._conn() as conn:
             conn.execute(

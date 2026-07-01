@@ -187,6 +187,41 @@ def describe_cron_job(session: WaluigiSession, namespace=None,
         print(f"Error: {e}")
 
 
+def describe_job_hook(session: WaluigiSession, namespace=None,
+                      hook_id=None, output=None) -> None:
+    ns = session.resolve_namespace(namespace)
+    if not ns: return
+    try:
+        r = session.http.get(f"/boss/namespaces/{ns}/job-hooks/{hook_id}",
+                             headers=session.headers())
+        if not ok(r): return
+        h = data(r)
+        if output == "json":
+            print(json.dumps(h, indent=2)); return
+        spec    = h.get("spec") or {}
+        watch   = spec.get("watch") or {}
+        trigger = spec.get("trigger") or {}
+        params  = trigger.get("params") or {}
+        rows = [
+            ["id",          h.get("id")],
+            ["namespace",   ns],
+            ["enabled",     "yes" if h.get("enabled") else "no"],
+            ["watch.job",   watch.get("job", "-")],
+            ["watch.on",    ", ".join(watch.get("on", []))],
+            ["trigger.jobRef", (trigger.get("jobRef") or {}).get("name", "-")],
+            ["trigger.executionPolicy", trigger.get("executionPolicy", "Ephemeral")],
+            ["trigger.concurrencyPolicy", trigger.get("concurrencyPolicy", "Allow")],
+            ["created_at",  h.get("created_at", "-")],
+        ]
+        print(tabulate(rows, tablefmt="plain"))
+        if params:
+            print("\nTrigger Params:")
+            print(tabulate([[k, v] for k, v in params.items()],
+                           headers=["NAME", "VALUE / TEMPLATE"], tablefmt="plain"))
+    except Exception as e:
+        print(f"Error: {e}")
+
+
 def describe_job_definition(session: WaluigiSession, namespace=None,
                             defn_id=None, output=None) -> None:
     ns = session.resolve_namespace(namespace)

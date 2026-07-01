@@ -156,6 +156,14 @@ def _apply_one(session: WaluigiSession, doc: dict,
                 session.http.post(f"{base}/{_name}/schema/publish",
                                   json={"published_by": "wlctl"}, headers=headers)
 
+        elif kind == "JobHook":
+            _ns   = namespace_override or meta.get("namespace") \
+                    or session.resolve_namespace(None)
+            _name = meta.get("name", "")
+            if not _ns: return
+            r = session.http.post(f"/boss/namespaces/{_ns}/job-hooks",
+                                  json=doc, headers=session.headers())
+
         elif kind == "Chart":
             _ns        = namespace_override or meta.get("namespace") \
                          or session.resolve_namespace(None)
@@ -230,6 +238,9 @@ def _print_applied(kind: str, doc: dict, r, ns: str = "", name: str = "") -> Non
         print(f"source/{ns}/{ref} {verb}")
     elif kind == "Dataset":
         print(f"dataset/{name} {verb}")
+    elif kind == "JobHook":
+        ref = d.get("id") or name
+        print(f"job-hook/{ref} {verb}")
     elif kind == "Chart":
         charts = (doc.get("spec") or {}).get("charts") or []
         print(f"chart/{ns}/{name} {verb} ({len(charts)} chart(s))")
