@@ -305,7 +305,7 @@ metadata:
 spec:
   watch:
     job: orders-etl          # job definition name (base_name) to watch
-    on:
+    events:
       - success
       - failure              # events to react to; valid: success, failure
   trigger:

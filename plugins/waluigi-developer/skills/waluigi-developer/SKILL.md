@@ -387,7 +387,7 @@ metadata:
 spec:
   watch:
     job: orders-etl           # job definition name (base_name) — matches all runs
-    on:
+    events:
       - success
       - failure               # valid: success, failure
   trigger:

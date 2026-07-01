@@ -40,8 +40,8 @@ async def upsert_job_hook(
     watch = spec.get("watch") or {}
     if not watch.get("job"):
         return ko("spec.watch.job is required", status=400)
-    if not watch.get("on"):
-        return ko("spec.watch.on is required (list of events, e.g. [success, failure])", status=400)
+    if not watch.get("events"):
+        return ko("spec.watch.events is required (list of events, e.g. [success, failure])", status=400)
     trigger = spec.get("trigger") or {}
     if not (trigger.get("jobRef") or {}).get("name"):
         return ko("spec.trigger.jobRef.name is required", status=400)

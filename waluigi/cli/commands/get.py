@@ -151,7 +151,7 @@ def get_job_hooks(session: WaluigiSession, namespace=None, output=None) -> None:
                 [
                     h.get("id"),
                     (h.get("spec") or {}).get("watch", {}).get("job", "-"),
-                    ", ".join((h.get("spec") or {}).get("watch", {}).get("on", [])),
+                    ", ".join((h.get("spec") or {}).get("watch", {}).get("events") or []),
                     ((h.get("spec") or {}).get("trigger", {}).get("jobRef") or {}).get("name", "-"),
                     "yes" if h.get("enabled") else "no",
                 ]

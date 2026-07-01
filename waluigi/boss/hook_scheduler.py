@@ -19,6 +19,7 @@ def fire_hooks(
     """Fire all enabled JobHooks matching the given job and event type."""
     base_name = job_id.rsplit("@", 1)[0]
     hooks = hook_svc.list_enabled_for_job(namespace, base_name)
+    hooks = [h for h in hooks if event_type in (h.get("spec", {}).get("watch", {}).get("events") or [])]
     if not hooks:
         return
 
