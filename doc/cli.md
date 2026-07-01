@@ -32,7 +32,7 @@ wlctl apply -f descriptors/jobs/erp-daily.yaml
 wlctl apply -f descriptors/full/full.yaml          # multi-document YAML
 ```
 
-Supported kinds: `Namespace`, `NamespaceResources`, `Job`, `JobDefinition`, `TaskDefinition`, `CronJob`, `Secret`, `Source`, `User`.
+Supported kinds: `Namespace`, `NamespaceResources`, `Job`, `JobDefinition`, `TaskDefinition`, `CronJob`, `JobHook`, `Secret`, `Source`, `Dataset`, `Chart`, `User`.
 
 `Source` descriptors are routed to the Catalog. All other kinds are routed to the Boss.
 
@@ -123,6 +123,14 @@ wlctl get cron-jobs [--namespace <ns>]
 ```
 
 Columns: `ID`, `SCHEDULE`, `TIMEZONE`, `ENABLED`, `LAST_RUN`, `NEXT_RUN`.
+
+### Job Hooks
+
+```bash
+wlctl get job-hooks [--namespace <ns>]
+```
+
+Columns: `ID`, `WATCH JOB`, `ON`, `TRIGGER JOB`, `ENABLED`.
 
 ### Sources (Catalog)
 
@@ -313,6 +321,12 @@ Returns an error if the job is still active. Use `reset` + wait, or `cancel` fir
 wlctl delete cron-job <id> [--namespace <ns>]
 ```
 
+### Delete a JobHook
+
+```bash
+wlctl delete job-hook <id> [--namespace <ns>]
+```
+
 ### Delete a TaskDefinition
 
 ```bash
@@ -366,6 +380,15 @@ wlctl cancel job <job_id> [--namespace <ns>]
 ```bash
 wlctl enable cron-job <id> [--namespace <ns>]
 wlctl disable cron-job <id> [--namespace <ns>]
+```
+
+---
+
+## JobHook lifecycle
+
+```bash
+wlctl enable job-hook <id> [--namespace <ns>]
+wlctl disable job-hook <id> [--namespace <ns>]
 ```
 
 ---

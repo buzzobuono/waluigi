@@ -141,6 +141,13 @@ export const api = {
   enableCronJob:  (ns, id)    => _post(`/boss/namespaces/${_enc(ns)}/cron-jobs/${_enc(id)}/_enable`).then(_unwrap),
   disableCronJob: (ns, id)    => _post(`/boss/namespaces/${_enc(ns)}/cron-jobs/${_enc(id)}/_disable`).then(_unwrap),
 
+  // ── Boss — Job Hooks ──────────────────────────────────────────────────────
+  jobHooks:        (ns)       => _get(`/boss/namespaces/${_enc(ns)}/job-hooks`).then(_unwrap),
+  upsertJobHook:   (ns, body) => _postJson(`/boss/namespaces/${_enc(ns)}/job-hooks`, body).then(_unwrap),
+  deleteJobHook:   (ns, id)   => _delete(`/boss/namespaces/${_enc(ns)}/job-hooks/${_enc(id)}`).then(_unwrap),
+  enableJobHook:   (ns, id)   => _post(`/boss/namespaces/${_enc(ns)}/job-hooks/${_enc(id)}/_enable`).then(_unwrap),
+  disableJobHook:  (ns, id)   => _post(`/boss/namespaces/${_enc(ns)}/job-hooks/${_enc(id)}/_disable`).then(_unwrap),
+
   // ── Boss — Cluster ────────────────────────────────────────────────────────
   workers:        ()          => _get('/boss/workers').then(_unwrap),
   resources:      (ns)        => _get(`/boss/namespaces/${_enc(ns)}/resources`).then(_unwrap),

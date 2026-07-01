@@ -355,6 +355,67 @@ spec:
 
 ---
 
+## JobHook
+
+Defines an event-driven trigger: when a watched job (matched by definition name) reaches a terminal state (`success` or `failure`), the Boss automatically submits the configured trigger JobDefinition with event context variables injected as params.
+
+Hooks watch the **job definition name** — they fire for all runs regardless of whether they were triggered by a CronJob, another JobHook, or a direct `wlctl apply`.
+
+```yaml
+kind: JobHook
+metadata:
+  name: <string>               # hook ID (required, unique per namespace)
+  namespace: <string>          # target namespace (required)
+spec:
+  watch:
+    job: <string>              # JobDefinition base name to watch (required)
+    events:                    # events to react to (required, at least one)
+      - success                # fire when job completes successfully
+      - failure                # fire when job reaches FAILED state
+  trigger:
+    jobRef:
+      name: <string>           # JobDefinition to submit (required)
+    executionPolicy: <string>  # Ephemeral | Stateful (default: Ephemeral)
+    concurrencyPolicy: <string># Forbid | Replace | Allow (default: Allow)
+    params: <dict>             # params injected into the triggered job
+                               # values support ${event.*} placeholders
+```
+
+### Event context variables
+
+| Placeholder | Value |
+|-------------|-------|
+| `${event.status}` | `success` or `failure` |
+| `${event.job_id}` | Full job ID of the completed run (e.g. `daily-etl@1718100000.0`) |
+| `${event.job_name}` | Base name — `job_id.rsplit('@', 1)[0]` |
+| `${event.namespace}` | Namespace of the completed job |
+| `${event.failed_tasks}` | JSON list of FAILED task IDs; empty list on success |
+
+### Example
+
+```yaml
+kind: JobHook
+metadata:
+  name: notify-on-etl-done
+  namespace: analytics
+spec:
+  watch:
+    job: daily-etl
+    events:
+      - success
+      - failure
+  trigger:
+    jobRef:
+      name: send-notification
+    executionPolicy: Ephemeral
+    concurrencyPolicy: Allow
+    params:
+      subject: "ETL ${event.status}: ${event.job_name}"
+      body: "Job ${event.job_id} in ${event.namespace} — status: ${event.status}. Failed tasks: ${event.failed_tasks}"
+```
+
+---
+
 ## User
 
 Manages Console users. Applied via `wlctl apply` (admin only) or the Console UI.
