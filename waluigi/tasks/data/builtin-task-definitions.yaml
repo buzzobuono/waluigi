@@ -165,3 +165,11 @@ spec:
   command: "python -m waluigi.tasks.reindex_time_series"
   affinity:
     - python
+---
+kind: TaskDefinition
+metadata:
+  name: "SendEmail"
+spec:
+  command: "python -m waluigi.tasks.send_email"
+  affinity:
+    - python

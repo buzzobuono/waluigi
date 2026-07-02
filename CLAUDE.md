@@ -146,7 +146,7 @@ Entry points (defined in `pyproject.toml`): `wlboss`, `wlworker`, `wlcatalog`, `
 | `waluigi/sdk/dataquality.py` | `DQManager` — YAML-rule-based data validation |
 | `waluigi/sdk/connectors/` | Pluggable storage connectors (local, S3, SFTP, SQL) |
 | `waluigi/tasks/` | Built-in task scripts (Python modules run via `python -m waluigi.tasks.*`) |
-| `waluigi/tasks/_io.py` | `read_input()`, `write_output()` helpers with automatic lineage |
+| `waluigi/sdk/catalog.py` | `catalog` singleton used by built-in tasks for dataset read/write with automatic lineage |
 
 ### Task State Machine
 
@@ -528,11 +528,12 @@ These are Python modules invokable from TaskDefinition specs. They are **not aut
 | `waluigi.tasks.catalog_set_expectations` | `CatalogSetExpectations` | Attach DQ expectations |
 | `waluigi.tasks.catalog_set_charts` | `CatalogSetCharts` | Attach chart definitions (bar, line, pie, histogram, scatter, radar, combo) |
 | `waluigi.tasks.reindex_time_series` | `ReindexTimeSeries` | Gap-fill time series; optional `group_by` for multi-series cross-product (day/week/month/year) |
+| `waluigi.tasks.send_email` | `SendEmail` | Send email via any SMTP server (generic); `config.smtp` connection + `SMTP_PASSWORD` secret |
 | `waluigi.tasks.send_gmail` | `SendGmail` | Send email via Gmail SMTP + App Password (**vendor: google**) |
 | `waluigi.tasks.ingest_google_sheet` | `IngestGoogleSheet` | Ingest public Google Sheet (all sheets or single, parametric coercion/filter) (**vendor: google**) |
 | `waluigi.tasks.sharepoint_export` | `SharePointExport` | Publish Catalog dataset to SharePoint via Microsoft Graph API (**vendor: microsoft**) |
 
-All built-in tasks use `waluigi/tasks/_io.py` helpers (`read_input()` / `write_output()`) which handle source upsert and lineage automatically.
+Dataset-oriented built-in tasks use the `catalog` singleton from `waluigi/sdk/catalog.py` (`read_dataset()` / `create_dataset()` + two-phase commit), which handles source upsert and lineage automatically.
 
 ## Storage Connectors
 

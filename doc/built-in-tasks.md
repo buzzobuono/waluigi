@@ -1241,3 +1241,72 @@ spec:
 
 
 All fill strategies and frequency formats are identical to `ReindexTimeSeries`. The difference is that the full index is `groups × periods` instead of just `periods`, and fills are applied group by group.
+
+---
+
+## SendEmail
+
+Sends an email through any SMTP server. Generic and non-vendor — works with corporate relays, Gmail, Office 365, Amazon SES, etc. Connection settings live in `config.smtp`; the password comes from a Secret.
+
+```yaml
+taskRef:
+  name: SendEmail
+config:
+  smtp:
+    host: <string>            # required — SMTP server hostname
+    port: <int>               # required — 465 (ssl), 587 (starttls), 25 (none)
+    security: <string>        # ssl | starttls | none  (default: starttls)
+    user: <string>            # SMTP username (omit for unauthenticated relay)
+    from: <string>            # sender address (default: user)
+params:
+  to: <string>                # recipient(s), comma-separated
+  subject: <string>           # optional (default: "Notifica Waluigi")
+  body: <string>              # required
+  body_type: <string>         # plain | html  (default: plain)
+  cc: <string>                # optional, comma-separated
+  bcc: <string>               # optional, comma-separated
+```
+
+**Secrets:**
+
+| Secret key | Purpose |
+|------------|---------|
+| `SMTP_PASSWORD` | SMTP password / app password — login is attempted only when both `smtp.user` and this secret are present |
+| `SMTP_NOTIFY_TO` | Optional default recipient used when the `to` param is not set (handy for fixed-recipient notification jobs) |
+
+Message fields are **params** (not config) so they interpolate `${event.*}` values injected by [JobHooks](yaml-reference.md) — e.g. `subject: "ETL ${event.status}"`. Connection fields are **config** so a `${WALUIGI_SECRET_...}` placeholder inside them is expanded by the worker.
+
+**Example:**
+
+```yaml
+- id: notify
+  taskRef:
+    name: SendEmail
+  config:
+    smtp:
+      host: smtp.example.com
+      port: 587
+      security: starttls
+      user: notifier@example.com
+      from: "Waluigi <notifier@example.com>"
+  params:
+    to: "team@example.com,ops@example.com"
+    subject: "Pipeline completata"
+    body: "<h1>OK</h1><p>Tutto a posto.</p>"
+    body_type: html
+  resources:
+    coin: 1
+```
+
+Apply the secret before running:
+
+```yaml
+kind: Secret
+metadata:
+  namespace: analytics
+  name: smtp-creds
+spec:
+  SMTP_PASSWORD: "app-password-here"
+```
+
+> For Gmail-only setups with fixed `smtp.gmail.com:465` SSL, the vendor task `SendGmail` (apply-builtins `google`) is a lighter alternative.

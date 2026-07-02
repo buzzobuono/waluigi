@@ -1332,6 +1332,40 @@ Ingest a public Google Sheet into the Catalog. Works with sheets shared as "anyo
 
 ---
 
+### SendEmail
+
+Send an email through any SMTP server (generic, non-vendor). Core built-in — available after `wlctl apply-builtins -n <ns>`.
+
+Connection settings go in `config.smtp`; the password comes from secret `SMTP_PASSWORD`.
+
+```yaml
+- id: notify
+  taskRef:
+    name: SendEmail
+  config:
+    smtp:
+      host: smtp.example.com
+      port: 587
+      security: starttls      # ssl | starttls | none (default: starttls)
+      user: notifier@example.com
+      from: "Waluigi <notifier@example.com>"   # optional (default: user)
+  params:
+    to: "team@example.com"
+    subject: "Pipeline completata"
+    body: "Il job è terminato con successo."
+    body_type: plain          # plain | html (default: plain)
+    cc: ""                    # optional
+    bcc: ""                   # optional
+  resources:
+    coin: 1
+```
+
+Secrets: `SMTP_PASSWORD` (login attempted only when both `smtp.user` and this secret are set — unauthenticated relays work without it). If `to` is not set, falls back to secret `SMTP_NOTIFY_TO`.
+
+Message fields are **params** so JobHook `${event.*}` values interpolate (e.g. `subject: "ETL ${event.status}"`).
+
+---
+
 ### SendGmail *(vendor: google)*
 
 Send an email via Gmail SMTP. Requires `wlctl apply-builtins -n <ns> google`.
