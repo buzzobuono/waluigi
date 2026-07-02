@@ -76,7 +76,7 @@ wlctl delete secret <name> [-n ns]
 wlctl delete dataset <id> [-n ns]            # cascade: all versions + physical files
 wlctl delete version <version> -d <dataset> [-n ns]  # hard delete single version
 
-wlctl run [cmd] [-f yaml] [-t task_id] [-p KEY=VALUE ...]  # local dev, no cluster needed
+wlrun [cmd] [-f yaml] [-t task_id] [-p KEY=VALUE ...]  # local dev, no cluster needed (separate entry point)
 
 # Tests
 pytest tests/

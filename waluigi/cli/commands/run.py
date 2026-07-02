@@ -178,9 +178,16 @@ def _inject_params(env: dict, job_params: dict, task_params: dict,
 
 
 def _make_cmd(cmd: str | None, script: str | None, env: dict) -> str:
+    # Use the interpreter that runs wlrun, not a bare "python" — many systems
+    # (e.g. Debian/Ubuntu) ship only "python3", so "python -m ..." would fail
+    # with exit 127. This covers built-in tasks, inline scripts, and any
+    # user command that starts with python/python3.
+    py = sys.executable
     if script:
         env['WALUIGI_SCRIPT'] = script
-        return "python -c \"import os; exec(os.environ['WALUIGI_SCRIPT'])\""
+        return f"{py} -c \"import os; exec(os.environ['WALUIGI_SCRIPT'])\""
+    if cmd:
+        cmd = re.sub(r"^\s*python3?\b", py, cmd, count=1)
     return cmd
 
 
