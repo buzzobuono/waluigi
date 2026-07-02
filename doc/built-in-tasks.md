@@ -2,7 +2,7 @@
 
 Waluigi ships with reusable task types that cover common data transformation patterns. Reference them in a job with `taskRef.name` and provide a `config` block — no Python code required.
 
-All built-in tasks use `CatalogClient` internally to read inputs and write outputs via the two-phase commit protocol. Lineage is recorded automatically.
+Most built-in tasks are dataset transformations: they use `CatalogClient` internally to read inputs and write outputs via the two-phase commit protocol, recording lineage automatically. A few are side-effect tasks that don't touch the Catalog (e.g. `SendEmail` / `SendGmail`, which send notifications).
 
 ## Setup: applying built-in TaskDefinitions
 
@@ -1310,3 +1310,64 @@ spec:
 ```
 
 > For Gmail-only setups with fixed `smtp.gmail.com:465` SSL, the vendor task `SendGmail` (apply-builtins `google`) is a lighter alternative.
+
+---
+
+## SendGmail *(vendor: google)*
+
+Sends an email via Gmail SMTP over `smtp.gmail.com:465` (SSL, fixed) using an App Password. This is a Gmail-specific convenience task — for any other server (corporate relay, Office 365, SES, …) use the generic [SendEmail](#sendemail) instead.
+
+Requires the Google vendor built-ins:
+
+```bash
+wlctl apply-builtins -n analytics google
+```
+
+```yaml
+taskRef:
+  name: SendGmail
+params:
+  to: <string>                # recipient(s), comma-separated
+  subject: <string>           # optional (default: "Notifica Waluigi")
+  body: <string>              # required
+  body_type: <string>         # plain | html  (default: plain)
+  cc: <string>                # optional, comma-separated
+  bcc: <string>               # optional, comma-separated
+```
+
+**Secrets:**
+
+| Secret key | Purpose |
+|------------|---------|
+| `GMAIL_USER` | Sender Gmail address (e.g. `me@gmail.com`) |
+| `GMAIL_APP_PASSWORD` | 16-char App Password (Google Account → Security → App Passwords) |
+| `GMAIL_NOTIFY_TO` | Optional default recipient used when the `to` param is not set |
+
+Unlike `SendEmail`, connection settings are fixed and there is no `config.smtp` — only params. `GMAIL_USER` doubles as the `From` address.
+
+**Example:**
+
+```yaml
+- id: notify
+  taskRef:
+    name: SendGmail
+  params:
+    to: "team@example.com"
+    subject: "Pipeline completata"
+    body: "Il job è terminato con successo."
+    body_type: plain
+  resources:
+    coin: 1
+```
+
+Apply the secret before running:
+
+```yaml
+kind: Secret
+metadata:
+  namespace: analytics
+  name: gmail-creds
+spec:
+  GMAIL_USER: "me@gmail.com"
+  GMAIL_APP_PASSWORD: "abcd efgh ijkl mnop"
+```
